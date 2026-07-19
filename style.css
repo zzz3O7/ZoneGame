@@ -1,0 +1,9 @@
+#board {
+  outline: 1px solid #000000;
+  background: #ffffff;
+}
+
+#pieceButtons button.selected {
+  outline: 2px solid #333;
+  font-weight: bold;
+}
