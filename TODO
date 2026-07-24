@@ -7,7 +7,18 @@ penalty preview
 move history
 undo/redo
 refactor
+zooming/paning + mobile support
+
 
 sound
 modes
-zooming/paning + mobile support
+
+1. board
+2. players + rating + score + (time)
+3. pieces = buttons
+4. skip + penalty + (resign)
+5. history ?
+6. zone info
+7. chat ?
+8. game info (mode, seed)
+9. help
