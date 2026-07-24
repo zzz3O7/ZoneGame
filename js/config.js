@@ -17,7 +17,7 @@ export const THEME = {
 };
 
 export const LAYOUT = {
-  cellSize: 30,
+  targetBoardSize: 720,
   bonusFontRatio: 0.4,
 };
 

@@ -5,14 +5,14 @@ import { Player } from "./player.js";
 import { Rules } from "./rules.js";
 import { Shape } from "./shape.js";
 import { CaveGenerator } from "./caveGenerator.js";
-import { COLS, ROWS, ZONE_RADIUS, STARTING_DOMINOS, PASS_PENALTY } from "./config.js";
+import { ZONE_RADIUS, STARTING_DOMINOS, PASS_PENALTY } from "./config.js";
 
 export class Game {
-  constructor(seed = Date.now()) {
+  constructor(cols, rows, seed = Date.now()) {
     this.seed = seed;
     const rng = createRng(seed);
 
-    const grid = CaveGenerator.generate(ROWS, COLS, 0.6, rng, 3, 0.4, 0.6, 30);
+    const grid = CaveGenerator.generate(rows, cols, 0.6, rng, 3, 0.4, 0.6, 30);
     const bonusMarkers = CaveGenerator.placeBonusMarkers(grid, 5, 6, rng);
 
     this.board = new Board(grid, bonusMarkers);

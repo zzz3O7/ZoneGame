@@ -1,15 +1,17 @@
-import { LAYOUT, COLS, ROWS, THEME, ZONE_RADIUS } from "./config.js";
+import { LAYOUT, THEME, ZONE_RADIUS } from "./config.js";
 import { Board } from "./board.js";
 import { Shape } from "./shape.js";
 import { Zone } from "./zone.js";
 import { Rules } from "./rules.js";
 
 export class Renderer {
-  constructor(canvas) {
+  constructor(canvas, board) {
     this.canvas = canvas;
     this.ctx = canvas.getContext("2d");
-    canvas.width = COLS * LAYOUT.cellSize;
-    canvas.height = ROWS * LAYOUT.cellSize;
+
+    this.cellSize = Math.floor(LAYOUT.targetBoardSize / Math.max(board.cols, board.rows));
+    canvas.width = board.cols * this.cellSize;
+    canvas.height = board.rows * this.cellSize;
   }
 
   render(board, zones, currentPlayer, pieceType, hoverShape, hoverCell, gesturePath) {
@@ -28,8 +30,8 @@ export class Renderer {
 
     for (let row = 0; row < board.rows; row++) {
       for (let col = 0; col < board.cols; col++) {
-        const x = col * LAYOUT.cellSize;
-        const y = row * LAYOUT.cellSize;
+        const x = col * this.cellSize;
+        const y = row * this.cellSize;
         const marker = board.bonusMarkers.get(Board.key(row, col));
         const hasBonus = marker && !marker.claimed;
 
@@ -37,20 +39,20 @@ export class Renderer {
         else if (hasBonus) ctx.fillStyle = THEME.wallBonus;
         else ctx.fillStyle = THEME.wall;
 
-        ctx.fillRect(x, y, LAYOUT.cellSize, LAYOUT.cellSize);
+        ctx.fillRect(x, y, this.cellSize, this.cellSize);
         ctx.strokeStyle = THEME.gridLine;
-        ctx.strokeRect(x, y, LAYOUT.cellSize, LAYOUT.cellSize);
+        ctx.strokeRect(x, y, this.cellSize, this.cellSize);
       }
     }
 
     ctx.fillStyle = THEME.bonusText;
-    ctx.font = `${LAYOUT.cellSize * LAYOUT.bonusFontRatio}px sans-serif`;
+    ctx.font = `${this.cellSize * LAYOUT.bonusFontRatio}px sans-serif`;
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
     for (const [key, marker] of board.bonusMarkers) {
       if (marker.claimed) continue;
       const [row, col] = Board.parse(key);
-      ctx.fillText("+5", col * LAYOUT.cellSize + LAYOUT.cellSize / 2, row * LAYOUT.cellSize + LAYOUT.cellSize / 2);
+      ctx.fillText("+5", col * this.cellSize + this.cellSize / 2, row * this.cellSize + this.cellSize / 2);
     }
   }
 
@@ -66,7 +68,7 @@ export class Renderer {
       ctx.fillStyle = color;
       for (const key of zone.cellSet) {
         const [r, c] = Board.parse(key);
-        ctx.fillRect(c * LAYOUT.cellSize, r * LAYOUT.cellSize, LAYOUT.cellSize, LAYOUT.cellSize);
+        ctx.fillRect(c * this.cellSize, r * this.cellSize, this.cellSize, this.cellSize);
       }
     }
   }
@@ -79,8 +81,8 @@ export class Renderer {
     for (const zone of zones) {
       for (const key of zone.cellSet) {
         const [r, c] = Board.parse(key);
-        const x = c * LAYOUT.cellSize,
-          y = r * LAYOUT.cellSize;
+        const x = c * this.cellSize,
+          y = r * this.cellSize;
 
         for (const [dr, dc, edge] of [
           [-1, 0, "top"],
@@ -95,19 +97,19 @@ export class Renderer {
           ctx.beginPath();
           if (edge === "top") {
             ctx.moveTo(x, y);
-            ctx.lineTo(x + LAYOUT.cellSize, y);
+            ctx.lineTo(x + this.cellSize, y);
           }
           if (edge === "bottom") {
-            ctx.moveTo(x, y + LAYOUT.cellSize);
-            ctx.lineTo(x + LAYOUT.cellSize, y + LAYOUT.cellSize);
+            ctx.moveTo(x, y + this.cellSize);
+            ctx.lineTo(x + this.cellSize, y + this.cellSize);
           }
           if (edge === "left") {
             ctx.moveTo(x, y);
-            ctx.lineTo(x, y + LAYOUT.cellSize);
+            ctx.lineTo(x, y + this.cellSize);
           }
           if (edge === "right") {
-            ctx.moveTo(x + LAYOUT.cellSize, y);
-            ctx.lineTo(x + LAYOUT.cellSize, y + LAYOUT.cellSize);
+            ctx.moveTo(x + this.cellSize, y);
+            ctx.lineTo(x + this.cellSize, y + this.cellSize);
           }
           ctx.stroke();
         }
@@ -120,7 +122,7 @@ export class Renderer {
     ctx.fillStyle = THEME.piece;
     for (const key of board.occupied) {
       const [r, c] = Board.parse(key);
-      ctx.fillRect(c * LAYOUT.cellSize + 2, r * LAYOUT.cellSize + 2, LAYOUT.cellSize - 4, LAYOUT.cellSize - 4);
+      ctx.fillRect(c * this.cellSize + 2, r * this.cellSize + 2, this.cellSize - 4, this.cellSize - 4);
     }
   }
 
@@ -137,13 +139,13 @@ export class Renderer {
     ctx.fillStyle = THEME.pendingNewZone;
     for (const key of cellSet) {
       const [pr, pc] = Board.parse(key);
-      ctx.fillRect(pc * LAYOUT.cellSize, pr * LAYOUT.cellSize, LAYOUT.cellSize, LAYOUT.cellSize);
+      ctx.fillRect(pc * this.cellSize, pr * this.cellSize, this.cellSize, this.cellSize);
     }
 
     ctx.fillStyle = THEME.pendingBonuses;
     for (const key of bonuses) {
       const [pr, pc] = Board.parse(key);
-      ctx.fillRect(pc * LAYOUT.cellSize, pr * LAYOUT.cellSize, LAYOUT.cellSize, LAYOUT.cellSize);
+      ctx.fillRect(pc * this.cellSize, pr * this.cellSize, this.cellSize, this.cellSize);
     }
   }
 
@@ -152,7 +154,7 @@ export class Renderer {
     ctx.fillStyle = THEME.gesturePath;
     for (const cell of path) {
       const [r, c] = cell;
-      ctx.fillRect(c * LAYOUT.cellSize, r * LAYOUT.cellSize, LAYOUT.cellSize, LAYOUT.cellSize);
+      ctx.fillRect(c * this.cellSize, r * this.cellSize, this.cellSize, this.cellSize);
     }
   }
 
@@ -164,7 +166,7 @@ export class Renderer {
     this.ctx.fillStyle = valid ? THEME.ghostShapeValid : THEME.ghostShapeInvalid;
     for (const [r, c] of Shape.cellsAt(hoverShape, hr, hc)) {
       if (board.isInside(r, c)) {
-        this.ctx.fillRect(c * LAYOUT.cellSize, r * LAYOUT.cellSize, LAYOUT.cellSize, LAYOUT.cellSize);
+        this.ctx.fillRect(c * this.cellSize, r * this.cellSize, this.cellSize, this.cellSize);
       }
     }
   }

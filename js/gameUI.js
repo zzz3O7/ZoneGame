@@ -1,7 +1,6 @@
 import { Board } from "./board.js";
 import { Shape, SHAPES_BASE } from "./shape.js";
 import { GestureRecognizer } from "./gestureRecognizer.js";
-import { LAYOUT, COLS, ROWS } from "./config.js";
 
 const KEY_TO_TYPE = { 1: "gesture", 2: "domino", 3: "tromino", 4: "tetromino" };
 
@@ -57,8 +56,10 @@ export class GameUI {
     const scaleY = this.canvas.height / rect.height;
     const x = (event.clientX - rect.left - this.canvas.clientLeft) * scaleX;
     const y = (event.clientY - rect.top - this.canvas.clientTop) * scaleY;
-    const col = Math.min(Math.max(Math.floor(x / LAYOUT.cellSize), 0), COLS - 1);
-    const row = Math.min(Math.max(Math.floor(y / LAYOUT.cellSize), 0), ROWS - 1);
+    const cellSize = this.renderer.cellSize;
+    const board = this.game.board;
+    const col = Math.min(Math.max(Math.floor(x / cellSize), 0), board.cols - 1);
+    const row = Math.min(Math.max(Math.floor(y / cellSize), 0), board.rows - 1);
     return [row, col];
   }
 
