@@ -13,6 +13,8 @@ zooming/paning + mobile support
 sound
 modes
 
+on different sizes board is still a square not a rectangle
+
 1. board
 2. players + rating + score + (time)
 3. pieces = buttons

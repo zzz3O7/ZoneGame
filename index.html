@@ -2,28 +2,198 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>ZoneGame</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;700&display=swap"
+      rel="stylesheet"
+    />
     <link rel="stylesheet" href="style.css" />
   </head>
   <body>
-    <div id="game">
-      <div id="scoreBoard">
-        <span>Player 1: <span id="score1">0</span></span>
-        <span>Player 2: <span id="score2">0</span></span>
+    <header class="topbar">
+      <div class="topbar__brand">ZoneGame</div>
+    </header>
+
+    <div class="layout">
+      <!-- LEFT COLUMN: match info + hints -->
+      <div class="col col--left">
+        <section class="panel">
+          <div class="panel__header">Match</div>
+          <div class="panel__body">
+            <div class="game-info__row">
+              <span class="game-info__label">Mode</span>
+              <span class="game-info__value">Local game</span>
+            </div>
+            <div class="game-info__row">
+              <span class="game-info__label">Seed</span>
+              <span class="game-info__value">8841203</span>
+            </div>
+            <div class="game-info__row">
+              <span class="game-info__label">Board size</span>
+              <span class="game-info__value">20 x 20</span>
+            </div>
+            <div class="game-info__row">
+              <span class="game-info__label">Zone radius</span>
+              <span class="game-info__value">5</span>
+            </div>
+            <div class="game-info__row">
+              <span class="game-info__label">Bonus value</span>
+              <span class="game-info__value">+5</span>
+            </div>
+          </div>
+        </section>
+
+        <section class="panel">
+          <div class="panel__header">
+            Hints
+            <button class="hints__toggle" type="button" aria-expanded="true" aria-controls="hintsBody">Collapse</button>
+          </div>
+          <div class="panel__body hints" id="hintsBody">
+            <div class="hints__item">
+              <span class="hints__key">1-4</span>
+              <span>Switch input mode: draw, domino, tromino, tetromino</span>
+            </div>
+            <div class="hints__item">
+              <span class="hints__key">Scroll</span>
+              <span>Rotate the current shape 90°</span>
+            </div>
+            <div class="hints__item">
+              <span class="hints__key">Right-click</span>
+              <span>Flip the shape, or cancel a gesture draw in progress</span>
+            </div>
+            <div class="hints__item">
+              <span class="hints__key">Drag</span>
+              <span>Draw mode: click and drag across cells to sketch a shape</span>
+            </div>
+            <div class="hints__item">
+              <span class="hints__key">Click</span>
+              <span>Place the shape, or confirm a drawn gesture</span>
+            </div>
+          </div>
+        </section>
       </div>
-      <div id="turnIndicator"></div>
-      <canvas id="board"></canvas>
-      <div id="controls">
-        <div id="pieceButtons">
-          <button data-type="gesture">Gesture</button>
-          <button data-type="domino">Domino</button>
-          <button data-type="tromino">Tromino</button>
-          <button data-type="tetromino">Tetromino</button>
+
+      <!-- CENTER COLUMN: player plates + fixed-size board -->
+      <div class="col col--center">
+        <!-- Opponent's plate -->
+        <div class="player-plate player-plate--b">
+          <div class="player-plate__identity">
+            <span class="player-plate__swatch"></span>
+            <div class="player-plate__name-block">
+              <span class="player-plate__name">player_2</span>
+              <span class="player-plate__rating">1742</span>
+            </div>
+          </div>
+
+          <div class="piece-selector">
+            <button class="piece-btn" disabled title="Draw a shape freehand">
+              <span class="piece-btn__icon">✎</span>
+              <span class="piece-btn__label">draw</span>
+            </button>
+
+            <span class="piece-selector__divider"></span>
+
+            <button class="piece-btn" disabled>
+              <span class="piece-btn__glyph"
+                ><span class="piece-btn__glyph-grid glyph-domino"><span></span><span></span></span
+              ></span>
+              <span class="piece-btn__count">2</span>
+            </button>
+            <button class="piece-btn" disabled>
+              <span class="piece-btn__glyph"
+                ><span class="piece-btn__glyph-grid glyph-tromino"><span></span><span></span><span></span></span
+              ></span>
+              <span class="piece-btn__count">∞</span>
+            </button>
+            <button class="piece-btn" disabled>
+              <span class="piece-btn__glyph"
+                ><span class="piece-btn__glyph-grid glyph-tetromino"
+                  ><span></span><span></span><span></span><span></span></span
+              ></span>
+              <span class="piece-btn__count">∞</span>
+            </button>
+
+            <span class="piece-selector__divider"></span>
+
+            <button class="piece-btn piece-btn--skip" disabled title="Skip turn">
+              <span class="piece-btn__icon">⏭</span>
+              <span class="piece-btn__count">−3</span>
+            </button>
+          </div>
+
+          <span class="player-plate__score">36</span>
+          <span class="player-plate__clock">04:12</span>
         </div>
-        <button id="passBtn" disabled>Pass</button>
-        <div id="gameOverBanner" style="display: none"></div>
+
+        <!-- Board -->
+        <div class="board-wrap">
+          <canvas id="board-canvas"></canvas>
+        </div>
+
+        <!-- Own plate -->
+        <div class="player-plate player-plate--a player-plate--active">
+          <div class="player-plate__identity">
+            <span class="player-plate__swatch"></span>
+            <div class="player-plate__name-block">
+              <span class="player-plate__name">player_1</span>
+              <span class="player-plate__rating">1810</span>
+            </div>
+          </div>
+
+          <div class="piece-selector">
+            <button class="piece-btn" title="Draw a shape freehand">
+              <span class="piece-btn__icon">✎</span>
+              <span class="piece-btn__label">draw</span>
+            </button>
+
+            <span class="piece-selector__divider"></span>
+
+            <button class="piece-btn piece-btn--selected">
+              <span class="piece-btn__glyph"
+                ><span class="piece-btn__glyph-grid glyph-domino"><span></span><span></span></span
+              ></span>
+              <span class="piece-btn__count">2</span>
+            </button>
+            <button class="piece-btn">
+              <span class="piece-btn__glyph"
+                ><span class="piece-btn__glyph-grid glyph-tromino"><span></span><span></span><span></span></span
+              ></span>
+              <span class="piece-btn__count">∞</span>
+            </button>
+            <button class="piece-btn">
+              <span class="piece-btn__glyph"
+                ><span class="piece-btn__glyph-grid glyph-tetromino"
+                  ><span></span><span></span><span></span><span></span></span
+              ></span>
+              <span class="piece-btn__count">∞</span>
+            </button>
+
+            <span class="piece-selector__divider"></span>
+
+            <button class="piece-btn piece-btn--skip" title="Skip turn">
+              <span class="piece-btn__icon">⏭</span>
+              <span class="piece-btn__count">−4</span>
+            </button>
+          </div>
+
+          <span class="player-plate__score">41</span>
+          <span class="player-plate__clock">06:47</span>
+        </div>
+      </div>
+
+      <!-- RIGHT COLUMN: move history -->
+      <div class="col col--right">
+        <section class="panel move-history">
+          <div class="panel__header">Move History</div>
+          <div class="panel__body move-history__body"></div>
+        </section>
       </div>
     </div>
+
     <script type="module" src="js/main.js"></script>
+    <script src="js/hintsPanel.js" defer></script>
   </body>
 </html>
