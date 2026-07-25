@@ -12,6 +12,7 @@
 
   /* Colors: surfaces */
   --color-bg: #10141a;
+  --color-scrim: rgba(16, 20, 26, 0.85);
   --color-surface: #181e24;
   --color-surface-alt: #1f262d;
   --color-surface-raised: #242c34;
@@ -349,11 +350,13 @@ button {
   background: var(--color-accent);
 }
 
+/* domino: 2 cells in a row */
 .glyph-domino {
   grid-template-columns: repeat(2, 10px);
   grid-template-rows: 10px;
 }
 
+/* tromino: L-shape in a 2x2 grid */
 .glyph-tromino {
   grid-template-columns: repeat(2, 10px);
   grid-template-rows: repeat(2, 10px);
@@ -368,6 +371,7 @@ button {
   grid-area: 2 / 2 / 3 / 3;
 }
 
+/* tetromino: L-shape in a 2x3 grid */
 .glyph-tetromino {
   grid-template-columns: repeat(2, 10px);
   grid-template-rows: repeat(3, 10px);
@@ -463,6 +467,26 @@ button {
   display: block;
   width: 100%;
   height: 100%;
+}
+
+.board-overlay {
+  position: absolute;
+  inset: 0;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  background: var(--color-scrim);
+}
+
+.board-overlay:not([hidden]) {
+  display: flex;
+}
+
+.board-overlay__message {
+  font-family: var(--font-display);
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--color-text);
 }
 
 /* ===================== MOVE HISTORY ===================== */

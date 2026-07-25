@@ -89,26 +89,26 @@
           </div>
 
           <div class="piece-selector">
-            <button class="piece-btn" disabled title="Draw a shape freehand">
+            <button class="piece-btn" data-type="gesture" title="Draw a shape freehand">
               <span class="piece-btn__icon">✎</span>
               <span class="piece-btn__label">draw</span>
             </button>
 
             <span class="piece-selector__divider"></span>
 
-            <button class="piece-btn" disabled>
+            <button class="piece-btn" data-type="domino">
               <span class="piece-btn__glyph"
                 ><span class="piece-btn__glyph-grid glyph-domino"><span></span><span></span></span
               ></span>
               <span class="piece-btn__count">2</span>
             </button>
-            <button class="piece-btn" disabled>
+            <button class="piece-btn" data-type="tromino">
               <span class="piece-btn__glyph"
                 ><span class="piece-btn__glyph-grid glyph-tromino"><span></span><span></span><span></span></span
               ></span>
               <span class="piece-btn__count">∞</span>
             </button>
-            <button class="piece-btn" disabled>
+            <button class="piece-btn" data-type="tetromino">
               <span class="piece-btn__glyph"
                 ><span class="piece-btn__glyph-grid glyph-tetromino"
                   ><span></span><span></span><span></span><span></span></span
@@ -118,19 +118,22 @@
 
             <span class="piece-selector__divider"></span>
 
-            <button class="piece-btn piece-btn--skip" disabled title="Skip turn">
+            <button class="piece-btn piece-btn--skip" title="Skip turn">
               <span class="piece-btn__icon">⏭</span>
-              <span class="piece-btn__count">−3</span>
+              <span class="piece-btn__count">0</span>
             </button>
           </div>
 
-          <span class="player-plate__score">36</span>
+          <span class="player-plate__score">0</span>
           <span class="player-plate__clock">04:12</span>
         </div>
 
-        <!-- Board -->
+        <!-- Board: fixed-size canvas, sized/rendered by Renderer at startup -->
         <div class="board-wrap">
           <canvas id="board-canvas"></canvas>
+          <div class="board-overlay" id="gameOverOverlay" hidden>
+            <div class="board-overlay__message" id="gameOverMessage"></div>
+          </div>
         </div>
 
         <!-- Own plate -->
@@ -144,26 +147,26 @@
           </div>
 
           <div class="piece-selector">
-            <button class="piece-btn" title="Draw a shape freehand">
+            <button class="piece-btn" data-type="gesture" title="Draw a shape freehand">
               <span class="piece-btn__icon">✎</span>
               <span class="piece-btn__label">draw</span>
             </button>
 
             <span class="piece-selector__divider"></span>
 
-            <button class="piece-btn piece-btn--selected">
+            <button class="piece-btn" data-type="domino">
               <span class="piece-btn__glyph"
                 ><span class="piece-btn__glyph-grid glyph-domino"><span></span><span></span></span
               ></span>
               <span class="piece-btn__count">2</span>
             </button>
-            <button class="piece-btn">
+            <button class="piece-btn" data-type="tromino">
               <span class="piece-btn__glyph"
                 ><span class="piece-btn__glyph-grid glyph-tromino"><span></span><span></span><span></span></span
               ></span>
               <span class="piece-btn__count">∞</span>
             </button>
-            <button class="piece-btn">
+            <button class="piece-btn" data-type="tetromino">
               <span class="piece-btn__glyph"
                 ><span class="piece-btn__glyph-grid glyph-tetromino"
                   ><span></span><span></span><span></span><span></span></span
@@ -175,11 +178,11 @@
 
             <button class="piece-btn piece-btn--skip" title="Skip turn">
               <span class="piece-btn__icon">⏭</span>
-              <span class="piece-btn__count">−4</span>
+              <span class="piece-btn__count">0</span>
             </button>
           </div>
 
-          <span class="player-plate__score">41</span>
+          <span class="player-plate__score">0</span>
           <span class="player-plate__clock">06:47</span>
         </div>
       </div>
@@ -193,7 +196,7 @@
       </div>
     </div>
 
-    <script type="module" src="js/main.js"></script>
     <script src="js/hintsPanel.js" defer></script>
+    <script type="module" src="js/main.js"></script>
   </body>
 </html>

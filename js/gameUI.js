@@ -1,6 +1,7 @@
 import { Board } from "./board.js";
 import { Shape, SHAPES_BASE } from "./shape.js";
 import { GestureRecognizer } from "./gestureRecognizer.js";
+import { PASS_PENALTY } from "./config.js";
 
 const KEY_TO_TYPE = { 1: "gesture", 2: "domino", 3: "tromino", 4: "tetromino" };
 
@@ -26,11 +27,31 @@ export class GameUI {
   }
 
   init() {
-    this._updateButtonHighlight();
-    this._updateTurnIndicator();
-    this._updateScoreBoard();
-    this._updatePassButton();
-    this.refresh();
+    this._render();
+  }
+
+  // ===================== intents: piece selection & transforms =====================
+
+  selectType(type) {
+    this.selectedType = type;
+    this.rotationStep = 0;
+    this.flipped = false;
+    this.pendingGesture = null;
+    this.isDrawingGesture = false;
+    this.gesturePath = [];
+    this.gestureSeen = new Set();
+    this.suppressNextClick = false;
+    this._render();
+  }
+
+  rotate(direction) {
+    this.rotationStep = (this.rotationStep + direction + 4) % 4;
+    this._render();
+  }
+
+  flip() {
+    this.flipped = !this.flipped;
+    this._render();
   }
 
   currentShape() {
@@ -41,14 +62,81 @@ export class GameUI {
     return cells;
   }
 
-  getActivePlacement() {
-    if (this.pendingGesture) {
-      return [[this.pendingGesture.anchorRow, this.pendingGesture.anchorCol], this.pendingGesture.shape];
-    }
-    if (this.selectedType === "gesture") return [null, null];
-    if (!this.hoverCell) return [null, null];
-    return [this.hoverCell, this.currentShape()];
+  // ===================== intents: gesture drawing =====================
+
+  startGesture(cell) {
+    if (this.selectedType !== "gesture") return;
+    if (this.pendingGesture) return;
+    this.isDrawingGesture = true;
+    this.gesturePath = [cell];
+    this.gestureSeen = new Set([Board.key(...cell)]);
+    this._render();
   }
+
+  finishGesture() {
+    if (!this.isDrawingGesture) return;
+    this.isDrawingGesture = false;
+    this.pendingGesture = GestureRecognizer.recognize(this.gesturePath);
+    this.gesturePath = [];
+    this.gestureSeen = new Set();
+    this.suppressNextClick = true; // the click right after mouseup shouldn't also place a piece
+    this._render();
+  }
+
+  cancelGesture() {
+    this.isDrawingGesture = false;
+    this.pendingGesture = null;
+    this.gesturePath = [];
+    this.gestureSeen = new Set();
+    this._render();
+  }
+
+  confirmGesture() {
+    if (!this.pendingGesture) return;
+    const { type, shape, anchorRow, anchorCol } = this.pendingGesture;
+    this.game.attemptPlacement(type, shape, anchorRow, anchorCol);
+    this.pendingGesture = null;
+    this._render();
+  }
+
+  secondaryAction() {
+    if (this.selectedType === "gesture") {
+      this.cancelGesture();
+    } else {
+      this.flip();
+    }
+  }
+
+  // ===================== intents: board interaction =====================
+
+  hover(cell) {
+    this.hoverCell = cell;
+    if (this.isDrawingGesture) {
+      const key = Board.key(...cell);
+      if (!this.gestureSeen.has(key)) {
+        this.gestureSeen.add(key);
+        this.gesturePath.push(cell);
+      }
+    }
+    this._render();
+  }
+
+  clearHover() {
+    this.hoverCell = null;
+    this._render();
+  }
+
+  placeAt([row, col]) {
+    this.game.attemptPlacement(this.selectedType, this.currentShape(), row, col);
+    this._render();
+  }
+
+  skipTurn() {
+    if (!this.game.pass()) return;
+    this._render();
+  }
+
+  // ===================== input: DOM event listeners =====================
 
   _cellFromEvent(event) {
     const rect = this.canvas.getBoundingClientRect();
@@ -64,174 +152,132 @@ export class GameUI {
   }
 
   _bindCanvasEvents() {
-    this.canvas.addEventListener("mousedown", (e) => this._onMouseDown(e));
-    document.addEventListener("mouseup", () => this._onMouseUp());
-    this.canvas.addEventListener("mousemove", (e) => this._onMouseMove(e));
-    this.canvas.addEventListener("mouseleave", () => this._onMouseLeave());
-    this.canvas.addEventListener("click", (e) => this._onClick(e));
-    this.canvas.addEventListener("contextmenu", (e) => this._onContextMenu(e));
-    this.canvas.addEventListener("wheel", (e) => this._onWheel(e));
+    this.canvas.addEventListener("mousedown", (e) => {
+      if (e.button !== 0) return;
+      this.startGesture(this._cellFromEvent(e));
+    });
+
+    document.addEventListener("mouseup", () => this.finishGesture());
+
+    this.canvas.addEventListener("mousemove", (e) => this.hover(this._cellFromEvent(e)));
+    this.canvas.addEventListener("mouseleave", () => this.clearHover());
+
+    this.canvas.addEventListener("click", (e) => {
+      if (this.suppressNextClick) {
+        this.suppressNextClick = false;
+        return;
+      }
+      if (this.pendingGesture) {
+        this.confirmGesture();
+        return;
+      }
+      if (this.selectedType === "gesture") return; // nothing drawn/confirmed yet
+      this.placeAt(this._cellFromEvent(e));
+    });
+
+    this.canvas.addEventListener("contextmenu", (e) => {
+      e.preventDefault();
+      this.secondaryAction();
+    });
+
+    this.canvas.addEventListener("wheel", (e) => {
+      e.preventDefault();
+      this.rotate(e.deltaY > 0 ? 1 : -1);
+    });
   }
 
   _bindControls() {
-    document.querySelectorAll("#pieceButtons button").forEach((btn) => {
+    // Both plates' buttons share the same binding — a button just carries its
+    // own data-type, it doesn't matter which player's row it lives in. Disabled
+    // buttons (the inactive player's row) simply don't fire click events at all.
+    document.querySelectorAll(".piece-selector button[data-type]").forEach((btn) => {
       btn.addEventListener("click", () => this.selectType(btn.dataset.type));
     });
-    document.getElementById("passBtn").addEventListener("click", () => this._onPassClick());
+
+    document.querySelectorAll(".piece-btn--skip").forEach((btn) => {
+      btn.addEventListener("click", () => this.skipTurn());
+    });
+
     document.addEventListener("keydown", (event) => {
       const type = KEY_TO_TYPE[event.key];
-      if (!type) return;
-      this.selectType(type);
+      if (type) this.selectType(type);
     });
   }
 
-  _onMouseDown(event) {
-    if (event.button !== 0) return;
-    if (this.selectedType !== "gesture") return;
-    if (this.pendingGesture) return;
+  // ===================== render: fully re-derive the DOM from state =====================
 
-    const [row, col] = this._cellFromEvent(event);
-    this.isDrawingGesture = true;
-    this.gesturePath = [[row, col]];
-    this.gestureSeen = new Set(this.gesturePath.map(([r, c]) => Board.key(r, c)));
-    this.refresh();
-  }
-
-  _onMouseUp() {
-    if (!this.isDrawingGesture) return;
-    this.isDrawingGesture = false;
-    this.pendingGesture = GestureRecognizer.recognize(this.gesturePath);
-    this.gesturePath = [];
-    this.gestureSeen = new Set();
-    this.suppressNextClick = true;
-    this.refresh();
-  }
-
-  _onMouseMove(event) {
-    this.hoverCell = this._cellFromEvent(event);
-    if (this.isDrawingGesture) {
-      const key = Board.key(...this.hoverCell);
-      if (!this.gestureSeen.has(key)) {
-        this.gestureSeen.add(key);
-        this.gesturePath.push(this.hoverCell);
-      }
+  _activePlacement() {
+    if (this.pendingGesture) {
+      return [[this.pendingGesture.anchorRow, this.pendingGesture.anchorCol], this.pendingGesture.shape];
     }
-    this.refresh();
+    if (this.selectedType === "gesture") return [null, null];
+    if (!this.hoverCell) return [null, null];
+    return [this.hoverCell, this.currentShape()];
   }
 
-  _onMouseLeave() {
-    this.hoverCell = null;
-    this.refresh();
+  _render() {
+    this._syncCanvas();
+    this._syncPlates();
+    this._syncGameOver();
   }
 
-  _onClick(event) {
-    if (this.suppressNextClick) {
-      this.suppressNextClick = false;
-      return;
-    }
-
-    if (this.selectedType === "gesture") {
-      if (!this.pendingGesture) return;
-      const { type, shape, anchorRow, anchorCol } = this.pendingGesture;
-      this.game.attemptPlacement(type, shape, anchorRow, anchorCol);
-      this.pendingGesture = null;
-      this._afterMove();
-      return;
-    }
-
-    const [row, col] = this._cellFromEvent(event);
-    this.game.attemptPlacement(this.selectedType, this.currentShape(), row, col);
-    this._afterMove();
-  }
-
-  _onContextMenu(event) {
-    event.preventDefault();
-
-    if (this.selectedType === "gesture") {
-      this.isDrawingGesture = false;
-      this.pendingGesture = null;
-      this.gesturePath = [];
-      this.gestureSeen = new Set();
-      this.refresh();
-      return;
-    }
-
-    this.flipped = !this.flipped;
-    this.refresh();
-  }
-
-  _onWheel(event) {
-    event.preventDefault();
-    const dir = event.deltaY > 0 ? 1 : -1;
-    this.rotationStep = (this.rotationStep + dir + 4) % 4;
-    this.refresh();
-  }
-
-  selectType(type) {
-    this.selectedType = type;
-    this.rotationStep = 0;
-    this.flipped = false;
-    this.pendingGesture = null;
-    this.isDrawingGesture = false;
-    this.gesturePath = [];
-    this.gestureSeen = new Set();
-    this.suppressNextClick = false;
-    this._updateButtonHighlight();
-    this.refresh();
-  }
-
-  _onPassClick() {
-    if (!this.game.pass()) return;
-    this._afterMove();
-  }
-
-  _afterMove() {
-    this._updateScoreBoard();
-    this._updateTurnIndicator();
-    this._updatePassButton();
-    if (this.game.gameOver) this._showGameOver();
-    this.refresh();
-  }
-
-  _updateButtonHighlight() {
-    document.querySelectorAll("#pieceButtons button").forEach((btn) => {
-      btn.classList.toggle("selected", btn.dataset.type === this.selectedType);
-    });
-  }
-
-  _updateScoreBoard() {
-    document.getElementById("score1").textContent = this.game.players[0].score;
-    document.getElementById("score2").textContent = this.game.players[1].score;
-  }
-
-  _updateTurnIndicator() {
-    document.getElementById("turnIndicator").textContent = `Player ${this.game.currentPlayerIndex + 1}'s move`;
-  }
-
-  _updatePassButton() {
-    const canMove = this.game.canCurrentPlayerMove();
-    document.getElementById("passBtn").disabled = canMove || this.game.gameOver;
-  }
-
-  _showGameOver() {
-    const banner = document.getElementById("gameOverBanner");
-    banner.style.display = "block";
-    const winner = this.game.winnerIndex;
-    banner.textContent = winner === null ? "Draw!" : `Game over. Player ${winner + 1} wins!`;
-  }
-
-  refresh() {
-    const [activeCell, activeShape] = this.getActivePlacement();
-    const activeType = this.pendingGesture ? this.pendingGesture.type : this.selectedType;
+  _syncCanvas() {
+    const [hoverCell, hoverShape] = this._activePlacement();
+    const pieceType = this.pendingGesture ? this.pendingGesture.type : this.selectedType;
 
     this.renderer.render(
       this.game.board,
       this.game.zones,
       this.game.currentPlayer,
-      activeType,
-      activeShape,
-      activeCell,
+      pieceType,
+      hoverShape,
+      hoverCell,
       this.gesturePath,
     );
+  }
+
+  _syncPlates() {
+    this.game.players.forEach((player) => this._syncPlate(player));
+  }
+
+  _syncPlate(player) {
+    const plate = document.querySelector(player.id === 0 ? ".player-plate--a" : ".player-plate--b");
+    if (!plate) return;
+
+    const isActive = player.id === this.game.currentPlayerIndex;
+    plate.classList.toggle("player-plate--active", isActive);
+
+    const scoreEl = plate.querySelector(".player-plate__score");
+    if (scoreEl) scoreEl.textContent = player.score;
+
+    const dominoCountEl = plate.querySelector('button[data-type="domino"] .piece-btn__count');
+    if (dominoCountEl) dominoCountEl.textContent = player.dominoLeft;
+
+    const skipPenalty = player.score - Math.floor(player.score * PASS_PENALTY);
+    const skipCountEl = plate.querySelector(".piece-btn--skip .piece-btn__count");
+    if (skipCountEl) skipCountEl.textContent = `-${skipPenalty}`;
+
+    const canCurrentPlayerMove = isActive && this.game.canCurrentPlayerMove();
+
+    plate.querySelectorAll(".piece-selector button").forEach((btn) => {
+      const isSkip = btn.classList.contains("piece-btn--skip");
+      btn.disabled = !isActive || this.game.gameOver || (isSkip && canCurrentPlayerMove);
+      btn.classList.toggle("piece-btn--selected", isActive && !isSkip && btn.dataset.type === this.selectedType);
+    });
+  }
+
+  _syncGameOver() {
+    const overlay = document.getElementById("gameOverOverlay");
+    const message = document.getElementById("gameOverMessage");
+    if (!overlay || !message) return;
+
+    if (!this.game.gameOver) {
+      overlay.hidden = true;
+      return;
+    }
+
+    const winner = this.game.winnerIndex;
+    message.textContent = winner === null ? "Draw" : `player_${winner + 1} wins`;
+    overlay.hidden = false;
   }
 }
