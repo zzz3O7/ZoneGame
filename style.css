@@ -5,6 +5,19 @@
   --radius-sm: 4px;
   --radius-md: 8px;
 
+  /* .layout grid geometry — the board-size formula derives from these,
+     so changing a column width or spacing here keeps the board's adaptive
+     sizing correct automatically instead of needing a hand-recomputed number. */
+  --layout-padding: 20px;
+  --layout-gap: 20px;
+  --col-left-width: 280px;
+  --col-right-width: 320px;
+  /* horizontal space eaten by everything except the board: both side
+     columns, the two gaps between the three columns, and the outer padding */
+  --side-columns-budget: calc(
+    var(--col-left-width) + var(--col-right-width) + (var(--layout-gap) * 2) + (var(--layout-padding) * 2)
+  );
+
   /* Typography */
   --font-display: "Space Grotesk", sans-serif;
   --font-body: "Inter", sans-serif;
@@ -29,13 +42,10 @@
   --color-accent-muted: #4f6b41;
   --color-score: #d3a94a; /* score numbers, bonus highlights */
   --color-danger: #b8593f; /* skip penalty, destructive actions */
-  --color-danger-muted: #3a2620;
 
   /* Colors: player identity */
   --color-player-a: #4f8fc4;
-  --color-player-a-muted: #2e4a60;
   --color-player-b: #b8593f;
-  --color-player-b-muted: #5c3527;
 }
 
 * {
@@ -83,14 +93,18 @@ button {
   flex: 1;
   min-height: 0;
   display: grid;
-  grid-template-columns: 280px auto 320px;
+  grid-template-columns: var(--col-left-width) auto var(--col-right-width);
   grid-template-rows: auto;
   align-content: center;
   justify-content: center;
-  gap: 20px;
-  padding: 20px;
+  gap: var(--layout-gap);
+  padding: var(--layout-padding);
   overflow: hidden;
-  --board-computed-size: min(var(--board-size), calc(100vh - 40px), calc(100vw - 680px));
+  --board-computed-size: min(
+    var(--board-size),
+    calc(100vh - (var(--layout-padding) * 2)),
+    calc(100vw - var(--side-columns-budget))
+  );
 }
 
 .col {
@@ -103,10 +117,10 @@ button {
 }
 
 .col--left {
-  width: 280px;
+  width: var(--col-left-width);
 }
 .col--right {
-  width: 320px;
+  width: var(--col-right-width);
 }
 
 .col--center {
@@ -626,6 +640,14 @@ button {
 }
 
 /* ===================== RESPONSIVE (narrow viewports: stack columns) ===================== */
+/* The 1340px threshold below is a plain number, not var(--side-columns-budget) —
+   CSS media query conditions can't reference custom properties. It's chosen to
+   switch to the stacked layout once the 3-column layout would squeeze the board
+   below a comfortable size: at 1340px wide, the board would get
+   1340 - var(--side-columns-budget) (currently 680px) = ~660px, still fine, so
+   the threshold is a bit of headroom below that pressure point. If you change
+   --col-left-width/--col-right-width/--layout-gap/--layout-padding, revisit
+   this number too — it doesn't update itself. */
 @media (max-width: 1340px) {
   html,
   body {
@@ -680,9 +702,9 @@ button {
 
   /* No side columns competing for horizontal space here, so the board's
      width budget is just the viewport minus the outer page padding —
-     the wide-layout formula (which subtracts the side columns' width)
-     would go negative on a narrow viewport and collapse the board to 0. */
+     the wide-layout formula (which subtracts --side-columns-budget) would
+     go negative on a narrow viewport and collapse the board to 0. */
   .board-wrap {
-    --board-computed-size: min(var(--board-size), calc(100vw - 40px));
+    --board-computed-size: min(var(--board-size), calc(100vw - (var(--layout-padding) * 2)));
   }
 }

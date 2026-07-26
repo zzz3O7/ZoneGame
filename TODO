@@ -3,6 +3,8 @@ move history
 undo/redo
 zooming/paning + mobile support
 
+gameUI.js full refactor
+colours
 default rotation of the shapes must be the same as the glyph on the button
 
 sound
