@@ -1,25 +1,27 @@
+// Canvas can't read CSS custom properties, so these hex values are copied
+// by hand from the :root tokens in style.css. Keep them in sync manually.
 export const THEME = {
-  floor: "#f0f0f0",
-  wall: "#505050",
-  wallBonus: "#5a4a1a",
-  bonusText: "#e8c95a",
-  gridLine: "#333333",
-  piece: "#6b6b6b",
-  gesturePath: "rgba(90,90,90,0.35)",
-  ghostShapeValid: "rgba(80,180,90,0.45)",
-  ghostShapeInvalid: "rgba(210,60,60,0.4)",
-  pendingNewZone: "rgba(120,120,220,0.2)",
-  pendingBonuses: "rgba(232,201,90,0.5)",
-  availibleZone: "rgba(80,180,90,0.25)",
-  unavailibleZone: "rgba(210,60,60,0.25)",
-  inactiveZone: "rgba(73, 73, 73, 0.25)",
-  zoneBorders: "#000000",
-  zoneBordersHighlight: "#564bb3",
+  floor: "#242c34",
+  wall: "#10141a", // walls match --color-bg, so they recede into the page
+  wallBonus: "#3a2f14",
+  bonusText: "#d3a94a",
+  gridLine: "#07080a",
+  piece: "#10141a", // same as wall: pieces read as solid/permanent, like walls
+  gesturePath: "rgba(231,233,230,0.25)",
+  ghostShapeValid: "rgba(126,166,102,0.5)",
+  ghostShapeInvalid: "rgba(184,89,63,0.45)",
+  pendingNewZone: "rgba(79,143,196,0.18)",
+  pendingBonuses: "rgba(211,169,74,0.5)",
+  availibleZone: "rgba(126,166,102,0.22)",
+  unavailibleZone: "rgba(184,89,63,0.22)",
+  inactiveZone: "rgba(92,101,112,0.2)",
+  zoneBorders: "#7d8896", // bright on purpose: must hold up over any zone fill
+  zoneBordersHighlight: "#b7b9ba", // hover state, distinct from the border above
 };
 
 export const LAYOUT = {
   canvasResolution: 720,
-  bonusFontRatio: 0.4,
+  bonusFontRatio: 0.5,
 };
 
 export const ZONE_RADIUS = 5;

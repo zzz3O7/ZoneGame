@@ -88,7 +88,7 @@ export class Renderer {
 
     if (hoveredZone) {
       ctx.strokeStyle = THEME.zoneBordersHighlight;
-      ctx.lineWidth = 5;
+      ctx.lineWidth = 3;
       this._strokeZoneBorder(hoveredZone);
     }
   }
