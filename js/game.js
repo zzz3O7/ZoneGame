@@ -19,7 +19,6 @@ export class Game {
     this.zones = [];
     this.players = [new Player(0, "Player 1", STARTING_DOMINOS), new Player(1, "Player 2", STARTING_DOMINOS)];
     this.currentPlayerIndex = 0;
-    this.consecutivePasses = 0;
     this.gameOver = false;
   }
 
@@ -49,7 +48,7 @@ export class Game {
     }
 
     this._checkZoneCompletions();
-    this.consecutivePasses = 0;
+    this._checkGameEnd();
     this._advanceTurn();
     return true;
   }
@@ -59,14 +58,8 @@ export class Game {
     if (this.canCurrentPlayerMove()) return false;
 
     this.currentPlayer.applyPassPenalty(PASS_PENALTY);
-    this.consecutivePasses++;
-
-    if (this.consecutivePasses >= 2) {
-      this.gameOver = true;
-      return true;
-    }
-
     this._advanceTurn();
+    this._checkGameEnd();
     return true;
   }
 
@@ -84,6 +77,11 @@ export class Game {
         this.players[winnerIndex].addScore(zone.cost);
       }
     }
+  }
+
+  _checkGameEnd() {
+    const noOneCanMove = this.players.every((player) => !Rules.canPlayerMove(this.board, this.zones, player));
+    if (noOneCanMove) this.gameOver = true;
   }
 
   get winnerIndex() {

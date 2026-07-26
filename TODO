@@ -1,6 +1,4 @@
 game end + menu
-    seed visuals
-    zone information table +? window
 move history
 undo/redo
 zooming/paning + mobile support
