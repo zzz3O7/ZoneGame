@@ -187,7 +187,7 @@ button {
 }
 .hints__key {
   flex-shrink: 0;
-  min-width: 30px;
+  width: 80px;
   height: 22px;
   padding: 0 6px;
   display: inline-flex;

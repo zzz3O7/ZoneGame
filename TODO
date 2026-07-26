@@ -2,10 +2,8 @@ game end + menu
 move history
 undo/redo
 zooming/paning + mobile support
-    remove necessity to skip turns twice - detect game end automatically
-    r, e and f controls
 
 sound
 modes
 
-on different sizes board is still a square not a rectangle
+on different sizes board is still a square not a rectangle and tiles are squished

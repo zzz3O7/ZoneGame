@@ -202,7 +202,18 @@ export class GameUI {
 
     document.addEventListener("keydown", (event) => {
       const type = KEY_TO_TYPE[event.key];
-      if (type) this.selectType(type);
+      if (type) {
+        this.selectType(type);
+        return;
+      }
+      if (event.key === "r") {
+        this.rotate(1);
+        return;
+      }
+      if (event.key === "f") {
+        this.secondaryAction();
+        return;
+      }
     });
   }
 
