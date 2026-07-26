@@ -29,7 +29,7 @@
             </div>
             <div class="game-info__row">
               <span class="game-info__label">Seed</span>
-              <span class="game-info__value">8841203</span>
+              <span class="game-info__value" id="seedValue">0</span>
             </div>
             <div class="game-info__row">
               <span class="game-info__label">Board size</span>
@@ -131,6 +131,7 @@
         <!-- Board: fixed-size canvas, sized/rendered by Renderer at startup -->
         <div class="board-wrap">
           <canvas id="board-canvas"></canvas>
+          <div class="zone-tooltip" id="zoneTooltip" hidden></div>
           <div class="board-overlay" id="gameOverOverlay" hidden>
             <div class="board-overlay__message" id="gameOverMessage"></div>
           </div>

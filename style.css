@@ -469,6 +469,29 @@ button {
   height: 100%;
 }
 
+.zone-tooltip {
+  position: absolute;
+  --zone-tooltip-gap: 5px;
+  background: var(--color-surface-raised);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  padding: 4px 8px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--color-text);
+  white-space: nowrap;
+  pointer-events: none;
+  z-index: 5;
+}
+
+.zone-tooltip--above {
+  transform: translate(-50%, calc(-100% - var(--zone-tooltip-gap)));
+}
+
+.zone-tooltip--below {
+  transform: translate(-50%, var(--zone-tooltip-gap));
+}
+
 .board-overlay {
   position: absolute;
   inset: 0;

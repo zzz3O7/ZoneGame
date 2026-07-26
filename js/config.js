@@ -14,6 +14,7 @@ export const THEME = {
   unavailibleZone: "rgba(210,60,60,0.25)",
   inactiveZone: "rgba(73, 73, 73, 0.25)",
   zoneBorders: "#000000",
+  zoneBordersHighlight: "#564bb3",
 };
 
 export const LAYOUT = {

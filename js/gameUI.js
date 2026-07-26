@@ -14,7 +14,7 @@ export class GameUI {
     this.selectedType = "gesture";
     this.rotationStep = 0;
     this.flipped = false;
-    this.hoverCell = null;
+    this.cursorCell = null;
 
     this.isDrawingGesture = false;
     this.gesturePath = [];
@@ -110,7 +110,7 @@ export class GameUI {
   // ===================== intents: board interaction =====================
 
   hover(cell) {
-    this.hoverCell = cell;
+    this.cursorCell = cell;
     if (this.isDrawingGesture) {
       const key = Board.key(...cell);
       if (!this.gestureSeen.has(key)) {
@@ -118,11 +118,13 @@ export class GameUI {
         this.gesturePath.push(cell);
       }
     }
+    this._updateZoneTooltip(cell);
     this._render();
   }
 
   clearHover() {
-    this.hoverCell = null;
+    this.cursorCell = null;
+    this._updateZoneTooltip(null);
     this._render();
   }
 
@@ -211,8 +213,58 @@ export class GameUI {
       return [[this.pendingGesture.anchorRow, this.pendingGesture.anchorCol], this.pendingGesture.shape];
     }
     if (this.selectedType === "gesture") return [null, null];
-    if (!this.hoverCell) return [null, null];
-    return [this.hoverCell, this.currentShape()];
+    if (!this.cursorCell) return [null, null];
+    return [this.cursorCell, this.currentShape()];
+  }
+
+  _boardRectInfo() {
+    const rect = this.canvas.getBoundingClientRect();
+    const wrapRect = this.canvas.parentElement.getBoundingClientRect();
+    const board = this.game.board;
+    return {
+      cssCellW: rect.width / board.cols,
+      cssCellH: rect.height / board.rows,
+      offsetX: rect.left - wrapRect.left,
+      offsetY: rect.top - wrapRect.top,
+    };
+  }
+
+  _updateZoneTooltip(cell) {
+    const tooltip = document.getElementById("zoneTooltip");
+    if (!tooltip) return;
+
+    const board = this.game.board;
+    const zoneId = cell ? board.zoneIdAt(cell[0], cell[1]) : null;
+    if (zoneId === null) {
+      tooltip.hidden = true;
+      return;
+    }
+
+    const zone = this.game.zones[zoneId];
+    let minRow = Infinity,
+      maxRow = -Infinity,
+      minCol = Infinity,
+      maxCol = -Infinity;
+    for (const key of zone.cellSet) {
+      const [r, c] = Board.parse(key);
+      if (r < minRow) minRow = r;
+      if (r > maxRow) maxRow = r;
+      if (c < minCol) minCol = c;
+      if (c > maxCol) maxCol = c;
+    }
+
+    const { cssCellW, cssCellH, offsetX, offsetY } = this._boardRectInfo();
+    const centerX = offsetX + ((minCol + maxCol + 1) / 2) * cssCellW;
+    const topY = offsetY + minRow * cssCellH;
+    const bottomY = offsetY + (maxRow + 1) * cssCellH;
+    const showAbove = topY > 30;
+
+    tooltip.textContent = `Reward: ${zone.cost}`;
+    tooltip.style.left = `${centerX}px`;
+    tooltip.style.top = showAbove ? `${topY}px` : `${bottomY}px`;
+    tooltip.classList.toggle("zone-tooltip--above", showAbove);
+    tooltip.classList.toggle("zone-tooltip--below", !showAbove);
+    tooltip.hidden = false;
   }
 
   _render() {
@@ -222,7 +274,7 @@ export class GameUI {
   }
 
   _syncCanvas() {
-    const [hoverCell, hoverShape] = this._activePlacement();
+    const [anchorCell, anchorShape] = this._activePlacement();
     const pieceType = this.pendingGesture ? this.pendingGesture.type : this.selectedType;
 
     this.renderer.render(
@@ -230,8 +282,9 @@ export class GameUI {
       this.game.zones,
       this.game.currentPlayer,
       pieceType,
-      hoverShape,
-      hoverCell,
+      anchorShape,
+      anchorCell,
+      this.cursorCell,
       this.gesturePath,
     );
   }

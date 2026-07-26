@@ -14,14 +14,15 @@ export class Renderer {
     canvas.height = board.rows * this.cellSize;
   }
 
-  render(board, zones, currentPlayer, pieceType, hoverShape, hoverCell, gesturePath) {
+  render(board, zones, currentPlayer, pieceType, anchorShape, anchorCell, cursorCell, gesturePath) {
     this._drawBoard(board);
     this._drawZones(zones, currentPlayer.id);
-    this._drawZoneBorders(zones);
-    this._drawZonePreview(board, hoverShape, hoverCell);
+    const hoveredZoneId = cursorCell ? board.zoneIdAt(cursorCell[0], cursorCell[1]) : null;
+    this._drawZoneBorders(zones, hoveredZoneId);
+    this._drawZonePreview(board, anchorShape, anchorCell);
     this._drawPieces(board);
     this._drawGesturePath(gesturePath);
-    this._drawGhost(board, zones, currentPlayer, pieceType, hoverShape, hoverCell);
+    this._drawGhost(board, zones, currentPlayer, pieceType, anchorShape, anchorCell);
   }
 
   _drawBoard(board) {
@@ -73,46 +74,59 @@ export class Renderer {
     }
   }
 
-  _drawZoneBorders(zones) {
+  _drawZoneBorders(zones, hoveredZoneId) {
     const ctx = this.ctx;
+    const hoveredZone = zones.find((z) => z.id === hoveredZoneId);
+
     ctx.strokeStyle = THEME.zoneBorders;
     ctx.lineWidth = 3;
-
     for (const zone of zones) {
-      for (const key of zone.cellSet) {
-        const [r, c] = Board.parse(key);
-        const x = c * this.cellSize,
-          y = r * this.cellSize;
+      if (zone.id === hoveredZoneId) continue;
+      this._strokeZoneBorder(zone);
+    }
 
-        for (const [dr, dc, edge] of [
-          [-1, 0, "top"],
-          [1, 0, "bottom"],
-          [0, -1, "left"],
-          [0, 1, "right"],
-        ]) {
-          const nr = r + dr,
-            nc = c + dc;
-          if (zone.cellSet.has(Board.key(nr, nc))) continue;
+    if (hoveredZone) {
+      ctx.strokeStyle = THEME.zoneBordersHighlight;
+      ctx.lineWidth = 5;
+      this._strokeZoneBorder(hoveredZone);
+    }
+  }
 
-          ctx.beginPath();
-          if (edge === "top") {
-            ctx.moveTo(x, y);
-            ctx.lineTo(x + this.cellSize, y);
-          }
-          if (edge === "bottom") {
-            ctx.moveTo(x, y + this.cellSize);
-            ctx.lineTo(x + this.cellSize, y + this.cellSize);
-          }
-          if (edge === "left") {
-            ctx.moveTo(x, y);
-            ctx.lineTo(x, y + this.cellSize);
-          }
-          if (edge === "right") {
-            ctx.moveTo(x + this.cellSize, y);
-            ctx.lineTo(x + this.cellSize, y + this.cellSize);
-          }
-          ctx.stroke();
+  _strokeZoneBorder(zone) {
+    const ctx = this.ctx;
+    for (const key of zone.cellSet) {
+      const [r, c] = Board.parse(key);
+      const x = c * this.cellSize,
+        y = r * this.cellSize;
+
+      for (const [dr, dc, edge] of [
+        [-1, 0, "top"],
+        [1, 0, "bottom"],
+        [0, -1, "left"],
+        [0, 1, "right"],
+      ]) {
+        const nr = r + dr,
+          nc = c + dc;
+        if (zone.cellSet.has(Board.key(nr, nc))) continue;
+
+        ctx.beginPath();
+        if (edge === "top") {
+          ctx.moveTo(x, y);
+          ctx.lineTo(x + this.cellSize, y);
         }
+        if (edge === "bottom") {
+          ctx.moveTo(x, y + this.cellSize);
+          ctx.lineTo(x + this.cellSize, y + this.cellSize);
+        }
+        if (edge === "left") {
+          ctx.moveTo(x, y);
+          ctx.lineTo(x, y + this.cellSize);
+        }
+        if (edge === "right") {
+          ctx.moveTo(x + this.cellSize, y);
+          ctx.lineTo(x + this.cellSize, y + this.cellSize);
+        }
+        ctx.stroke();
       }
     }
   }
@@ -126,9 +140,9 @@ export class Renderer {
     }
   }
 
-  _drawZonePreview(board, hoverShape, hoverCell) {
-    if (!hoverCell || !hoverShape) return;
-    const [r, c] = hoverCell;
+  _drawZonePreview(board, anchorShape, anchorCell) {
+    if (!anchorCell || !anchorShape) return;
+    const [r, c] = anchorCell;
     if (board.zoneIdAt(r, c) !== null) return;
     if (!board.isFloor(r, c)) return;
 
@@ -158,13 +172,13 @@ export class Renderer {
     }
   }
 
-  _drawGhost(board, zones, currentPlayer, pieceType, hoverShape, hoverCell) {
-    if (!hoverCell || !hoverShape) return;
-    const [hr, hc] = hoverCell;
-    const valid = Rules.canPlaceHere(board, zones, currentPlayer, pieceType, hoverShape, hr, hc);
+  _drawGhost(board, zones, currentPlayer, pieceType, anchorShape, anchorCell) {
+    if (!anchorCell || !anchorShape) return;
+    const [hr, hc] = anchorCell;
+    const valid = Rules.canPlaceHere(board, zones, currentPlayer, pieceType, anchorShape, hr, hc);
 
     this.ctx.fillStyle = valid ? THEME.ghostShapeValid : THEME.ghostShapeInvalid;
-    for (const [r, c] of Shape.cellsAt(hoverShape, hr, hc)) {
+    for (const [r, c] of Shape.cellsAt(anchorShape, hr, hc)) {
       if (board.isInside(r, c)) {
         this.ctx.fillRect(c * this.cellSize, r * this.cellSize, this.cellSize, this.cellSize);
       }
