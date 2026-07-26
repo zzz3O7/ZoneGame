@@ -1,6 +1,7 @@
 import { Game } from "./game.js";
 import { Renderer } from "./renderer.js";
 import { GameUI } from "./gameUI.js";
+import { initHintsPanel } from "./hintsPanel.js";
 
 const canvas = document.getElementById("board-canvas");
 const game = new Game(20, 20);
@@ -11,3 +12,4 @@ document.getElementById("seedValue").textContent = game.seed;
 const ui = new GameUI(game, renderer, canvas);
 
 ui.init();
+initHintsPanel();

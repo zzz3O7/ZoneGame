@@ -18,7 +18,7 @@ export const THEME = {
 };
 
 export const LAYOUT = {
-  targetBoardSize: 720,
+  canvasResolution: 720,
   bonusFontRatio: 0.4,
 };
 

@@ -1,4 +1,5 @@
 import { Board } from "./board.js";
+import { ORTHOGONAL_OFFSETS } from "./directions.js";
 
 export class Zone {
   constructor(id, cellSet, cost, creator) {
@@ -29,12 +30,7 @@ export class Zone {
 
       cellSet.add(Board.key(r, c));
 
-      for (const [dr, dc] of [
-        [1, 0],
-        [-1, 0],
-        [0, 1],
-        [0, -1],
-      ]) {
+      for (const [dr, dc] of ORTHOGONAL_OFFSETS) {
         const nr = r + dr,
           nc = c + dc;
         const key = Board.key(nr, nc);
@@ -55,12 +51,7 @@ export class Zone {
       const dist = Math.max(Math.abs(r - anchorRow), Math.abs(c - anchorCol));
       if (dist > radius) continue;
 
-      const adjacentToZone = [
-        [1, 0],
-        [-1, 0],
-        [0, 1],
-        [0, -1],
-      ].some(([dr, dc]) => cellSet.has(Board.key(r + dr, c + dc)));
+      const adjacentToZone = ORTHOGONAL_OFFSETS.some(([dr, dc]) => cellSet.has(Board.key(r + dr, c + dc)));
       if (adjacentToZone) found.add(key);
     }
     return found;

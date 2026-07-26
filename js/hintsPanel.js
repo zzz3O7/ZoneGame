@@ -1,4 +1,4 @@
-document.addEventListener("DOMContentLoaded", () => {
+export function initHintsPanel() {
   const toggle = document.querySelector(".hints__toggle");
   const body = document.getElementById("hintsBody");
   if (!toggle || !body) return;
@@ -9,4 +9,4 @@ document.addEventListener("DOMContentLoaded", () => {
     toggle.textContent = wasExpanded ? "Expand" : "Collapse";
     toggle.setAttribute("aria-expanded", String(!wasExpanded));
   });
-});
+}

@@ -1,4 +1,5 @@
 import { shuffle } from "./rng.js";
+import { ORTHOGONAL_OFFSETS } from "./directions.js";
 
 export class CaveGenerator {
   static randomFill(rows, cols, fillProb, rng = Math.random) {
@@ -68,12 +69,7 @@ export class CaveGenerator {
           while (stack.length) {
             const [r, c] = stack.pop();
             region.push([r, c]);
-            for (const [dr, dc] of [
-              [1, 0],
-              [-1, 0],
-              [0, 1],
-              [0, -1],
-            ]) {
+            for (const [dr, dc] of ORTHOGONAL_OFFSETS) {
               const nr = r + dr,
                 nc = c + dc;
               if (nr >= 0 && nc >= 0 && nr < rows && nc < cols && g[nr][nc] === 1 && !visited[nr][nc]) {
@@ -146,12 +142,7 @@ export class CaveGenerator {
     for (let row = 0; row < rows; row++) {
       for (let col = 0; col < cols; col++) {
         if (g[row][col] !== 0) continue;
-        const hasFloorNeighbor = [
-          [1, 0],
-          [-1, 0],
-          [0, 1],
-          [0, -1],
-        ].some(([dr, dc]) => {
+        const hasFloorNeighbor = ORTHOGONAL_OFFSETS.some(([dr, dc]) => {
           const r = row + dr,
             c = col + dc;
           return r >= 0 && c >= 0 && r < rows && c < cols && g[r][c] === 1;

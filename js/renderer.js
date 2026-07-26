@@ -3,13 +3,14 @@ import { Board } from "./board.js";
 import { Shape } from "./shape.js";
 import { Zone } from "./zone.js";
 import { Rules } from "./rules.js";
+import { ORTHOGONAL_EDGES } from "./directions.js";
 
 export class Renderer {
   constructor(canvas, board) {
     this.canvas = canvas;
     this.ctx = canvas.getContext("2d");
 
-    this.cellSize = Math.floor(LAYOUT.targetBoardSize / Math.max(board.cols, board.rows));
+    this.cellSize = Math.floor(LAYOUT.canvasResolution / Math.max(board.cols, board.rows));
     canvas.width = board.cols * this.cellSize;
     canvas.height = board.rows * this.cellSize;
   }
@@ -99,12 +100,7 @@ export class Renderer {
       const x = c * this.cellSize,
         y = r * this.cellSize;
 
-      for (const [dr, dc, edge] of [
-        [-1, 0, "top"],
-        [1, 0, "bottom"],
-        [0, -1, "left"],
-        [0, 1, "right"],
-      ]) {
+      for (const [dr, dc, edge] of ORTHOGONAL_EDGES) {
         const nr = r + dr,
           nc = c + dc;
         if (zone.cellSet.has(Board.key(nr, nc))) continue;
