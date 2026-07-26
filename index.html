@@ -76,125 +76,117 @@
         </section>
       </div>
 
-      <!-- CENTER COLUMN: player plates + fixed-size board -->
-      <div class="col col--center">
-        <!-- Opponent's plate -->
-        <div class="player-plate player-plate--b">
-          <div class="player-plate__identity">
-            <span class="player-plate__swatch"></span>
-            <div class="player-plate__name-block">
-              <span class="player-plate__name">player_2</span>
-              <span class="player-plate__rating">1742</span>
-            </div>
-          </div>
-
-          <div class="piece-selector">
-            <button class="piece-btn" data-type="gesture" title="Draw a shape freehand">
-              <span class="piece-btn__icon">✎</span>
-              <span class="piece-btn__label">draw</span>
-            </button>
-
-            <span class="piece-selector__divider"></span>
-
-            <button class="piece-btn" data-type="domino">
-              <span class="piece-btn__glyph"
-                ><span class="piece-btn__glyph-grid glyph-domino"><span></span><span></span></span
-              ></span>
-              <span class="piece-btn__count">2</span>
-            </button>
-            <button class="piece-btn" data-type="tromino">
-              <span class="piece-btn__glyph"
-                ><span class="piece-btn__glyph-grid glyph-tromino"><span></span><span></span><span></span></span
-              ></span>
-              <span class="piece-btn__count">∞</span>
-            </button>
-            <button class="piece-btn" data-type="tetromino">
-              <span class="piece-btn__glyph"
-                ><span class="piece-btn__glyph-grid glyph-tetromino"
-                  ><span></span><span></span><span></span><span></span></span
-              ></span>
-              <span class="piece-btn__count">∞</span>
-            </button>
-
-            <span class="piece-selector__divider"></span>
-
-            <button class="piece-btn piece-btn--skip" title="Skip turn">
-              <span class="piece-btn__icon">⏭</span>
-              <span class="piece-btn__count">0</span>
-            </button>
-          </div>
-
-          <span class="player-plate__score">0</span>
-          <span class="player-plate__clock">04:12</span>
-        </div>
-
-        <!-- Board: fixed-size canvas, sized/rendered by Renderer at startup -->
-        <div class="board-wrap">
-          <canvas id="board-canvas"></canvas>
-          <div class="zone-tooltip" id="zoneTooltip" hidden></div>
-          <div class="board-overlay" id="gameOverOverlay" hidden>
-            <div class="board-overlay__message" id="gameOverMessage"></div>
-          </div>
-        </div>
-
-        <!-- Own plate -->
-        <div class="player-plate player-plate--a player-plate--active">
-          <div class="player-plate__identity">
-            <span class="player-plate__swatch"></span>
-            <div class="player-plate__name-block">
-              <span class="player-plate__name">player_1</span>
-              <span class="player-plate__rating">1810</span>
-            </div>
-          </div>
-
-          <div class="piece-selector">
-            <button class="piece-btn" data-type="gesture" title="Draw a shape freehand">
-              <span class="piece-btn__icon">✎</span>
-              <span class="piece-btn__label">draw</span>
-            </button>
-
-            <span class="piece-selector__divider"></span>
-
-            <button class="piece-btn" data-type="domino">
-              <span class="piece-btn__glyph"
-                ><span class="piece-btn__glyph-grid glyph-domino"><span></span><span></span></span
-              ></span>
-              <span class="piece-btn__count">2</span>
-            </button>
-            <button class="piece-btn" data-type="tromino">
-              <span class="piece-btn__glyph"
-                ><span class="piece-btn__glyph-grid glyph-tromino"><span></span><span></span><span></span></span
-              ></span>
-              <span class="piece-btn__count">∞</span>
-            </button>
-            <button class="piece-btn" data-type="tetromino">
-              <span class="piece-btn__glyph"
-                ><span class="piece-btn__glyph-grid glyph-tetromino"
-                  ><span></span><span></span><span></span><span></span></span
-              ></span>
-              <span class="piece-btn__count">∞</span>
-            </button>
-
-            <span class="piece-selector__divider"></span>
-
-            <button class="piece-btn piece-btn--skip" title="Skip turn">
-              <span class="piece-btn__icon">⏭</span>
-              <span class="piece-btn__count">0</span>
-            </button>
-          </div>
-
-          <span class="player-plate__score">0</span>
-          <span class="player-plate__clock">06:47</span>
+      <!-- CENTER COLUMN: board + shared piece controls -->
+    <div class="col col--center">
+      <div class="board-wrap">
+        <canvas id="board-canvas"></canvas>
+        <div class="zone-tooltip" id="zoneTooltip" hidden></div>
+        <div class="board-overlay" id="gameOverOverlay" hidden>
+          <div class="board-overlay__message" id="gameOverMessage"></div>
         </div>
       </div>
 
-      <!-- RIGHT COLUMN: move history -->
-      <div class="col col--right">
-        <section class="panel move-history">
-          <div class="panel__header">Move History</div>
-          <div class="panel__body move-history__body"></div>
-        </section>
+      <div class="board-controls piece-selector">
+        <button class="piece-btn" data-type="gesture" title="Draw a shape freehand">
+          <span class="piece-btn__icon">✎</span>
+          <span class="piece-btn__label">draw</span>
+        </button>
+
+        <span class="piece-selector__divider"></span>
+
+        <button class="piece-btn" data-type="domino">
+          <span class="piece-btn__glyph"
+            ><span class="piece-btn__glyph-grid glyph-domino"><span></span><span></span></span
+          ></span>
+          <span class="piece-btn__count">2</span>
+        </button>
+        <button class="piece-btn" data-type="tromino">
+          <span class="piece-btn__glyph"
+            ><span class="piece-btn__glyph-grid glyph-tromino"><span></span><span></span><span></span></span
+          ></span>
+          <span class="piece-btn__count">∞</span>
+        </button>
+        <button class="piece-btn" data-type="tetromino">
+          <span class="piece-btn__glyph"
+            ><span class="piece-btn__glyph-grid glyph-tetromino"
+              ><span></span><span></span><span></span><span></span></span
+          ></span>
+          <span class="piece-btn__count">∞</span>
+        </button>
+
+        <span class="piece-selector__divider"></span>
+
+        <button class="piece-btn piece-btn--skip" title="Skip turn">
+          <span class="piece-btn__icon">⏭</span>
+          <span class="piece-btn__count">0</span>
+        </button>
       </div>
+    </div>
+
+    <!-- RIGHT COLUMN: opponent info / move history / self info -->
+    <div class="col col--right">
+      <section class="side-plate side-plate--opponent" data-player="1">
+        <div class="side-plate__pieces">
+          <span class="side-piece">
+            <span class="piece-btn__glyph-grid glyph-domino glyph-mini"><span></span><span></span></span>
+            <span class="side-piece__count" data-piece="domino">2</span>
+          </span>
+          <span class="side-piece">
+            <span class="piece-btn__glyph-grid glyph-tromino glyph-mini"><span></span><span></span><span></span></span>
+            <span class="side-piece__count">∞</span>
+          </span>
+          <span class="side-piece">
+            <span class="piece-btn__glyph-grid glyph-tetromino glyph-mini"
+              ><span></span><span></span><span></span><span></span></span
+            >
+            <span class="side-piece__count">∞</span>
+          </span>
+        </div>
+
+        <div class="side-plate__row">
+          <span class="side-plate__swatch"></span>
+          <div class="side-plate__name-block">
+            <span class="side-plate__name">player_2</span>
+            <span class="side-plate__rating">1742</span>
+          </div>
+          <span class="side-plate__score">0</span>
+          <span class="side-plate__clock">04:12</span>
+        </div>
+      </section>
+
+      <section class="panel move-history">
+        <div class="panel__header">Move History</div>
+        <div class="panel__body move-history__body"></div>
+      </section>
+
+      <section class="side-plate side-plate--self side-plate--active" data-player="0">
+        <div class="side-plate__row">
+          <span class="side-plate__swatch"></span>
+          <div class="side-plate__name-block">
+            <span class="side-plate__name">player_1</span>
+            <span class="side-plate__rating">1810</span>
+          </div>
+          <span class="side-plate__score">0</span>
+          <span class="side-plate__clock">06:47</span>
+        </div>
+
+        <div class="side-plate__pieces">
+          <span class="side-piece">
+            <span class="piece-btn__glyph-grid glyph-domino glyph-mini"><span></span><span></span></span>
+            <span class="side-piece__count" data-piece="domino">2</span>
+          </span>
+          <span class="side-piece">
+            <span class="piece-btn__glyph-grid glyph-tromino glyph-mini"><span></span><span></span><span></span></span>
+            <span class="side-piece__count">∞</span>
+          </span>
+          <span class="side-piece">
+            <span class="piece-btn__glyph-grid glyph-tetromino glyph-mini"
+              ><span></span><span></span><span></span><span></span></span
+            >
+            <span class="side-piece__count">∞</span>
+          </span>
+        </div>
+      </section>
     </div>
 
     <script src="js/hintsPanel.js" defer></script>
