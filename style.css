@@ -1,7 +1,7 @@
 /* ===================== TOKENS ===================== */
 :root {
   /* Layout */
-  --board-size: 720px;
+  --board-size: 720px; /* ideal/max board size; actual size adapts to viewport */
   --radius-sm: 4px;
   --radius-md: 8px;
 
@@ -46,14 +46,14 @@ html,
 body {
   margin: 0;
   padding: 0;
+  height: 100%;
+  overflow: hidden; /* nothing should ever need to scroll the page itself */
   background: var(--color-bg);
   color: var(--color-text);
   font-family: var(--font-body);
-  height: 100%;
 }
 
 body {
-  min-height: 100vh;
   display: flex;
   flex-direction: column;
 }
@@ -78,31 +78,19 @@ button {
   font-family: inherit;
 }
 
-/* ===================== TOPBAR ===================== */
-.topbar {
-  flex-shrink: 0;
-  padding: 10px 20px;
-  background: var(--color-surface);
-  border-bottom: 1px solid var(--color-border);
-}
-
-.topbar__brand {
-  font-family: var(--font-display);
-  font-weight: 700;
-  font-size: 18px;
-  letter-spacing: 0.02em;
-  color: var(--color-text);
-}
-
 /* ===================== MAIN LAYOUT ===================== */
 .layout {
   flex: 1;
+  min-height: 0;
   display: grid;
   grid-template-columns: 280px auto 320px;
+  grid-template-rows: auto;
+  align-content: center;
   justify-content: center;
   gap: 20px;
   padding: 20px;
-  overflow: auto;
+  overflow: hidden;
+  --board-computed-size: min(var(--board-size), calc(100vh - 40px), calc(100vw - 680px));
 }
 
 .col {
@@ -110,6 +98,8 @@ button {
   flex-direction: column;
   gap: 16px;
   min-width: 0;
+  min-height: 0;
+  height: var(--board-computed-size);
 }
 
 .col--left {
@@ -120,9 +110,10 @@ button {
 }
 
 .col--center {
-  width: var(--board-size);
   flex-shrink: 0;
-  align-items: stretch;
+  align-items: center;
+  justify-content: center;
+  min-height: 0;
 }
 
 /* ===================== GENERIC PANEL CARD ===================== */
@@ -172,6 +163,23 @@ button {
 }
 
 /* ===================== HINTS ===================== */
+/* .hints-panel fills whatever vertical space is left in the left column,
+   its body scrolls internally instead of pushing the page height. */
+/* .hints-panel only grows to fill the leftover column height while its body
+   is actually expanded — collapsed, it shrinks back to just the header. */
+.hints-panel:has(#hintsBody:not([hidden])) {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+.hints-panel .panel__body {
+  overflow-y: auto;
+}
+.hints-panel:has(#hintsBody:not([hidden])) .panel__body {
+  flex: 1;
+}
+
 .hints {
   font-size: 13px;
   line-height: 1.55;
@@ -214,88 +222,30 @@ button {
   color: var(--color-text-secondary);
 }
 
-/* ===================== CENTER: PLAYER PLATES + BOARD ===================== */
-.player-plate {
-  background: var(--color-surface);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
-  padding: 10px 14px;
-  display: flex;
-  align-items: center;
-  gap: 14px;
-}
-
-.player-plate--active {
-  border-color: var(--color-accent-muted);
-  box-shadow: 0 0 0 1px var(--color-accent-muted);
-}
-
-.player-plate__identity {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  min-width: 128px;
-}
-
-.player-plate__swatch {
-  width: 10px;
-  height: 10px;
-  border-radius: 2px;
-  flex-shrink: 0;
-}
-.player-plate--a .player-plate__swatch {
-  background: var(--color-player-a);
-}
-.player-plate--b .player-plate__swatch {
-  background: var(--color-player-b);
-}
-
-.player-plate__name-block {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  min-width: 0;
-}
-
-.player-plate__name {
-  font-family: var(--font-display);
-  font-weight: 600;
-  font-size: 14px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.player-plate__rating {
-  font-family: var(--font-mono);
-  font-size: 11px;
-  color: var(--color-text-muted);
-}
-
-.player-plate__score {
-  font-family: var(--font-mono);
-  font-weight: 700;
-  font-size: 20px;
-  color: var(--color-score);
-  min-width: 34px;
-  text-align: center;
-}
-
-/* --- piece selector inside the plate --- */
+/* ===================== CONTROLS: piece/mode selector (left column) ===================== */
 .piece-selector {
   display: flex;
   align-items: center;
   gap: 6px;
-  flex: 1;
   justify-content: center;
 }
 
-.piece-selector__divider {
-  width: 1px;
-  height: 26px;
-  background: var(--color-border);
-  flex-shrink: 0;
-  margin: 0 2px;
+.piece-selector--controls {
+  flex-wrap: nowrap;
+  gap: 4px;
+}
+.piece-selector--controls .piece-btn {
+  flex: 1;
+  min-width: 0;
+  padding: 6px 4px 5px;
+}
+.piece-selector--controls .piece-btn__glyph,
+.piece-selector--controls .piece-btn__icon {
+  width: 24px;
+  height: 24px;
+}
+.piece-selector--controls .piece-btn__label {
+  font-size: 9px;
 }
 
 .piece-btn {
@@ -303,7 +253,9 @@ button {
   display: flex;
   flex-direction: column;
   align-items: center;
+  justify-content: center;
   gap: 4px;
+  min-height: 52px;
   background: var(--color-surface-alt);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-sm);
@@ -389,6 +341,20 @@ button {
   grid-area: 3 / 2 / 4 / 3;
 }
 
+/* mini variant: same shapes, smaller cells, used in the side plates */
+.glyph-mini.glyph-domino {
+  grid-template-columns: repeat(2, 6px);
+  grid-template-rows: 6px;
+}
+.glyph-mini.glyph-tromino {
+  grid-template-columns: repeat(2, 6px);
+  grid-template-rows: repeat(2, 6px);
+}
+.glyph-mini.glyph-tetromino {
+  grid-template-columns: repeat(2, 6px);
+  grid-template-rows: repeat(3, 6px);
+}
+
 .piece-btn__count {
   font-family: var(--font-mono);
   font-size: 11px;
@@ -432,29 +398,13 @@ button {
   border-color: var(--color-border);
 }
 
-.player-plate__clock {
-  font-family: var(--font-mono);
-  font-size: 20px;
-  font-weight: 500;
-  min-width: 78px;
-  text-align: center;
-  padding: 6px 10px;
-  border-radius: var(--radius-sm);
-  background: var(--color-surface-alt);
-  border: 1px solid var(--color-border);
-}
-.player-plate--active .player-plate__clock {
-  color: var(--color-accent);
-  border-color: var(--color-accent-muted);
-}
-.player-plate:not(.player-plate--active) .player-plate__clock {
-  color: var(--color-text-muted);
-}
-
 /* ===================== BOARD ===================== */
+/* Board is square and adapts to whatever vertical space the viewport gives it,
+   capped at --board-size so it never gets absurdly large on tall screens, and
+   capped horizontally so it can't push the side columns off-screen either. */
 .board-wrap {
-  width: var(--board-size);
-  height: var(--board-size);
+  width: var(--board-computed-size);
+  height: var(--board-computed-size);
   flex-shrink: 0;
   background: var(--color-surface);
   border: 1px solid var(--color-border);
@@ -512,16 +462,121 @@ button {
   color: var(--color-text);
 }
 
-/* ===================== MOVE HISTORY ===================== */
+/* ===================== RIGHT COLUMN: SIDE PLATES + MOVE HISTORY ===================== */
 .col--right {
   display: flex;
   flex-direction: column;
 }
 
+.side-plate {
+  flex-shrink: 0;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: 10px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.side-plate--active {
+  border-color: var(--color-accent-muted);
+  box-shadow: 0 0 0 1px var(--color-accent-muted);
+}
+
+.side-plate__row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.side-plate__swatch {
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+  flex-shrink: 0;
+}
+.side-plate--opponent .side-plate__swatch {
+  background: var(--color-player-b);
+}
+.side-plate--self .side-plate__swatch {
+  background: var(--color-player-a);
+}
+
+.side-plate__name-block {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  flex: 1;
+}
+
+.side-plate__name {
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 14px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.side-plate__rating {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--color-text-muted);
+}
+
+.side-plate__score {
+  font-family: var(--font-mono);
+  font-weight: 700;
+  font-size: 18px;
+  color: var(--color-score);
+  min-width: 30px;
+  text-align: center;
+}
+
+.side-plate__clock {
+  font-family: var(--font-mono);
+  font-size: 15px;
+  font-weight: 500;
+  min-width: 60px;
+  text-align: center;
+  padding: 4px 8px;
+  border-radius: var(--radius-sm);
+  background: var(--color-surface-alt);
+  border: 1px solid var(--color-border);
+  color: var(--color-text-muted);
+}
+.side-plate--active .side-plate__clock {
+  color: var(--color-accent);
+  border-color: var(--color-accent-muted);
+}
+
+.side-plate__pieces {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.side-piece {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.side-piece__count {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--color-text-secondary);
+}
+
+/* move history sits between the two side plates and absorbs any leftover
+   vertical space, scrolling internally rather than growing the page */
 .move-history {
   flex: 1;
   display: flex;
   flex-direction: column;
+  min-height: 0;
 }
 .move-history__body {
   padding: 0;
@@ -570,23 +625,64 @@ button {
   color: transparent;
 }
 
-/* ===================== RESPONSIVE (BOARD STAYS FIXED SIZE) ===================== */
-@media (max-width: 1400px) {
+/* ===================== RESPONSIVE (narrow viewports: stack columns) ===================== */
+@media (max-width: 1340px) {
+  html,
+  body {
+    height: auto;
+    overflow: auto;
+  }
+
   .layout {
-    grid-template-columns: 1fr;
-    justify-items: center;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 16px;
+    height: auto;
+    overflow: visible;
   }
-  .col--left,
-  .col--right {
-    width: var(--board-size);
+
+  /* .col wrappers stop generating a box: their children become direct flex
+     items of .layout, so sections from different columns can be freely
+     interleaved via `order` below (a plain flex order on .col could only
+     move whole columns, not individual sections within them). */
+  .col {
+    display: contents;
   }
-  .col--left {
-    order: 2;
+
+  .panel,
+  .side-plate {
+    width: 100%;
+    max-width: var(--board-size);
   }
-  .col--center {
+
+  .side-plate--opponent {
     order: 1;
   }
-  .col--right {
+  .board-wrap {
+    order: 2;
+  }
+  .side-plate--self {
     order: 3;
+  }
+  .controls-panel {
+    order: 4;
+  }
+  .hints-panel {
+    order: 5;
+  }
+  .move-history {
+    order: 6;
+  }
+  .match-panel {
+    order: 7;
+  }
+
+  /* No side columns competing for horizontal space here, so the board's
+     width budget is just the viewport minus the outer page padding —
+     the wide-layout formula (which subtracts the side columns' width)
+     would go negative on a narrow viewport and collapse the board to 0. */
+  .board-wrap {
+    --board-computed-size: min(var(--board-size), calc(100vw - 40px));
   }
 }

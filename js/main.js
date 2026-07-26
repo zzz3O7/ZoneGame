@@ -6,7 +6,6 @@ const canvas = document.getElementById("board-canvas");
 const game = new Game(20, 20);
 const renderer = new Renderer(canvas, game.board);
 
-document.documentElement.style.setProperty("--board-size", `${canvas.width}px`);
 document.getElementById("seedValue").textContent = game.seed;
 
 const ui = new GameUI(game, renderer, canvas);

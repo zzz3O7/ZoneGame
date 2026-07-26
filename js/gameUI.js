@@ -189,9 +189,8 @@ export class GameUI {
   }
 
   _bindControls() {
-    // Both plates' buttons share the same binding — a button just carries its
-    // own data-type, it doesn't matter which player's row it lives in. Disabled
-    // buttons (the inactive player's row) simply don't fire click events at all.
+    // Single shared control row (lives in the left "Controls" panel) — it
+    // always acts on whichever player's turn it currently is.
     document.querySelectorAll(".piece-selector button[data-type]").forEach((btn) => {
       btn.addEventListener("click", () => this.selectType(btn.dataset.type));
     });
@@ -280,7 +279,8 @@ export class GameUI {
 
   _render() {
     this._syncCanvas();
-    this._syncPlates();
+    this._syncControls();
+    this._syncSidePlates();
     this._syncGameOver();
   }
 
@@ -300,34 +300,47 @@ export class GameUI {
     );
   }
 
-  _syncPlates() {
-    this.game.players.forEach((player) => this._syncPlate(player));
+  // Controls (draw/domino/tromino/tetromino/skip) are a single shared row now —
+  // there's no "inactive player's plate" anymore, the row always reflects
+  // whichever player's turn it currently is.
+  _syncControls() {
+    const player = this.game.currentPlayer;
+    const canMove = this.game.canCurrentPlayerMove();
+
+    document.querySelectorAll(".piece-selector button[data-type]").forEach((btn) => {
+      const type = btn.dataset.type;
+      const disabled = this.game.gameOver || (type === "domino" && player.dominoLeft <= 0);
+      btn.disabled = disabled;
+      btn.classList.toggle("piece-btn--selected", type === this.selectedType);
+    });
+
+    const skipBtn = document.querySelector(".piece-btn--skip");
+    if (skipBtn) {
+      skipBtn.disabled = this.game.gameOver || canMove;
+      const skipPenalty = player.score - Math.floor(player.score * PASS_PENALTY);
+      const countEl = skipBtn.querySelector(".piece-btn__count");
+      if (countEl) countEl.textContent = `-${skipPenalty}`;
+    }
   }
 
-  _syncPlate(player) {
-    const plate = document.querySelector(player.id === 0 ? ".player-plate--a" : ".player-plate--b");
+  // Side plates (name/rating/score/clock/pieces remaining) are purely
+  // informational — one per player, looked up by data-player id.
+  _syncSidePlates() {
+    this.game.players.forEach((player) => this._syncSidePlate(player));
+  }
+
+  _syncSidePlate(player) {
+    const plate = document.querySelector(`.side-plate[data-player="${player.id}"]`);
     if (!plate) return;
 
     const isActive = player.id === this.game.currentPlayerIndex;
-    plate.classList.toggle("player-plate--active", isActive);
+    plate.classList.toggle("side-plate--active", isActive);
 
-    const scoreEl = plate.querySelector(".player-plate__score");
+    const scoreEl = plate.querySelector(".side-plate__score");
     if (scoreEl) scoreEl.textContent = player.score;
 
-    const dominoCountEl = plate.querySelector('button[data-type="domino"] .piece-btn__count');
+    const dominoCountEl = plate.querySelector('.side-piece__count[data-piece="domino"]');
     if (dominoCountEl) dominoCountEl.textContent = player.dominoLeft;
-
-    const skipPenalty = player.score - Math.floor(player.score * PASS_PENALTY);
-    const skipCountEl = plate.querySelector(".piece-btn--skip .piece-btn__count");
-    if (skipCountEl) skipCountEl.textContent = `-${skipPenalty}`;
-
-    const canCurrentPlayerMove = isActive && this.game.canCurrentPlayerMove();
-
-    plate.querySelectorAll(".piece-selector button").forEach((btn) => {
-      const isSkip = btn.classList.contains("piece-btn--skip");
-      btn.disabled = !isActive || this.game.gameOver || (isSkip && canCurrentPlayerMove);
-      btn.classList.toggle("piece-btn--selected", isActive && !isSkip && btn.dataset.type === this.selectedType);
-    });
   }
 
   _syncGameOver() {

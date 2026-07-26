@@ -3,8 +3,7 @@ move history
 undo/redo
 zooming/paning + mobile support
 
-domino button inactive when no dominos
-default rotation of the shapes must be the same as on the button
+default rotation of the shapes must be the same as the glyph on the button
 
 sound
 modes
