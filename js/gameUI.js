@@ -1,7 +1,7 @@
-import { Board } from "./board.js";
 import { Shape, SHAPES_BASE } from "./shape.js";
-import { GestureRecognizer } from "./gestureRecognizer.js";
 import { PASS_PENALTY } from "./config.js";
+import { GestureInput } from "./gestureInput.js";
+import { ZoneTooltip } from "./zoneTooltip.js";
 
 const KEY_TO_TYPE = { 1: "gesture", 2: "domino", 3: "tromino", 4: "tetromino" };
 
@@ -16,11 +16,8 @@ export class GameUI {
     this.flipped = false;
     this.cursorCell = null;
 
-    this.isDrawingGesture = false;
-    this.gesturePath = [];
-    this.gestureSeen = new Set();
-    this.pendingGesture = null; // { type, shape, anchorRow, anchorCol } or null
-    this.suppressNextClick = false;
+    this.gesture = new GestureInput();
+    this.zoneTooltip = new ZoneTooltip(canvas);
 
     this._bindCanvasEvents();
     this._bindControls();
@@ -36,11 +33,7 @@ export class GameUI {
     this.selectedType = type;
     this.rotationStep = 0;
     this.flipped = false;
-    this.pendingGesture = null;
-    this.isDrawingGesture = false;
-    this.gesturePath = [];
-    this.gestureSeen = new Set();
-    this.suppressNextClick = false;
+    this.gesture.reset();
     this._render();
   }
 
@@ -66,37 +59,25 @@ export class GameUI {
 
   startGesture(cell) {
     if (this.selectedType !== "gesture") return;
-    if (this.pendingGesture) return;
-    this.isDrawingGesture = true;
-    this.gesturePath = [cell];
-    this.gestureSeen = new Set([Board.key(...cell)]);
+    this.gesture.start(cell);
     this._render();
   }
 
   finishGesture() {
-    if (!this.isDrawingGesture) return;
-    this.isDrawingGesture = false;
-    this.pendingGesture = GestureRecognizer.recognize(this.gesturePath);
-    this.gesturePath = [];
-    this.gestureSeen = new Set();
-    this.suppressNextClick = true; // the click right after mouseup shouldn't also place a piece
+    if (!this.gesture.finish()) return;
     this._render();
   }
 
   cancelGesture() {
-    this.isDrawingGesture = false;
-    this.pendingGesture = null;
-    this.gesturePath = [];
-    this.gestureSeen = new Set();
+    this.gesture.cancel();
     this._render();
   }
 
   confirmGesture() {
-    if (!this.pendingGesture) return;
-    const { type, shape, anchorRow, anchorCol } = this.pendingGesture;
-    this.game.attemptPlacement(type, shape, anchorRow, anchorCol);
-    this.pendingGesture = null;
-    this._render();
+    const confirmed = this.gesture.confirm((type, shape, anchorRow, anchorCol) => {
+      this.game.attemptPlacement(type, shape, anchorRow, anchorCol);
+    });
+    if (confirmed) this._render();
   }
 
   secondaryAction() {
@@ -111,20 +92,14 @@ export class GameUI {
 
   hover(cell) {
     this.cursorCell = cell;
-    if (this.isDrawingGesture) {
-      const key = Board.key(...cell);
-      if (!this.gestureSeen.has(key)) {
-        this.gestureSeen.add(key);
-        this.gesturePath.push(cell);
-      }
-    }
-    this._updateZoneTooltip(cell);
+    this.gesture.extend(cell);
+    this.zoneTooltip.update(cell, this.game.board, this.game.zones);
     this._render();
   }
 
   clearHover() {
     this.cursorCell = null;
-    this._updateZoneTooltip(null);
+    this.zoneTooltip.hide();
     this._render();
   }
 
@@ -165,11 +140,8 @@ export class GameUI {
     this.canvas.addEventListener("mouseleave", () => this.clearHover());
 
     this.canvas.addEventListener("click", (e) => {
-      if (this.suppressNextClick) {
-        this.suppressNextClick = false;
-        return;
-      }
-      if (this.pendingGesture) {
+      if (this.gesture.consumeSuppressedClick()) return;
+      if (this.gesture.pending) {
         this.confirmGesture();
         return;
       }
@@ -219,62 +191,12 @@ export class GameUI {
   // ===================== render: fully re-derive the DOM from state =====================
 
   _activePlacement() {
-    if (this.pendingGesture) {
-      return [[this.pendingGesture.anchorRow, this.pendingGesture.anchorCol], this.pendingGesture.shape];
+    if (this.gesture.pending) {
+      return [[this.gesture.pending.anchorRow, this.gesture.pending.anchorCol], this.gesture.pending.shape];
     }
     if (this.selectedType === "gesture") return [null, null];
     if (!this.cursorCell) return [null, null];
     return [this.cursorCell, this.currentShape()];
-  }
-
-  _boardRectInfo() {
-    const rect = this.canvas.getBoundingClientRect();
-    const wrapRect = this.canvas.parentElement.getBoundingClientRect();
-    const board = this.game.board;
-    return {
-      cssCellW: rect.width / board.cols,
-      cssCellH: rect.height / board.rows,
-      offsetX: rect.left - wrapRect.left,
-      offsetY: rect.top - wrapRect.top,
-    };
-  }
-
-  _updateZoneTooltip(cell) {
-    const tooltip = document.getElementById("zoneTooltip");
-    if (!tooltip) return;
-
-    const board = this.game.board;
-    const zoneId = cell ? board.zoneIdAt(cell[0], cell[1]) : null;
-    if (zoneId === null) {
-      tooltip.hidden = true;
-      return;
-    }
-
-    const zone = this.game.zones[zoneId];
-    let minRow = Infinity,
-      maxRow = -Infinity,
-      minCol = Infinity,
-      maxCol = -Infinity;
-    for (const key of zone.cellSet) {
-      const [r, c] = Board.parse(key);
-      if (r < minRow) minRow = r;
-      if (r > maxRow) maxRow = r;
-      if (c < minCol) minCol = c;
-      if (c > maxCol) maxCol = c;
-    }
-
-    const { cssCellW, cssCellH, offsetX, offsetY } = this._boardRectInfo();
-    const centerX = offsetX + ((minCol + maxCol + 1) / 2) * cssCellW;
-    const topY = offsetY + minRow * cssCellH;
-    const bottomY = offsetY + (maxRow + 1) * cssCellH;
-    const showAbove = topY > 30;
-
-    tooltip.textContent = `Reward: ${zone.cost}`;
-    tooltip.style.left = `${centerX}px`;
-    tooltip.style.top = showAbove ? `${topY}px` : `${bottomY}px`;
-    tooltip.classList.toggle("zone-tooltip--above", showAbove);
-    tooltip.classList.toggle("zone-tooltip--below", !showAbove);
-    tooltip.hidden = false;
   }
 
   _render() {
@@ -286,7 +208,7 @@ export class GameUI {
 
   _syncCanvas() {
     const [anchorCell, anchorShape] = this._activePlacement();
-    const pieceType = this.pendingGesture ? this.pendingGesture.type : this.selectedType;
+    const pieceType = this.gesture.pending ? this.gesture.pending.type : this.selectedType;
 
     this.renderer.render(
       this.game.board,
@@ -296,7 +218,7 @@ export class GameUI {
       anchorShape,
       anchorCell,
       this.cursorCell,
-      this.gesturePath,
+      this.gesture.path,
     );
   }
 
