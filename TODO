@@ -1,11 +1,10 @@
 game end + menu
 move history
 undo/redo
+last move highlight
 zooming/paning + mobile support
-
-controls shouldn't have a header
 
 sound
 modes
 
-on different sizes board is still a square not a rectangle and tiles are squished
+on different grid sizes board is still a square not a rectangle and tiles are squished
