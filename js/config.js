@@ -24,6 +24,6 @@ export const LAYOUT = {
   bonusFontRatio: 0.5,
 };
 
-export const ZONE_RADIUS = 5;
+export const ZONE_RADIUS = 4;
 export const STARTING_DOMINOS = 2;
 export const PASS_PENALTY = 0.9;
