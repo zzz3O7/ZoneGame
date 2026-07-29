@@ -58,6 +58,7 @@ export class MatchClient {
   }
 
   _handleMatchStart(msg) {
+    this.myPlayerIndex = msg.yourPlayerIndex;
     this.game = new Game(msg.cols, msg.rows, msg.seed);
     this.playerNames = msg.players.map((p) => p.nickname);
     this.onMatchStart?.(this.game);

@@ -15,7 +15,7 @@ export class Renderer {
     canvas.height = board.rows * this.cellSize;
   }
 
-  render(board, zones, viewer, pieceType, anchorShape, anchorCell, cursorCell, gesturePath) {
+  render(board, zones, currentPlayerIndex, viewer, pieceType, anchorShape, anchorCell, cursorCell, gesturePath) {
     this._drawBoard(board);
     this._drawZones(zones, viewer.id);
     const hoveredZoneId = cursorCell ? board.zoneIdAt(cursorCell[0], cursorCell[1]) : null;
@@ -23,7 +23,7 @@ export class Renderer {
     this._drawZonePreview(board, anchorShape, anchorCell);
     this._drawPieces(board);
     this._drawGesturePath(gesturePath);
-    this._drawGhost(board, zones, viewer, pieceType, anchorShape, anchorCell);
+    this._drawGhost(board, zones, currentPlayerIndex, viewer, pieceType, anchorShape, anchorCell);
   }
 
   _drawBoard(board) {
@@ -168,10 +168,11 @@ export class Renderer {
     }
   }
 
-  _drawGhost(board, zones, viewer, pieceType, anchorShape, anchorCell) {
+  _drawGhost(board, zones, currentPlayerIndex, viewer, pieceType, anchorShape, anchorCell) {
     if (!anchorCell || !anchorShape) return;
     const [hr, hc] = anchorCell;
-    const valid = Rules.canPlaceHere(board, zones, viewer, pieceType, anchorShape, hr, hc);
+    const valid =
+      currentPlayerIndex == viewer.id && Rules.canPlaceHere(board, zones, viewer, pieceType, anchorShape, hr, hc);
 
     this.ctx.fillStyle = valid ? THEME.ghostShapeValid : THEME.ghostShapeInvalid;
     for (const [r, c] of Shape.cellsAt(anchorShape, hr, hc)) {

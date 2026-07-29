@@ -471,8 +471,6 @@ button {
 
 .board--waiting {
   opacity: 0.6;
-  pointer-events: none;
-  cursor: default;
 }
 
 /* ===================== RIGHT COLUMN: SIDE PLATES + MOVE HISTORY ===================== */

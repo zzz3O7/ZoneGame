@@ -28,17 +28,18 @@ export class Match {
 
   _start() {
     this.status = "active";
-    const seed = Date.now(); // server-picked, trustworthy
+    const seed = Date.now();
     this.game = new Game(DEFAULT_COLS, DEFAULT_ROWS, seed);
 
-    this.broadcast({
+    this.broadcastPersonalized((p) => ({
       type: MSG.MATCH_START,
       matchId: this.matchId,
       seed: this.game.seed,
       cols: DEFAULT_COLS,
       rows: DEFAULT_ROWS,
-      players: this.players.map((p) => ({ index: p.playerIndex, nickname: p.nickname })),
-    });
+      yourPlayerIndex: p.playerIndex,
+      players: this.players.map((pp) => ({ index: pp.playerIndex, nickname: pp.nickname })),
+    }));
   }
 
   attemptMove(ws, pieceType, shape, anchorRow, anchorCol) {
@@ -95,6 +96,12 @@ export class Match {
     const data = JSON.stringify(msg);
     for (const p of this.players) {
       if (p.ws.readyState === p.ws.OPEN) p.ws.send(data);
+    }
+  }
+
+  broadcastPersonalized(buildMsg) {
+    for (const p of this.players) {
+      if (p.ws.readyState === p.ws.OPEN) p.ws.send(JSON.stringify(buildMsg(p)));
     }
   }
 }

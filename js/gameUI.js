@@ -250,6 +250,7 @@ export class GameUI {
     this.renderer.render(
       this.game.board,
       this.game.zones,
+      this.game.currentPlayerIndex,
       this.game.players[viewerIndex],
       pieceType,
       anchorShape,
@@ -266,7 +267,7 @@ export class GameUI {
 
     document.querySelectorAll(".piece-selector button[data-type]").forEach((btn) => {
       const type = btn.dataset.type;
-      const disabled = this.game.gameOver || !myTurn || (type === "domino" && player.dominoLeft <= 0);
+      const disabled = this.game.gameOver || (type === "domino" && player.dominoLeft <= 0);
       btn.disabled = disabled;
       btn.classList.toggle("piece-btn--selected", type === this.selectedType);
     });
