@@ -49,6 +49,13 @@ wss.on("connection", (ws) => {
       match.attemptMove(ws, msg.pieceType, msg.shape, msg.anchorRow, msg.anchorCol);
       return;
     }
+
+    if (msg.type === MSG.PASS_ATTEMPT) {
+      const match = manager.findMatchByWs(ws);
+      if (!match) return;
+      match.attemptPass(ws);
+      return;
+    }
   });
 
   ws.on("close", () => {

@@ -10,7 +10,7 @@ export class MatchClient {
     this.myPlayerIndex = null;
     this.game = null;
 
-    // set these from outside to react to events
+    this.onCreated = null; // (inviteCode) => void
     this.onMatchStart = null; // (game) => void
     this.onMoveApplied = null; // () => void
     this.onRejected = null; // (reason) => void
@@ -40,10 +40,15 @@ export class MatchClient {
     this.connection.send({ type: MSG.MOVE_ATTEMPT, pieceType, shape, anchorRow, anchorCol });
   }
 
+  sendPass() {
+    this.connection.send({ type: MSG.PASS_ATTEMPT });
+  }
+
   _handleCreated(msg) {
     this.matchId = msg.matchId;
     this.inviteCode = msg.inviteCode;
     this.myPlayerIndex = msg.yourPlayerIndex;
+    this.onCreated?.(this.inviteCode);
   }
 
   _handleJoined(msg) {
@@ -57,8 +62,12 @@ export class MatchClient {
   }
 
   _handleMoveApplied(msg) {
-    const { pieceType, shape, anchorRow, anchorCol } = msg.action;
-    this.game.attemptPlacement(pieceType, shape, anchorRow, anchorCol);
+    const { action } = msg;
+    if (action.kind === "pass") {
+      this.game.pass();
+    } else {
+      this.game.attemptPlacement(action.pieceType, action.shape, action.anchorRow, action.anchorCol);
+    }
 
     const localHash = this.game.getStateHash();
     if (localHash !== msg.hash) {

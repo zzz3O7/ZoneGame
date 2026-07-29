@@ -469,6 +469,12 @@ button {
   color: var(--color-text);
 }
 
+.board--waiting {
+  opacity: 0.6;
+  pointer-events: none;
+  cursor: default;
+}
+
 /* ===================== RIGHT COLUMN: SIDE PLATES + MOVE HISTORY ===================== */
 .col--right {
   display: flex;

@@ -6,10 +6,11 @@ import { ZoneTooltip } from "./zoneTooltip.js";
 const KEY_TO_TYPE = { 1: "gesture", 2: "domino", 3: "tromino", 4: "tetromino" };
 
 export class GameUI {
-  constructor(game, renderer, canvas) {
+  constructor(game, renderer, canvas, matchClient = null) {
     this.game = game;
     this.renderer = renderer;
     this.canvas = canvas;
+    this.matchClient = matchClient; // null = local hotseat
 
     this.selectedType = "gesture";
     this.rotationStep = 0;
@@ -25,6 +26,41 @@ export class GameUI {
 
   init() {
     this._render();
+  }
+
+  refresh() {
+    // public alias, so main.js can trigger re-render on remote moves
+    this._render();
+  }
+
+  // ===================== network gating =====================
+
+  _isMyTurn() {
+    return !this.matchClient || this.matchClient.isMyTurn();
+  }
+
+  _submitPlacement(pieceType, shape, anchorRow, anchorCol) {
+    if (!this._isMyTurn()) return;
+
+    if (this.matchClient) {
+      this.matchClient.sendMove(pieceType, shape, anchorRow, anchorCol);
+      // no local mutation, no _render() here — wait for moveApplied broadcast
+    } else {
+      this.game.attemptPlacement(pieceType, shape, anchorRow, anchorCol);
+      this._render();
+    }
+  }
+
+  _submitPass() {
+    if (!this._isMyTurn()) return;
+
+    if (this.matchClient) {
+      this.matchClient.sendPass();
+      // same: wait for broadcast, don't mutate/render yet
+    } else {
+      if (!this.game.pass()) return;
+      this._render();
+    }
   }
 
   // ===================== intents: piece selection & transforms =====================
@@ -75,9 +111,9 @@ export class GameUI {
 
   confirmGesture() {
     const confirmed = this.gesture.confirm((type, shape, anchorRow, anchorCol) => {
-      this.game.attemptPlacement(type, shape, anchorRow, anchorCol);
+      this._submitPlacement(type, shape, anchorRow, anchorCol);
     });
-    if (confirmed) this._render();
+    if (confirmed && !this.matchClient) this._render();
   }
 
   secondaryAction() {
@@ -104,13 +140,11 @@ export class GameUI {
   }
 
   placeAt([row, col]) {
-    this.game.attemptPlacement(this.selectedType, this.currentShape(), row, col);
-    this._render();
+    this._submitPlacement(this.selectedType, this.currentShape(), row, col);
   }
 
   skipTurn() {
-    if (!this.game.pass()) return;
-    this._render();
+    this._submitPass();
   }
 
   // ===================== input: DOM event listeners =====================
@@ -200,6 +234,7 @@ export class GameUI {
   }
 
   _render() {
+    this.canvas.classList.toggle("board--waiting", !this._isMyTurn());
     this._syncCanvas();
     this._syncControls();
     this._syncSidePlates();
@@ -222,37 +257,37 @@ export class GameUI {
     );
   }
 
-  // Controls (draw/domino/tromino/tetromino/skip) are a single shared row now —
-  // there's no "inactive player's plate" anymore, the row always reflects
-  // whichever player's turn it currently is.
   _syncControls() {
     const player = this.game.currentPlayer;
     const canMove = this.game.canCurrentPlayerMove();
+    const myTurn = this._isMyTurn(); // true always in local mode, real check online
 
     document.querySelectorAll(".piece-selector button[data-type]").forEach((btn) => {
       const type = btn.dataset.type;
-      const disabled = this.game.gameOver || (type === "domino" && player.dominoLeft <= 0);
+      const disabled = this.game.gameOver || !myTurn || (type === "domino" && player.dominoLeft <= 0);
       btn.disabled = disabled;
       btn.classList.toggle("piece-btn--selected", type === this.selectedType);
     });
 
     const skipBtn = document.querySelector(".piece-btn--skip");
     if (skipBtn) {
-      skipBtn.disabled = this.game.gameOver || canMove;
+      skipBtn.disabled = this.game.gameOver || !myTurn || canMove;
       const skipPenalty = player.score - Math.floor(player.score * PASS_PENALTY);
       const countEl = skipBtn.querySelector(".piece-btn__count");
       if (countEl) countEl.textContent = `-${skipPenalty}`;
     }
   }
 
-  // Side plates (name/rating/score/clock/pieces remaining) are purely
-  // informational — one per player, looked up by data-player id.
   _syncSidePlates() {
-    this.game.players.forEach((player) => this._syncSidePlate(player));
+    const myIndex = this.matchClient ? this.matchClient.myPlayerIndex : 0; // local: doesn't matter, arbitrary anchor
+    this.game.players.forEach((player) => {
+      const isSelf = player.id === myIndex;
+      this._syncSidePlate(player, isSelf);
+    });
   }
 
-  _syncSidePlate(player) {
-    const plate = document.querySelector(`.side-plate[data-player="${player.id}"]`);
+  _syncSidePlate(player, isSelf) {
+    const plate = document.querySelector(`.side-plate[data-position="${isSelf ? "self" : "opponent"}"]`);
     if (!plate) return;
 
     const isActive = player.id === this.game.currentPlayerIndex;

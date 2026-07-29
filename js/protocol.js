@@ -6,7 +6,9 @@ export const MSG = {
   MATCH_JOINED: "matchJoined", // server -> sender only
   MATCH_START: "matchStart", // server -> both
   MOVE_ATTEMPT: "moveAttempt", // client -> server
+  PASS_ATTEMPT: "passAttempt", // client -> server
   MOVE_APPLIED: "moveApplied", // server -> both
   MOVE_REJECTED: "moveRejected", // server -> sender only
+
   ERROR: "error",
 };

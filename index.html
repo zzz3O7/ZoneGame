@@ -13,174 +13,196 @@
     <link rel="stylesheet" href="style.css" />
   </head>
   <body>
-    <div class="layout">
-      <!-- LEFT COLUMN: controls + match info + hints -->
-      <div class="col col--left">
-        <section class="panel match-panel">
-          <div class="panel__header">Match</div>
-          <div class="panel__body">
-            <div class="game-info__row">
-              <span class="game-info__label">Mode</span>
-              <span class="game-info__value">Local game</span>
-            </div>
-            <div class="game-info__row">
-              <span class="game-info__label">Seed</span>
-              <span class="game-info__value" id="seedValue">0</span>
-            </div>
-            <div class="game-info__row">
-              <span class="game-info__label">Board size</span>
-              <span class="game-info__value">20 x 20</span>
-            </div>
-            <div class="game-info__row">
-              <span class="game-info__label">Zone radius</span>
-              <span class="game-info__value">5</span>
-            </div>
-            <div class="game-info__row">
-              <span class="game-info__label">Bonus value</span>
-              <span class="game-info__value">+5</span>
-            </div>
-          </div>
-        </section>
-
-        <section class="panel controls-panel">
-          <div class="panel__body">
-            <div class="piece-selector piece-selector--controls">
-              <button class="piece-btn" data-type="gesture" title="Draw a shape freehand">
-                <span class="piece-btn__icon">✎</span>
-              </button>
-              <button class="piece-btn" data-type="domino">
-                <span class="piece-btn__glyph"
-                  ><span class="piece-btn__glyph-grid glyph-domino"><span></span><span></span></span
-                ></span>
-              </button>
-              <button class="piece-btn" data-type="tromino">
-                <span class="piece-btn__glyph"
-                  ><span class="piece-btn__glyph-grid glyph-tromino"><span></span><span></span><span></span></span
-                ></span>
-              </button>
-              <button class="piece-btn" data-type="tetromino">
-                <span class="piece-btn__glyph"
-                  ><span class="piece-btn__glyph-grid glyph-tetromino"
-                    ><span></span><span></span><span></span><span></span></span
-                ></span>
-              </button>
-              <button class="piece-btn piece-btn--skip" title="Skip turn">
-                <span class="piece-btn__icon">⏭</span>
-                <span class="piece-btn__count">0</span>
-              </button>
-            </div>
-          </div>
-        </section>
-
-        <section class="panel hints-panel">
-          <div class="panel__header">
-            Hints
-            <button class="hints__toggle" type="button" aria-expanded="true" aria-controls="hintsBody">Collapse</button>
-          </div>
-          <div class="panel__body hints" id="hintsBody">
-            <div class="hints__item">
-              <span class="hints__key">1-4</span>
-              <span>Switch input mode: draw, domino, tromino, tetromino</span>
-            </div>
-            <div class="hints__item">
-              <span class="hints__key">Scroll / R</span>
-              <span>Rotate the current shape</span>
-            </div>
-            <div class="hints__item">
-              <span class="hints__key">RMB / F</span>
-              <span>Flip the shape, or cancel a gesture</span>
-            </div>
-            <div class="hints__item">
-              <span class="hints__key">Drag</span>
-              <span>Draw mode: click and drag across cells to sketch a shape</span>
-            </div>
-            <div class="hints__item">
-              <span class="hints__key">LMB</span>
-              <span>Place the shape, or confirm a drawn gesture</span>
-            </div>
-          </div>
-        </section>
+    <div id="menuScreen">
+      <button id="btnLocalGame">Play Local (Hotseat)</button>
+      <button id="btnCreateMatch">Create Match</button>
+      <div>
+        <input id="joinCodeInput" placeholder="Invite code" />
+        <button id="btnJoinMatch">Join</button>
       </div>
+      <input id="nicknameInput" placeholder="Nickname" />
+      <!-- only needed for create/join -->
+    </div>
 
-      <!-- CENTER COLUMN: board only, sized/rendered by Renderer at startup -->
-      <div class="col col--center">
-        <div class="board-wrap">
-          <canvas id="board-canvas"></canvas>
-          <div class="zone-tooltip" id="zoneTooltip" hidden></div>
-          <div class="board-overlay" id="gameOverOverlay" hidden>
-            <div class="board-overlay__message" id="gameOverMessage"></div>
+    <div id="waitingRoomScreen" hidden>
+      <h2>Waiting for opponent…</h2>
+      <p>Share this code:</p>
+      <div id="inviteCodeDisplay"></div>
+      <button id="btnCancelWait">Cancel</button>
+    </div>
+
+    <div id="gameScreen" hidden>
+      <div class="layout">
+        <!-- LEFT COLUMN: controls + match info + hints -->
+        <div class="col col--left">
+          <section class="panel match-panel">
+            <div class="panel__header">Match</div>
+            <div class="panel__body">
+              <div class="game-info__row">
+                <span class="game-info__label">Mode</span>
+                <span class="game-info__value">Local game</span>
+              </div>
+              <div class="game-info__row">
+                <span class="game-info__label">Seed</span>
+                <span class="game-info__value" id="seedValue">0</span>
+              </div>
+              <div class="game-info__row">
+                <span class="game-info__label">Board size</span>
+                <span class="game-info__value">20 x 20</span>
+              </div>
+              <div class="game-info__row">
+                <span class="game-info__label">Zone radius</span>
+                <span class="game-info__value">5</span>
+              </div>
+              <div class="game-info__row">
+                <span class="game-info__label">Bonus value</span>
+                <span class="game-info__value">+5</span>
+              </div>
+            </div>
+          </section>
+
+          <section class="panel controls-panel">
+            <div class="panel__body">
+              <div class="piece-selector piece-selector--controls">
+                <button class="piece-btn" data-type="gesture" title="Draw a shape freehand">
+                  <span class="piece-btn__icon">✎</span>
+                </button>
+                <button class="piece-btn" data-type="domino">
+                  <span class="piece-btn__glyph"
+                    ><span class="piece-btn__glyph-grid glyph-domino"><span></span><span></span></span
+                  ></span>
+                </button>
+                <button class="piece-btn" data-type="tromino">
+                  <span class="piece-btn__glyph"
+                    ><span class="piece-btn__glyph-grid glyph-tromino"><span></span><span></span><span></span></span
+                  ></span>
+                </button>
+                <button class="piece-btn" data-type="tetromino">
+                  <span class="piece-btn__glyph"
+                    ><span class="piece-btn__glyph-grid glyph-tetromino"
+                      ><span></span><span></span><span></span><span></span></span
+                  ></span>
+                </button>
+                <button class="piece-btn piece-btn--skip" title="Skip turn">
+                  <span class="piece-btn__icon">⏭</span>
+                  <span class="piece-btn__count">0</span>
+                </button>
+              </div>
+            </div>
+          </section>
+
+          <section class="panel hints-panel">
+            <div class="panel__header">
+              Hints
+              <button class="hints__toggle" type="button" aria-expanded="true" aria-controls="hintsBody">
+                Collapse
+              </button>
+            </div>
+            <div class="panel__body hints" id="hintsBody">
+              <div class="hints__item">
+                <span class="hints__key">1-4</span>
+                <span>Switch input mode: draw, domino, tromino, tetromino</span>
+              </div>
+              <div class="hints__item">
+                <span class="hints__key">Scroll / R</span>
+                <span>Rotate the current shape</span>
+              </div>
+              <div class="hints__item">
+                <span class="hints__key">RMB / F</span>
+                <span>Flip the shape, or cancel a gesture</span>
+              </div>
+              <div class="hints__item">
+                <span class="hints__key">Drag</span>
+                <span>Draw mode: click and drag across cells to sketch a shape</span>
+              </div>
+              <div class="hints__item">
+                <span class="hints__key">LMB</span>
+                <span>Place the shape, or confirm a drawn gesture</span>
+              </div>
+            </div>
+          </section>
+        </div>
+
+        <!-- CENTER COLUMN: board only, sized/rendered by Renderer at startup -->
+        <div class="col col--center">
+          <div class="board-wrap">
+            <canvas id="board-canvas"></canvas>
+            <div class="zone-tooltip" id="zoneTooltip" hidden></div>
+            <div class="board-overlay" id="gameOverOverlay" hidden>
+              <div class="board-overlay__message" id="gameOverMessage"></div>
+            </div>
           </div>
         </div>
-      </div>
 
-      <!-- RIGHT COLUMN: opponent info / move history / self info -->
-      <div class="col col--right">
-        <section class="side-plate side-plate--opponent" data-player="1">
-          <div class="side-plate__pieces">
-            <span class="side-piece">
-              <span class="piece-btn__glyph-grid glyph-domino glyph-mini"><span></span><span></span></span>
-              <span class="side-piece__count" data-piece="domino">2</span>
-            </span>
-            <span class="side-piece">
-              <span class="piece-btn__glyph-grid glyph-tromino glyph-mini"
-                ><span></span><span></span><span></span
-              ></span>
-              <span class="side-piece__count">∞</span>
-            </span>
-            <span class="side-piece">
-              <span class="piece-btn__glyph-grid glyph-tetromino glyph-mini"
-                ><span></span><span></span><span></span><span></span
-              ></span>
-              <span class="side-piece__count">∞</span>
-            </span>
-          </div>
-
-          <div class="side-plate__row">
-            <span class="side-plate__swatch"></span>
-            <div class="side-plate__name-block">
-              <span class="side-plate__name">player_2</span>
-              <span class="side-plate__rating">1742</span>
+        <!-- RIGHT COLUMN: opponent info / move history / self info -->
+        <div class="col col--right">
+          <section class="side-plate side-plate--opponent" data-position="opponent">
+            <div class="side-plate__pieces">
+              <span class="side-piece">
+                <span class="piece-btn__glyph-grid glyph-domino glyph-mini"><span></span><span></span></span>
+                <span class="side-piece__count" data-piece="domino">2</span>
+              </span>
+              <span class="side-piece">
+                <span class="piece-btn__glyph-grid glyph-tromino glyph-mini"
+                  ><span></span><span></span><span></span
+                ></span>
+                <span class="side-piece__count">∞</span>
+              </span>
+              <span class="side-piece">
+                <span class="piece-btn__glyph-grid glyph-tetromino glyph-mini"
+                  ><span></span><span></span><span></span><span></span
+                ></span>
+                <span class="side-piece__count">∞</span>
+              </span>
             </div>
-            <span class="side-plate__score">0</span>
-            <span class="side-plate__clock">00:00</span>
-          </div>
-        </section>
 
-        <section class="panel move-history">
-          <div class="panel__header">Move History</div>
-          <div class="panel__body move-history__body"></div>
-        </section>
-
-        <section class="side-plate side-plate--self side-plate--active" data-player="0">
-          <div class="side-plate__row">
-            <span class="side-plate__swatch"></span>
-            <div class="side-plate__name-block">
-              <span class="side-plate__name">player_1</span>
-              <span class="side-plate__rating">1810</span>
+            <div class="side-plate__row">
+              <span class="side-plate__swatch"></span>
+              <div class="side-plate__name-block">
+                <span class="side-plate__name">player_2</span>
+                <span class="side-plate__rating">1742</span>
+              </div>
+              <span class="side-plate__score">0</span>
+              <span class="side-plate__clock">00:00</span>
             </div>
-            <span class="side-plate__score">0</span>
-            <span class="side-plate__clock">00:00</span>
-          </div>
+          </section>
 
-          <div class="side-plate__pieces">
-            <span class="side-piece">
-              <span class="piece-btn__glyph-grid glyph-domino glyph-mini"><span></span><span></span></span>
-              <span class="side-piece__count" data-piece="domino">2</span>
-            </span>
-            <span class="side-piece">
-              <span class="piece-btn__glyph-grid glyph-tromino glyph-mini"
-                ><span></span><span></span><span></span
-              ></span>
-              <span class="side-piece__count">∞</span>
-            </span>
-            <span class="side-piece">
-              <span class="piece-btn__glyph-grid glyph-tetromino glyph-mini"
-                ><span></span><span></span><span></span><span></span
-              ></span>
-              <span class="side-piece__count">∞</span>
-            </span>
-          </div>
-        </section>
+          <section class="panel move-history">
+            <div class="panel__header">Move History</div>
+            <div class="panel__body move-history__body"></div>
+          </section>
+
+          <section class="side-plate side-plate--self side-plate--active" data-position="self">
+            <div class="side-plate__row">
+              <span class="side-plate__swatch"></span>
+              <div class="side-plate__name-block">
+                <span class="side-plate__name">player_1</span>
+                <span class="side-plate__rating">1810</span>
+              </div>
+              <span class="side-plate__score">0</span>
+              <span class="side-plate__clock">00:00</span>
+            </div>
+
+            <div class="side-plate__pieces">
+              <span class="side-piece">
+                <span class="piece-btn__glyph-grid glyph-domino glyph-mini"><span></span><span></span></span>
+                <span class="side-piece__count" data-piece="domino">2</span>
+              </span>
+              <span class="side-piece">
+                <span class="piece-btn__glyph-grid glyph-tromino glyph-mini"
+                  ><span></span><span></span><span></span
+                ></span>
+                <span class="side-piece__count">∞</span>
+              </span>
+              <span class="side-piece">
+                <span class="piece-btn__glyph-grid glyph-tetromino glyph-mini"
+                  ><span></span><span></span><span></span><span></span
+                ></span>
+                <span class="side-piece__count">∞</span>
+              </span>
+            </div>
+          </section>
+        </div>
       </div>
     </div>
 
