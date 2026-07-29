@@ -1,5 +1,5 @@
 import { randomUUID } from "crypto";
-import { Match } from "./Match.js";
+import { Match } from "./match.js";
 
 function genInviteCode() {
   // 6 char, readable alphabet (no 0/O/1/I confusion)
