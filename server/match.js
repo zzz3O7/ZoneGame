@@ -1,6 +1,6 @@
 // server/Match.js
 import { Game } from "../js/game.js";
-import { MSG } from "./protocol.js";
+import { MSG } from "../js/protocol.js";
 
 const DEFAULT_COLS = 20; // TODO game creation by gamemode object
 const DEFAULT_ROWS = 20;
