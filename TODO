@@ -1,8 +1,11 @@
 game end + menu
-move history
+move history (zone creation/index and piece) + points history
+highlight associated zone on move hover 
 undo/redo
 last move highlight
 zooming/paning + mobile support
+
+skip move - 10% penalty on all points ( concecutive passess are not allowed)
 
 sound
 modes

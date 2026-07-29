@@ -1,96 +1,106 @@
-# GDD — Рабочее название: **ZoneGame**
+# Game Design Document: ZoneGame
 
-_Версия 0.1 — черновик для сверки правил_
-
----
-
-## 1. Концепции
-
-### 1.1 Поле
-
-Игровое пространство случайной формы, генерируемое по алгоритму пещеры. Состоит из **проходимых клеток** (куда можно ставить фигуры) и **стен**.
-
-При генерации поля часть стен содержит **бонусные маркеры** (+5) — плюсики, видимые обоим игрокам с самого начала.
-
-### 1.2 Фигуры
-
-Каждый игрок в свой ход ставит ровно одну фигуру. Доступны три вида:
-
-| Фигура       | Размер   | Кол-во                |
-| ------------ | -------- | --------------------- |
-| L-тримино    | 3 клетки | не ограничено         |
-| L-тетромино  | 4 клетки | не ограничено         |
-| Домино (1×2) | 2 клетки | 2 штуки на всю партию |
-
-Разрешены все преобразования группы симметрий квадрата (диэдральная группа D₄): 4 вращения (0°, 90°, 180°, 270°) × 2 отражения = 8 ориентаций для каждой фигуры.
-
-Домино — ограниченный ресурс. Использование домино полностью заменяет обычный ход (не дополняет его).
-
-### 1.3 Зона
-
-Зона — это область клеток, определяемая flood-fill алгоритмом от центра поставленной фигуры с радиусом Чебышева 5 (то есть распространение идёт через проходимые клетки, пока расстояние Чебышева от центра не превысит 5). Стены обрывают распространение — зона принимает органичную форму, повторяющую рельеф пещеры, а не просто квадрат.
-
-**Параметры зоны фиксируются в момент создания и не меняются:**
-
-- **Множество клеток** — результат flood-fill от центра фигуры, ограниченного радиусом Чебышева 5, за вычетом клеток, уже принадлежащих другим зонам. Минимальный размер ограничен естественно: зона не может быть создана, если породившая её фигура не вмещается целиком внутри.
-- **Стоимость** — количество клеток в множестве + 5 за каждый бонусный маркер, попавший в зону. Бонусный маркер учитывается только в первой зоне, захватившей его; для всех последующих зон он уже нейтрален.
-- **Локальная очерёдность** — определяется тем, кто создал зону (создавший ходит первым, значит следующий локальный ход — у оппонента).
-
-### 1.4 Глобальный ход
-
-Игроки чередуются. В свой глобальный ход игрок делает ровно одно из двух:
-
-**А) Ход в существующую зону** — поставить фигуру в зону, где сейчас _его_ локальный ход.
-
-**Б) Создание новой зоны** — поставить фигуру в любое место поля вне всех существующих зон. Вокруг этой фигуры (в центре) образуется новая зона. Первый локальный ход в новой зоне автоматически считается сделанным (фигура уже стоит) — следовательно, следующий локальный ход там за оппонентом.
-
-### 1.5 Локальный ход
-
-Внутри каждой зоны ведётся собственная очерёдность, независимая от других зон и от глобальной очерёдности. Игрок не может ходить в зону, где сейчас не его локальный ход.
-
-Зона завершается, когда игрок, чей локальный ход, **не может поставить ни одну фигуру** внутри неё — нет места ни для тримино, ни для тетромино, и либо домино тоже не влезает, либо у игрока не осталось домино. Этот игрок проиграл зону. Победитель — тот, кто сделал последний локальный ход в ней — получает стоимость зоны в очках.
-
-### 1.6 Очки
-
-Очки за партию — сумма стоимостей всех выигранных зон с учётом модификаторов:
-
-- Победа в зоне → **+стоимость зоны** победителю.
-- Пропуск глобального хода → **−10% от текущих очков игрока в момент пропуска** (округление на усмотрение балансировки).
+_Working title. Version 0.2 — rules reference draft._
 
 ---
 
-## 2. Взаимосвязи
+## 1. Overview
 
-### Поле → Зона
+ZoneGame is a two-player, turn-based strategy game played on a procedurally generated cave-shaped board. Players place polyomino pieces to claim territory, and each claimed territory becomes its own self-contained mini-game with its own turn order and its own prize. The player who out-maneuvers their opponent across the most (and most valuable) territories wins the match.
 
-Поле задаёт физическое пространство для зон. Стены ограничивают реальный размер каждой зоны — две зоны в плотно застроенной области будут маленькими и дешёвыми. Бонусные маркеры в стенах "активируются" при создании зоны, если попадают в её границы.
-
-### Зона → Локальный ход
-
-Каждая зона хранит состояние локальной очерёдности. Локальный ход привязан к конкретной зоне — игрок не может "перенести" свой локальный ход из одной зоны в другую.
-
-### Глобальный ход → Зона (создание)
-
-Когда игрок создаёт зону, он одновременно делает первый локальный ход внутри неё. Это ключевая взаимосвязь: создание зоны выгодно тем, что ты сам выбираешь место, но невыгодно тем, что инициативу внутри зоны ты сразу отдаёшь.
-
-### Глобальный ход → Зона (выбор)
-
-В каждый глобальный ход игрок самостоятельно решает, куда направить усилия: продолжить борьбу в существующей зоне или открыть новую. Это порождает основной стратегический выбор партии.
-
-### Домино → Глобальный ход
-
-Домино — расходуемый ресурс, используемый вместо обычной фигуры. Применим как в существующей зоне, так и для создания новой. Поскольку домино меньше стандартных фигур, оно ценно в зонах с малым остатком свободного места (может влезть туда, куда тримино уже не поместится).
-
-### Пропуск → Очки
-
-Пропуск глобального хода возможен только если игрок не может ходить ни в одну из доступных зон (где его локальный ход) и не может создать новую зону (нет свободного места вне зон). В момент пропуска от текущих очков игрока вычитается 10% (минимум 0). Штраф применяется немедленно — игрок всегда видит актуальный счёт.
-
-### Завершение партии
-
-Партия заканчивается когда оба игрока не могут сделать ход. В этот момент все зоны уже завершены — незавершённых зон не существует. Победитель партии — игрок с большей суммой очков.
+The core tension is spatial and tactical at once: every move asks the same two questions. _Where should I place this piece?_ And _what does that choice cost me somewhere else?_
 
 ---
 
-## 3. Открытые вопросы (для балансировки)
+## 2. The Board
 
-_Все числовые параметры (радиус зоны, множители, кол-во домино) — балансировочные переменные, финализируются на основе реальных партий._
+The board is generated using a random cave-generation algorithm, producing an irregular, organic layout of **open cells** (where pieces can be placed) and **walls** (impassable, and permanent for the whole match).
+
+Some wall segments contain **bonus markers**, worth +5 points each. These are visible to both players from the start of the match, and they increase the walue of the zone, containing them.
+
+Because the board shape is irregular rather than an open grid, cramped areas naturally produce small, low-value territories, while open caverns allow for larger, more valuable ones. The terrain itself is part of the strategy.
+
+---
+
+## 3. Pieces
+
+On each turn, a player places exactly one piece. There are three types:
+
+| Piece        | Size    | Supply                                            |
+| ------------ | ------- | ------------------------------------------------- |
+| L-tromino    | 3 cells | Unlimited                                         |
+| L-tetromino  | 4 cells | Unlimited                                         |
+| Domino (1×2) | 2 cells | 2 per match, shared resource pool for that player |
+
+All eight orientations of each piece are legal — the four rotations (0°, 90°, 180°, 270°) combined with mirroring. Players may place any orientation that fits.
+
+The domino is the odd one out: it's small footprint makes it valuable precisely when space is running out — a domino can often fit where a tromino or tetromino no longer can.
+
+---
+
+## 4. Zones
+
+When a piece is placed to open new ground, it creates a **zone**: a claimed territory generated by flood-filling outward from the piece's center, following open cells only, up to a Chebyshev distance of 4. Walls and other zones stop the flood fill, so zones take on the natural shape of the cave rather than a clean square.
+
+A zone's properties are locked in permanently the moment it's created:
+
+- **Territory** — the exact set of cells produced by the flood fill.
+- **Value** — one point per cell in the zone's territory, plus 5 points for every bonus marker inside it. A bonus marker only pays out once, to whichever zone claims it first; every zone created afterward treats that marker as already spent.
+- **Turn order** — whoever creates the zone has, by definition, just made the first move inside it. That means their opponent gets the next move within that zone.
+
+Once a zone exists, it runs its own local contest, independent of every other zone on the board.
+
+---
+
+## 5. Turn Structure
+
+### 5.1 Global turns
+
+Players alternate global turns. On each global turn, a player does exactly one of the following:
+
+**A. Play into an active zone.** Place a piece inside any zone where it is currently that player's turn locally.
+
+**B. Open a new zone.** Place a piece anywhere on the board outside of all existing zones' territory. This immediately creates a new zone centered on that piece, and counts as the zone's first local move.
+
+There's no third option — every global turn is a piece placement of one kind or the other.
+
+### 5.2 Local turns
+
+Each zone maintains its own internal turn order, entirely separate from the global game and from every other zone. A player may only place a piece in a zone during their own local turn there.
+
+A zone **closes** when the player whose local turn it is cannot legally place any piece inside it — no room for a tromino, no room for a tetromino, and either no room for a domino or none left in their supply. That player has lost the zone. The player who made the _last_ successful move in it wins the zone and is awarded its full point value.
+
+### 5.3 Passing
+
+If a player has no legal move anywhere — no active zone where it's their turn has room for a piece, and there's no open space left to start a new zone — they must pass their global turn. Passing costs 10% of that player's current score, applied and visible immediately (resulting points rounded down).
+
+---
+
+## 6. Scoring and Victory
+
+A player's score is the running total of every zone they've won, minus any penalties incurred from passing.
+
+The match ends when _both_ players are simultaneously unable to make a move. By that point, every zone on the board has necessarily been resolved — there's no such thing as a match ending with an open zone still in play. The player with the higher score wins.
+
+---
+
+## 7. Strategic Notes
+
+A few things worth keeping in mind while reading the rules, since they explain _why_ the game plays the way it does rather than just _what_ the rules are:
+
+- **Opening a zone is a trade.** You choose exactly where it goes, but you hand your opponent the next move inside it. Every new zone is simultaneously an offer and a concession.
+- **The domino is a scalpel, not a hammer.** Its scarcity means it's usually worth saving for the moment a zone's remaining space gets too tight for anything bigger — and worth denying your opponent by forcing that moment early or in the less valuable zone.
+- **Terrain is leverage.** Since zone shape follows the cave rather than a clean radius, understanding the board's geometry before committing a piece is often as important as the piece itself.
+
+---
+
+## 8. Open Design Questions
+
+The following parameters are intentionally left as variables, to be finalized through playtesting rather than fixed by design intuition:
+
+- Zone radius (currently Chebyshev 4)
+- Bonus marker value (currently +5)
+- Pass penalty (currently 10% of current score)
+- Domino supply per player (currently 2)
+
+None of these are load-bearing to the core loop — they're dials, not pillars.
