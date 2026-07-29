@@ -113,7 +113,8 @@ export class GameUI {
     const confirmed = this.gesture.confirm((type, shape, anchorRow, anchorCol) => {
       this._submitPlacement(type, shape, anchorRow, anchorCol);
     });
-    if (confirmed && !this.matchClient) this._render();
+    //if (confirmed && !this.matchClient) this._render();
+    this._render();
   }
 
   secondaryAction() {
@@ -244,11 +245,12 @@ export class GameUI {
   _syncCanvas() {
     const [anchorCell, anchorShape] = this._activePlacement();
     const pieceType = this.gesture.pending ? this.gesture.pending.type : this.selectedType;
+    const viewerIndex = this.matchClient ? this.matchClient.myPlayerIndex : this.game.currentPlayerIndex;
 
     this.renderer.render(
       this.game.board,
       this.game.zones,
-      this.game.currentPlayer,
+      this.game.players[viewerIndex],
       pieceType,
       anchorShape,
       anchorCell,
@@ -292,6 +294,11 @@ export class GameUI {
 
     const isActive = player.id === this.game.currentPlayerIndex;
     plate.classList.toggle("side-plate--active", isActive);
+
+    const nameEl = plate.querySelector(".side-plate__name");
+    if (nameEl) {
+      nameEl.textContent = this.matchClient?.playerNames?.[player.id] ?? `player_${player.id + 1}`;
+    }
 
     const scoreEl = plate.querySelector(".side-plate__score");
     if (scoreEl) scoreEl.textContent = player.score;

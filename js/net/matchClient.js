@@ -8,6 +8,7 @@ export class MatchClient {
     this.matchId = null;
     this.inviteCode = null;
     this.myPlayerIndex = null;
+    this.playerNames = null;
     this.game = null;
 
     this.onCreated = null; // (inviteCode) => void
@@ -58,6 +59,7 @@ export class MatchClient {
 
   _handleMatchStart(msg) {
     this.game = new Game(msg.cols, msg.rows, msg.seed);
+    this.playerNames = msg.players.map((p) => p.nickname);
     this.onMatchStart?.(this.game);
   }
 
