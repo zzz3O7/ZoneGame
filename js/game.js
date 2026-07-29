@@ -89,4 +89,26 @@ export class Game {
     if (s0 === s1) return null;
     return s0 > s1 ? 0 : 1;
   }
+
+  getStateHash() {
+    const occupied = [...this.board.occupied].sort();
+    const zonesState = this.zones.map((z) => `${z.id}:${z.active ? 1 : 0}:${z.localTurn}:${z.cost}`);
+    const playersState = this.players.map((p) => `${p.score}:${p.dominoLeft}`);
+
+    const str = JSON.stringify({
+      occupied,
+      zones: zonesState,
+      players: playersState,
+      currentPlayerIndex: this.currentPlayerIndex,
+      gameOver: this.gameOver,
+    });
+
+    // FNV-1a, fast & deterministic, non-crypto
+    let hash = 0x811c9dc5;
+    for (let i = 0; i < str.length; i++) {
+      hash ^= str.charCodeAt(i);
+      hash = Math.imul(hash, 0x01000193);
+    }
+    return (hash >>> 0).toString(16);
+  }
 }
