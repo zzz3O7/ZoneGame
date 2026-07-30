@@ -40,8 +40,7 @@ document.getElementById("btnLocalGame").addEventListener("click", () => {
 
 document.getElementById("btnCreateMatch").addEventListener("click", async () => {
   const nickname = document.getElementById("nicknameInput").value || "Player";
-  //const conn = new Connection("ws://89.125.59.204:8080");
-  const conn = new Connection(`${location.protocol === "https:" ? "wss" : "ws"}://${location.host}`);
+  const conn = new Connection("ws://89.125.59.204:8080");
   await conn.connect();
 
   const matchClient = setupMatchClient(conn);
@@ -55,8 +54,7 @@ document.getElementById("btnCreateMatch").addEventListener("click", async () => 
 document.getElementById("btnJoinMatch").addEventListener("click", async () => {
   const nickname = document.getElementById("nicknameInput").value || "Player";
   const code = document.getElementById("joinCodeInput").value.trim().toUpperCase();
-  //const conn = new Connection("ws://89.125.59.204:8080");
-  const conn = new Connection(`${location.protocol === "https:" ? "wss" : "ws"}://${location.host}`);
+  const conn = new Connection("ws://89.125.59.204:8080");
   await conn.connect();
 
   const matchClient = setupMatchClient(conn);
