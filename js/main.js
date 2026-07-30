@@ -40,7 +40,8 @@ document.getElementById("btnLocalGame").addEventListener("click", () => {
 
 document.getElementById("btnCreateMatch").addEventListener("click", async () => {
   const nickname = document.getElementById("nicknameInput").value || "Player";
-  const conn = new Connection("ws://localhost:8080");
+  //const conn = new Connection("ws://localhost:8080");
+  const conn = new Connection(`wss://${location.host}/ws`);
   await conn.connect();
 
   const matchClient = setupMatchClient(conn);
@@ -54,7 +55,8 @@ document.getElementById("btnCreateMatch").addEventListener("click", async () => 
 document.getElementById("btnJoinMatch").addEventListener("click", async () => {
   const nickname = document.getElementById("nicknameInput").value || "Player";
   const code = document.getElementById("joinCodeInput").value.trim().toUpperCase();
-  const conn = new Connection("ws://localhost:8080");
+  //const conn = new Connection("ws://localhost:8080");
+  const conn = new Connection(`wss://${location.host}/ws`);
   await conn.connect();
 
   const matchClient = setupMatchClient(conn);
