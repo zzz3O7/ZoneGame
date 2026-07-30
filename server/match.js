@@ -1,6 +1,6 @@
 // server/Match.js
 import { Game } from "../js/game.js";
-import { MSG } from "../js/protocol.js";
+import { MSG } from "../js/net/protocol.js";
 
 const DEFAULT_COLS = 20; // TODO game creation by gamemode object
 const DEFAULT_ROWS = 20;
@@ -48,13 +48,13 @@ export class Match {
     const player = this.players.find((p) => p.ws === ws);
     if (!player) return;
     if (player.playerIndex !== this.game.currentPlayerIndex) {
-      ws.send(JSON.stringify({ type: MSG.MOVE_REJECTED, reason: "Not your turn" }));
+      this._sendTo(ws, { type: MSG.MOVE_REJECTED, reason: "Not your turn" });
       return;
     }
 
     const applied = this.game.attemptPlacement(pieceType, shape, anchorRow, anchorCol);
     if (!applied) {
-      ws.send(JSON.stringify({ type: MSG.MOVE_REJECTED, reason: "Illegal move" }));
+      this._sendTo(ws, { type: MSG.MOVE_REJECTED, reason: "Illegal move" });
       return;
     }
 
@@ -73,13 +73,13 @@ export class Match {
     const player = this.players.find((p) => p.ws === ws);
     if (!player) return;
     if (player.playerIndex !== this.game.currentPlayerIndex) {
-      ws.send(JSON.stringify({ type: MSG.MOVE_REJECTED, reason: "Not your turn" }));
+      this._sendTo(ws, { type: MSG.MOVE_REJECTED, reason: "Not your turn" });
       return;
     }
 
     const applied = this.game.pass();
     if (!applied) {
-      ws.send(JSON.stringify({ type: MSG.MOVE_REJECTED, reason: "Cannot pass, you have a move" }));
+      this._sendTo(ws, { type: MSG.MOVE_REJECTED, reason: "Cannot pass, you have a move" });
       return;
     }
 
@@ -92,16 +92,39 @@ export class Match {
     });
   }
 
+  // ADDED: called from server on ws 'close'
+  handleDisconnect(ws) {
+    const player = this.players.find((p) => p.ws === ws);
+    if (!player) return;
+    this.status = "done"; // no reconnect support yet, MVP: end match TODO
+    const opponent = this.players.find((p) => p.ws !== ws);
+    if (opponent) {
+      this._sendTo(opponent.ws, {
+        type: MSG.OPPONENT_DISCONNECTED,
+        playerIndex: player.playerIndex,
+      });
+    }
+  }
+
+  // ADDED: guarded single-socket send, used by reject paths
+  _sendTo(ws, msg) {
+    if (ws.readyState !== ws.OPEN) return;
+    try {
+      ws.send(JSON.stringify(msg));
+    } catch (err) {
+      console.error("send failed:", err.message);
+    }
+  }
+
   broadcast(msg) {
-    const data = JSON.stringify(msg);
     for (const p of this.players) {
-      if (p.ws.readyState === p.ws.OPEN) p.ws.send(data);
+      this._sendTo(p.ws, msg);
     }
   }
 
   broadcastPersonalized(buildMsg) {
     for (const p of this.players) {
-      if (p.ws.readyState === p.ws.OPEN) p.ws.send(JSON.stringify(buildMsg(p)));
+      this._sendTo(p.ws, buildMsg(p));
     }
   }
 }

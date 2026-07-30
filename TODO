@@ -5,9 +5,17 @@ undo/redo
 last move highlight
 zooming/paning + mobile support
 
+pending zone cost display
+
+on opponent disconected show a message
+
+on message receive - send confirmation message
+
 skip move - 10% penalty on all points ( concecutive passess are not allowed)
 
 sound
 modes
 
 on different grid sizes board is still a square not a rectangle and tiles are squished
+
+ws randomly closes mid game

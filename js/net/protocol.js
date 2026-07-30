@@ -1,4 +1,3 @@
-// server/protocol.js
 export const MSG = {
   CREATE_MATCH: "createMatch", // client -> server
   MATCH_CREATED: "matchCreated", // server -> match creator
@@ -9,6 +8,7 @@ export const MSG = {
   PASS_ATTEMPT: "passAttempt", // client -> server
   MOVE_APPLIED: "moveApplied", // server -> both
   MOVE_REJECTED: "moveRejected", // server -> sender only
+  OPPONENT_DISCONNECTED: "opponentDisconnected", // server -> client
 
   ERROR: "error",
 };

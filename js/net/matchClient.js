@@ -16,12 +16,16 @@ export class MatchClient {
     this.onMoveApplied = null; // () => void
     this.onRejected = null; // (reason) => void
     this.onError = null; // (message) => void
+    this.onOpponentDisconnected = null; // (playerIndex) => void
+    this.onConnectionLost = null; // () => void
 
     connection.on(MSG.MATCH_CREATED, (msg) => this._handleCreated(msg));
     connection.on(MSG.MATCH_JOINED, (msg) => this._handleJoined(msg));
     connection.on(MSG.MATCH_START, (msg) => this._handleMatchStart(msg));
     connection.on(MSG.MOVE_APPLIED, (msg) => this._handleMoveApplied(msg));
     connection.on(MSG.MOVE_REJECTED, (msg) => this.onRejected?.(msg.reason));
+    connection.on(MSG.OPPONENT_DISCONNECTED, (msg) => this.onOpponentDisconnected?.(msg.playerIndex));
+    connection.on("__close", () => this.onConnectionLost?.());
     connection.on(MSG.ERROR, (msg) => this.onError?.(msg.message));
   }
 
@@ -38,11 +42,13 @@ export class MatchClient {
   }
 
   sendMove(pieceType, shape, anchorRow, anchorCol) {
-    this.connection.send({ type: MSG.MOVE_ATTEMPT, pieceType, shape, anchorRow, anchorCol });
+    const ok = this.connection.send({ type: MSG.MOVE_ATTEMPT, pieceType, shape, anchorRow, anchorCol });
+    if (!ok) this.onConnectionLost?.();
   }
 
   sendPass() {
-    this.connection.send({ type: MSG.PASS_ATTEMPT });
+    const ok = this.connection.send({ type: MSG.PASS_ATTEMPT });
+    if (!ok) this.onConnectionLost?.();
   }
 
   _handleCreated(msg) {
