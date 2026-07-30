@@ -11,5 +11,3 @@ sound
 modes
 
 on different grid sizes board is still a square not a rectangle and tiles are squished
-
-env variables with server ip (vps or localhost) to deploy on server and test localy at the same time
