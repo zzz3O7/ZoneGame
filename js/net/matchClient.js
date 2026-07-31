@@ -1,6 +1,6 @@
 // js/net/matchClient.js
 import { Game } from "../game.js";
-import { MSG } from "../protocol.js";
+import { MSG } from "./protocol.js";
 
 export class MatchClient {
   constructor(connection) {
