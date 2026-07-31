@@ -1,17 +1,13 @@
 game end + menu
-move history (zone creation/index and piece) + points history
-highlight associated zone on move preview (add an extra parameter to update(cell, board, zones, zonepPeview))
-undo/redo
-last move highlight
+    move history (zone creation/index and piece) + points history
+    highlight associated zone on move jover in history 
+    undo/redo
+    last move highlight
 zooming/paning + mobile support
-
-pending zone cost display
 
 on opponent disconected show a message
 
-win screen correct names
-
-main menu visuals
+    main menu visuals
 
 skip move - 10% penalty on all points ( concecutive passess are not allowed)
 

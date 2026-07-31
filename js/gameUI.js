@@ -1,7 +1,9 @@
 import { Shape, SHAPES_BASE } from "./shape.js";
-import { PASS_PENALTY } from "./config.js";
+import { PASS_PENALTY, ZONE_RADIUS } from "./config.js";
 import { GestureInput } from "./gestureInput.js";
 import { ZoneTooltip } from "./zoneTooltip.js";
+import { Zone } from "./zone.js";
+import { Board } from "./board.js";
 
 const KEY_TO_TYPE = { 1: "gesture", 2: "domino", 3: "tromino", 4: "tetromino" };
 
@@ -132,13 +134,11 @@ export class GameUI {
   hover(cell) {
     this.cursorCell = cell;
     this.gesture.extend(cell);
-    this.zoneTooltip.update(cell, this.game.board, this.game.zones);
     this._render();
   }
 
   clearHover() {
     this.cursorCell = null;
-    this.zoneTooltip.hide();
     this._render();
   }
 
@@ -249,6 +249,10 @@ export class GameUI {
     const pieceType = this.gesture.pending ? this.gesture.pending.type : this.selectedType;
     const viewerIndex = this.matchClient ? this.matchClient.myPlayerIndex : this.game.currentPlayerIndex;
 
+    const zonePreview = anchorCell ? Zone.preview(this.game.board, anchorCell[0], anchorCell[1], ZONE_RADIUS) : null;
+    const cursorInPreview =
+      zonePreview && this.cursorCell && zonePreview.cellSet.has(Board.key(this.cursorCell[0], this.cursorCell[1]));
+
     this.renderer.render(
       this.game.board,
       this.game.zones,
@@ -260,6 +264,8 @@ export class GameUI {
       this.cursorCell,
       this.gesture.path,
     );
+
+    this.zoneTooltip.update(this.cursorCell, this.game.board, this.game.zones, cursorInPreview ? zonePreview : null);
   }
 
   _syncControls() {

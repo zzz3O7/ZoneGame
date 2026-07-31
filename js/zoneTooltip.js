@@ -10,8 +10,13 @@ export class ZoneTooltip {
     if (this.el) this.el.hidden = true;
   }
 
-  update(cell, board, zones) {
+  update(cell, board, zones, zonePreview = null) {
     if (!this.el) return;
+
+    if (zonePreview) {
+      this._show(zonePreview.cellSet, zonePreview.cost, board);
+      return;
+    }
 
     const zoneId = cell ? board.zoneIdAt(cell[0], cell[1]) : null;
     if (zoneId === null) {
@@ -20,7 +25,11 @@ export class ZoneTooltip {
     }
 
     const zone = zones[zoneId];
-    const cells = Array.from(zone.cellSet, Board.parse);
+    this._show(zone.cellSet, zone.cost, board);
+  }
+
+  _show(cellSet, cost, board) {
+    const cells = Array.from(cellSet, Board.parse);
     if (cells.length === 0) {
       this.hide();
       return;
@@ -35,7 +44,7 @@ export class ZoneTooltip {
     // ----- board limits -----
     const maxCol = board.cols - 2;
     const minCol = 1;
-    const isFree = (r, c) => !zone.cellSet.has(`${r},${c}`);
+    const isFree = (r, c) => !cellSet.has(`${r},${c}`);
 
     // ----- collect all valid placements -----
     const placements = []; // { r, c, hasBelow, hasAbove, hDist, vDist }
@@ -50,8 +59,8 @@ export class ZoneTooltip {
         let hasAbove = false;
         for (let dc = -1; dc <= 1; dc++) {
           const col = c + dc;
-          if (r + 1 < board.rows && zone.cellSet.has(`${r + 1},${col}`)) hasBelow = true;
-          if (r - 1 >= 0 && zone.cellSet.has(`${r - 1},${col}`)) hasAbove = true;
+          if (r + 1 < board.rows && cellSet.has(`${r + 1},${col}`)) hasBelow = true;
+          if (r - 1 >= 0 && cellSet.has(`${r - 1},${col}`)) hasAbove = true;
         }
         if (!hasBelow && !hasAbove) continue;
 
@@ -72,8 +81,8 @@ export class ZoneTooltip {
         let hasAbove = false;
         for (let dc = 0; dc <= 1; dc++) {
           const col = c + dc;
-          if (r + 1 < board.rows && zone.cellSet.has(`${r + 1},${col}`)) hasBelow = true;
-          if (r - 1 >= 0 && zone.cellSet.has(`${r - 1},${col}`)) hasAbove = true;
+          if (r + 1 < board.rows && cellSet.has(`${r + 1},${col}`)) hasBelow = true;
+          if (r - 1 >= 0 && cellSet.has(`${r - 1},${col}`)) hasAbove = true;
         }
         if (!hasBelow && !hasAbove) continue;
 
@@ -85,7 +94,7 @@ export class ZoneTooltip {
     }
 
     if (placements.length === 0) {
-      this._fallbackBoundingBox(zone, board);
+      this._fallbackBoundingBox(cellSet, cost, board);
       return;
     }
 
@@ -112,18 +121,18 @@ export class ZoneTooltip {
     const centerX = offsetX + (chosen.c + 0.5) * cssCellW;
     const centerY = offsetY + (chosen.r + 0.5) * cssCellH;
 
-    this.el.textContent = `Reward: ${zone.cost}`;
+    this.el.textContent = `Reward: ${cost}`;
     this.el.style.left = `${centerX}px`;
     this.el.style.top = `${centerY}px`;
     this.el.hidden = false;
   }
 
-  _fallbackBoundingBox(zone, board) {
+  _fallbackBoundingBox(cellSet, cost, board) {
     let minRow = Infinity,
       maxRow = -Infinity,
       minCol = Infinity,
       maxCol = -Infinity;
-    for (const key of zone.cellSet) {
+    for (const key of cellSet) {
       const [r, c] = Board.parse(key);
       if (r < minRow) minRow = r;
       if (r > maxRow) maxRow = r;
@@ -134,7 +143,7 @@ export class ZoneTooltip {
     const centerX = offsetX + ((minCol + maxCol + 1) / 2) * cssCellW;
     const centerY = offsetY + ((minRow + maxRow + 1) / 2) * cssCellH;
 
-    this.el.textContent = `Reward: ${zone.cost}`;
+    this.el.textContent = `Reward: ${cost}`;
     this.el.style.left = `${centerX}px`;
     this.el.style.top = `${centerY}px`;
     this.el.hidden = false;

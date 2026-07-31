@@ -139,21 +139,18 @@ export class Renderer {
   _drawZonePreview(board, anchorShape, anchorCell) {
     if (!anchorCell || !anchorShape) return;
     const [r, c] = anchorCell;
-    if (board.zoneIdAt(r, c) !== null) return;
-    if (!board.isFloor(r, c)) return;
+    const preview = Zone.preview(board, r, c, ZONE_RADIUS);
+    if (!preview) return;
 
     const { ctx } = this;
-    const cellSet = Zone.floodFill(board, r, c, ZONE_RADIUS);
-    const bonuses = Zone.bonusesInRange(board, cellSet, r, c, ZONE_RADIUS);
-
     ctx.fillStyle = THEME.pendingNewZone;
-    for (const key of cellSet) {
+    for (const key of preview.cellSet) {
       const [pr, pc] = Board.parse(key);
       ctx.fillRect(pc * this.cellSize, pr * this.cellSize, this.cellSize, this.cellSize);
     }
 
     ctx.fillStyle = THEME.pendingBonuses;
-    for (const key of bonuses) {
+    for (const key of preview.bonusKeys) {
       const [pr, pc] = Board.parse(key);
       ctx.fillRect(pc * this.cellSize, pr * this.cellSize, this.cellSize, this.cellSize);
     }

@@ -57,6 +57,16 @@ export class Zone {
     return found;
   }
 
+  static preview(board, anchorRow, anchorCol, radius) {
+    if (board.zoneIdAt(anchorRow, anchorCol) !== null) return null;
+    if (!board.isFloor(anchorRow, anchorCol)) return null;
+
+    const cellSet = Zone.floodFill(board, anchorRow, anchorCol, radius);
+    const bonusKeys = Zone.bonusesInRange(board, cellSet, anchorRow, anchorCol, radius);
+    const cost = cellSet.size + bonusKeys.size * 5;
+    return { cellSet, bonusKeys, cost };
+  }
+
   static create(board, zones, anchorRow, anchorCol, creator, radius) {
     const id = zones.length;
     const cellSet = Zone.floodFill(board, anchorRow, anchorCol, radius);
