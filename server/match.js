@@ -1,4 +1,3 @@
-// server/Match.js
 import { Game } from "../js/game.js";
 import { MSG } from "../js/net/protocol.js";
 

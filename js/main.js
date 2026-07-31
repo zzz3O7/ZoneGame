@@ -27,7 +27,6 @@ function startGame(game, matchClient = null) {
 
   const canvas = document.getElementById("board-canvas");
   const renderer = new Renderer(canvas, game.board);
-  document.getElementById("seedValue").textContent = game.seed; // TODO it's a gameUi responsibility (init)
 
   ui = new GameUI(game, renderer, canvas, matchClient);
   ui.init();
@@ -40,7 +39,6 @@ document.getElementById("btnLocalGame").addEventListener("click", () => {
 
 document.getElementById("btnCreateMatch").addEventListener("click", async () => {
   const nickname = document.getElementById("nicknameInput").value || "Player";
-  //const conn = new Connection("ws://localhost:8080");
   const conn = new Connection(`wss://${location.host}/ws`);
   await conn.connect();
 
@@ -55,7 +53,6 @@ document.getElementById("btnCreateMatch").addEventListener("click", async () => 
 document.getElementById("btnJoinMatch").addEventListener("click", async () => {
   const nickname = document.getElementById("nicknameInput").value || "Player";
   const code = document.getElementById("joinCodeInput").value.trim().toUpperCase();
-  //const conn = new Connection("ws://localhost:8080");
   const conn = new Connection(`wss://${location.host}/ws`);
   await conn.connect();
 
@@ -64,8 +61,6 @@ document.getElementById("btnJoinMatch").addEventListener("click", async () => {
 });
 
 document.getElementById("btnCancelWait").addEventListener("click", () => {
-  // TODO: needs a proper leave/cancel message to server later; for MVP, just
-  // reload or reset connection — leaving a stale "waiting" match on server
-  // is a cleanup problem for a future piece (match timeout/expiry).
+  // TODO: needs a proper leave/cancel message to server later.
   showScreen(menuScreen);
 });

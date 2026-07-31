@@ -25,6 +25,8 @@ export class GameUI {
   }
 
   init() {
+    const seedEl = document.getElementById("seedValue");
+    if (seedEl) seedEl.textContent = this.game.seed;
     this._render();
   }
 
@@ -319,7 +321,8 @@ export class GameUI {
     }
 
     const winner = this.game.winnerIndex;
-    message.textContent = winner === null ? "Draw" : `player_${winner + 1} wins`;
+    const winnerName = winner === null ? null : (this.matchClient?.playerNames?.[winner] ?? `player_${winner + 1}`);
+    message.textContent = winner === null ? "Draw" : `${winnerName} wins`;
     overlay.hidden = false;
   }
 }

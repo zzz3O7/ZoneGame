@@ -1,4 +1,3 @@
-// js/net/matchClient.js
 import { Game } from "../game.js";
 import { MSG } from "./protocol.js";
 
