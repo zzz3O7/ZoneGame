@@ -644,8 +644,14 @@ button {
 .mh-move--b .mh-glyph span {
   background: var(--color-player-b);
 }
+.mh-move--a .mh-glyph-pass {
+  color: var(--color-player-a);
+}
+.mh-move--b .mh-glyph-pass {
+  color: var(--color-player-b);
+}
 .mh-glyph-pass {
-  font-size: 12px;
+  font-size: 20px;
   line-height: 1;
 }
 
