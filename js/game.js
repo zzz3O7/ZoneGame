@@ -5,6 +5,7 @@ import { Player } from "./player.js";
 import { Rules } from "./rules.js";
 import { Shape } from "./shape.js";
 import { CaveGenerator } from "./caveGenerator.js";
+import { MoveHistory } from "./history.js";
 import { ZONE_RADIUS, STARTING_DOMINOS, PASS_PENALTY } from "./config.js";
 
 export class Game {
@@ -20,6 +21,7 @@ export class Game {
     this.players = [new Player(0, "Player 1", STARTING_DOMINOS), new Player(1, "Player 2", STARTING_DOMINOS)];
     this.currentPlayerIndex = 0;
     this.gameOver = false;
+    this.history = new MoveHistory();
   }
 
   get currentPlayer() {
@@ -31,36 +33,62 @@ export class Game {
   }
 
   attemptPlacement(pieceType, shape, anchorRow, anchorCol) {
-    if (this.gameOver) return false;
+    if (this.gameOver) return null;
     const player = this.currentPlayer;
 
     const canPlace = Rules.canPlaceHere(this.board, this.zones, player, pieceType, shape, anchorRow, anchorCol);
-    if (!canPlace) return false;
+    if (!canPlace) return null;
 
     if (pieceType === "domino") player.useDomino();
     this.board.occupy(Shape.cellsAt(shape, anchorRow, anchorCol));
 
-    const zoneId = this.board.zoneIdAt(anchorRow, anchorCol);
-    if (zoneId === null) {
-      Zone.create(this.board, this.zones, anchorRow, anchorCol, this.currentPlayerIndex, ZONE_RADIUS);
+    const existingZoneId = this.board.zoneIdAt(anchorRow, anchorCol);
+    let zoneEvent;
+    if (existingZoneId === null) {
+      const zone = Zone.create(this.board, this.zones, anchorRow, anchorCol, this.currentPlayerIndex, ZONE_RADIUS);
+      zoneEvent = { kind: "created", zoneId: zone.id };
     } else {
-      this.zones[zoneId].localTurn = 1 - this.currentPlayerIndex;
+      this.zones[existingZoneId].localTurn = 1 - this.currentPlayerIndex;
+      zoneEvent = { kind: "joined", zoneId: existingZoneId };
     }
 
-    this._checkZoneCompletions();
+    const completions = this._checkZoneCompletions();
+
+    const entry = this.history.record({
+      playerIndex: this.currentPlayerIndex,
+      type: "piece",
+      pieceType,
+      shape,
+      anchorRow,
+      anchorCol,
+      zoneEvent,
+      completions,
+    });
+
+    console.log(`type: ${entry.type}, ${entry.pieceType}\n
+      zone ${entry.zoneEvent.zoneId} ${entry.zoneEvent.kind}\n
+      completions: ${JSON.stringify(entry.completions)}`); // DEBUG
+
     this._checkGameEnd();
     this._advanceTurn();
-    return true;
+    return entry;
   }
 
   pass() {
-    if (this.gameOver) return false;
-    if (this.canCurrentPlayerMove()) return false;
+    if (this.gameOver) return null;
+    if (this.canCurrentPlayerMove()) return null;
 
+    const playerIndex = this.currentPlayerIndex;
+    const preScore = this.currentPlayer.score;
     this.currentPlayer.applyPassPenalty(PASS_PENALTY);
+    const penalty = preScore - this.currentPlayer.score;
+
+    const entry = this.history.record({ playerIndex, type: "pass", penalty });
+    console.log(`type: ${entry.type}, penalty: ${entry.penalty}`); // DEBUG
+
     this._advanceTurn();
     this._checkGameEnd();
-    return true;
+    return entry;
   }
 
   _advanceTurn() {
@@ -68,6 +96,7 @@ export class Game {
   }
 
   _checkZoneCompletions() {
+    const completions = [];
     for (const zone of this.zones) {
       if (!zone.active) continue;
       const hasMove = Rules.zoneHasMove(this.board, this.zones, zone, this.players[zone.localTurn]);
@@ -75,8 +104,10 @@ export class Game {
         zone.complete();
         const winnerIndex = 1 - zone.localTurn;
         this.players[winnerIndex].addScore(zone.cost);
+        completions.push({ zoneId: zone.id, winnerIndex, points: zone.cost });
       }
     }
+    return completions;
   }
 
   _checkGameEnd() {

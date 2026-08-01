@@ -595,45 +595,126 @@ button {
   flex: 1;
 }
 
-.move-row {
+.mh-row {
   display: grid;
-  grid-template-columns: 28px 1fr 1fr;
+  grid-template-columns: 20px 1fr 1fr 1fr;
+  align-items: center;
   gap: 8px;
-  padding: 6px 14px;
-  font-size: 13px;
-  font-family: var(--font-mono);
+  padding: 5px 6px;
+  border-radius: 6px;
 }
-.move-row:nth-child(odd) {
+.mh-row:hover {
   background: var(--color-surface-alt);
 }
 
-.move-row__idx {
+.mh-idx {
   color: var(--color-text-muted);
+  font-size: 12px;
+  text-align: right;
 }
-.move-row__a,
-.move-row__b {
-  color: var(--color-text-secondary);
+
+.mh-move {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px 8px;
+  border-radius: 5px;
+  height: 29px;
+  width: 100%;
+  box-sizing: border-box;
 }
-.move-row__a::before {
-  content: "";
-  display: inline-block;
-  width: 6px;
-  height: 6px;
+.mh-move--a {
+  background: rgba(79, 143, 196, 0.15);
+}
+.mh-move--b {
+  background: rgba(184, 89, 63, 0.15);
+}
+
+.mh-glyph {
+  display: grid;
+  gap: 1px;
+  flex-shrink: 0;
+}
+.mh-glyph span {
   border-radius: 1px;
+}
+.mh-move--a .mh-glyph span {
   background: var(--color-player-a);
-  margin-right: 6px;
 }
-.move-row__b::before {
-  content: "";
-  display: inline-block;
-  width: 6px;
-  height: 6px;
-  border-radius: 1px;
+.mh-move--b .mh-glyph span {
   background: var(--color-player-b);
-  margin-right: 6px;
 }
-.move-row__b:empty {
-  color: transparent;
+.mh-glyph-pass {
+  font-size: 12px;
+  line-height: 1;
+}
+
+/* domino and tromino stay upright; tetromino is laid on its side (rotated
+   180 from the piece-selector's upright glyph) so it's only 2 rows tall
+   like the tromino, letting all three share one bigger 8px cell size
+   instead of shrinking to fit the tallest (upright) shape */
+.mh-glyph-domino {
+  grid-template-columns: repeat(2, 10px);
+  grid-template-rows: 10px;
+}
+.mh-glyph-tromino {
+  grid-template-columns: repeat(2, 10px);
+  grid-template-rows: repeat(2, 10px);
+}
+.mh-glyph-tromino span:nth-child(1) {
+  grid-area: 1 / 1 / 2 / 2;
+}
+.mh-glyph-tromino span:nth-child(2) {
+  grid-area: 2 / 1 / 3 / 2;
+}
+.mh-glyph-tromino span:nth-child(3) {
+  grid-area: 2 / 2 / 3 / 3;
+}
+.mh-glyph-tetromino {
+  grid-template-columns: repeat(3, 10px);
+  grid-template-rows: repeat(2, 10px);
+}
+.mh-glyph-tetromino span:nth-child(1) {
+  grid-area: 1 / 1 / 2 / 2;
+}
+.mh-glyph-tetromino span:nth-child(2) {
+  grid-area: 2 / 1 / 3 / 2;
+}
+.mh-glyph-tetromino span:nth-child(3) {
+  grid-area: 2 / 2 / 3 / 3;
+}
+.mh-glyph-tetromino span:nth-child(4) {
+  grid-area: 2 / 3 / 3 / 4;
+}
+
+.mh-chip-slot {
+  display: flex;
+  justify-content: center;
+}
+.mh-chip {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 29px;
+  border-radius: 5px;
+  font-size: 12px;
+  font-weight: 500;
+  box-sizing: border-box;
+}
+.mh-chip--a,
+.mh-chip--b {
+  color: var(--color-score);
+}
+.mh-chip--a {
+  background: rgba(79, 143, 196, 0.15);
+}
+.mh-chip--b {
+  background: rgba(184, 89, 63, 0.15);
+}
+.mh-chip--penalty {
+  background: rgba(131, 141, 148, 0.15);
+  color: var(--color-danger);
 }
 
 /* ===================== RESPONSIVE (narrow viewports: stack columns) ===================== */
@@ -692,6 +773,7 @@ button {
   }
   .move-history {
     order: 6;
+    max-height: 260px;
   }
   .match-panel {
     order: 7;

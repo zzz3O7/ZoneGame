@@ -4,6 +4,7 @@ import { GestureInput } from "./gestureInput.js";
 import { ZoneTooltip } from "./zoneTooltip.js";
 import { Zone } from "./zone.js";
 import { Board } from "./board.js";
+import { HistoryPanel } from "./historyPanel.js";
 
 const KEY_TO_TYPE = { 1: "gesture", 2: "domino", 3: "tromino", 4: "tetromino" };
 
@@ -21,6 +22,7 @@ export class GameUI {
 
     this.gesture = new GestureInput();
     this.zoneTooltip = new ZoneTooltip(canvas);
+    this.historyPanel = new HistoryPanel(document.querySelector(".move-history__body"));
 
     this._bindCanvasEvents();
     this._bindControls();
@@ -242,6 +244,9 @@ export class GameUI {
     this._syncControls();
     this._syncSidePlates();
     this._syncGameOver();
+
+    const baseIndex = this.matchClient ? this.matchClient.myPlayerIndex : 0;
+    this.historyPanel.render(this.game.history.all(), baseIndex);
   }
 
   _syncCanvas() {

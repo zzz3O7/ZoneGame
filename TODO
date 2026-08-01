@@ -1,8 +1,9 @@
 game end + menu
     move history (zone creation/index and piece) + points history
-    highlight associated zone on move jover in history 
+    highlight associated zone on move hover in history 
     undo/redo
     last move highlight
+    draw pieces not as individual sqaures
 zooming/paning + mobile support
 
 on opponent disconected show a message
