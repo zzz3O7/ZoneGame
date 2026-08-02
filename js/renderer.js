@@ -27,6 +27,7 @@ export class Renderer {
     gesturePath,
     highlightEntry,
     hoveredZoneIds,
+    entries,
   ) {
     this._drawBoard(board);
     this._drawZones(zones, viewer.id);
@@ -34,7 +35,7 @@ export class Renderer {
     const zoneIds = hoveredZoneIds ?? this._cursorZoneIdSet(board, cursorCell);
     this._drawZoneHighlight(zones, zoneIds);
     this._drawZonePreview(board, anchorShape, anchorCell);
-    this._drawPieces(board);
+    this._drawPieces(entries);
     this._drawMoveHighlight(highlightEntry);
     this._drawGesturePath(gesturePath);
     this._drawGhost(board, zones, currentPlayerIndex, viewer, pieceType, anchorShape, anchorCell);
@@ -92,7 +93,7 @@ export class Renderer {
   _drawZoneBorders(zones) {
     const ctx = this.ctx;
     ctx.strokeStyle = THEME.zoneBorders;
-    ctx.lineWidth = 3;
+    ctx.lineWidth = 2;
     for (const zone of zones) this._strokeZoneBorder(zone);
   }
 
@@ -161,12 +162,35 @@ export class Renderer {
     }
   }
 
-  _drawPieces(board) {
-    const { ctx } = this;
+  _drawPieces(entries) {
+    const ctx = this.ctx;
     ctx.fillStyle = THEME.piece;
-    for (const key of board.occupied) {
-      const [r, c] = Board.parse(key);
-      ctx.fillRect(c * this.cellSize + 2, r * this.cellSize + 2, this.cellSize - 4, this.cellSize - 4);
+    const inset = 2;
+
+    for (const entry of entries) {
+      if (entry.type === "pass") continue;
+      const cells = Shape.cellsAt(entry.shape, entry.anchorRow, entry.anchorCol);
+      const cellSet = new Set(cells.map(([r, c]) => Board.key(r, c)));
+
+      for (const [r, c] of cells) {
+        const x = c * this.cellSize,
+          y = r * this.cellSize;
+        ctx.fillRect(x + inset, y + inset, this.cellSize - inset * 2, this.cellSize - inset * 2);
+      }
+
+      // bridge the gap between two cells of the *same* piece so it reads
+      // as one united shape instead of separate squares -- only check
+      // right/bottom per cell, each adjacency only needs filling once
+      for (const [r, c] of cells) {
+        const x = c * this.cellSize,
+          y = r * this.cellSize;
+        if (cellSet.has(Board.key(r, c + 1))) {
+          ctx.fillRect(x + this.cellSize - inset, y + inset, inset * 2, this.cellSize - inset * 2);
+        }
+        if (cellSet.has(Board.key(r + 1, c))) {
+          ctx.fillRect(x + inset, y + this.cellSize - inset, this.cellSize - inset * 2, inset * 2);
+        }
+      }
     }
   }
 

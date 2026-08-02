@@ -629,6 +629,12 @@ button {
 .mh-move--b {
   background: rgba(184, 89, 63, 0.15);
 }
+.mh-move:hover,
+.mh-chip--a:hover,
+.mh-chip--b:hover,
+.mh-chip--penalty:hover {
+  outline: 1px solid var(--color-text-secondary);
+}
 
 .mh-glyph {
   display: grid;

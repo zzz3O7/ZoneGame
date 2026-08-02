@@ -303,6 +303,7 @@ export class GameUI {
       this.gesture.path,
       highlightEntry,
       this.hoveredZoneIds,
+      entries,
     );
 
     this.zoneTooltip.update(this.cursorCell, this.game.board, this.game.zones, cursorInPreview ? zonePreview : null);

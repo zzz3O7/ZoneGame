@@ -1,18 +1,16 @@
 game end + menu
-    move history (zone creation/index and piece) + points history
-    highlight associated zone on move hover in history 
-    undo/redo
-    last move highlight
-    draw pieces not as individual sqaures
-zooming/paning + mobile support
+    main menu visuals
+    mobile support
+
+calc drawings (+ undo/redo for drawings)
 
 on opponent disconected show a message
 
-    main menu visuals
-
 skip move - 10% penalty on all points ( concecutive passess are not allowed)
 
-sound
 modes
+
+sound
+undo/redo
 
 on different grid sizes board is still a square not a rectangle and tiles are squished
