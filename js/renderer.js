@@ -15,13 +15,27 @@ export class Renderer {
     canvas.height = board.rows * this.cellSize;
   }
 
-  render(board, zones, currentPlayerIndex, viewer, pieceType, anchorShape, anchorCell, cursorCell, gesturePath) {
+  render(
+    board,
+    zones,
+    currentPlayerIndex,
+    viewer,
+    pieceType,
+    anchorShape,
+    anchorCell,
+    cursorCell,
+    gesturePath,
+    highlightEntry,
+    hoveredZoneIds,
+  ) {
     this._drawBoard(board);
     this._drawZones(zones, viewer.id);
-    const hoveredZoneId = cursorCell ? board.zoneIdAt(cursorCell[0], cursorCell[1]) : null;
-    this._drawZoneBorders(zones, hoveredZoneId);
+    this._drawZoneBorders(zones);
+    const zoneIds = hoveredZoneIds ?? this._cursorZoneIdSet(board, cursorCell);
+    this._drawZoneHighlight(zones, zoneIds);
     this._drawZonePreview(board, anchorShape, anchorCell);
     this._drawPieces(board);
+    this._drawMoveHighlight(highlightEntry);
     this._drawGesturePath(gesturePath);
     this._drawGhost(board, zones, currentPlayerIndex, viewer, pieceType, anchorShape, anchorCell);
   }
@@ -75,27 +89,47 @@ export class Renderer {
     }
   }
 
-  _drawZoneBorders(zones, hoveredZoneId) {
+  _drawZoneBorders(zones) {
     const ctx = this.ctx;
-    const hoveredZone = zones.find((z) => z.id === hoveredZoneId);
-
     ctx.strokeStyle = THEME.zoneBorders;
     ctx.lineWidth = 3;
-    for (const zone of zones) {
-      if (zone.id === hoveredZoneId) continue;
-      this._strokeZoneBorder(zone);
-    }
+    for (const zone of zones) this._strokeZoneBorder(zone);
+  }
 
-    if (hoveredZone) {
-      ctx.strokeStyle = THEME.zoneBordersHighlight;
-      ctx.lineWidth = 3;
-      this._strokeZoneBorder(hoveredZone);
+  _cursorZoneIdSet(board, cursorCell) {
+    if (!cursorCell) return null;
+    const id = board.zoneIdAt(cursorCell[0], cursorCell[1]);
+    return id == null ? null : new Set([id]);
+  }
+
+  _drawZoneHighlight(zones, highlightedZoneIds) {
+    if (!highlightedZoneIds || highlightedZoneIds.size === 0) return;
+    const ctx = this.ctx;
+    ctx.strokeStyle = THEME.zoneBordersHighlight;
+    ctx.lineWidth = 3;
+    for (const zone of zones) {
+      if (highlightedZoneIds.has(zone.id)) this._strokeZoneBorder(zone);
     }
   }
 
   _strokeZoneBorder(zone) {
+    this._strokeCellSetBorder(zone.cellSet);
+  }
+
+  _drawMoveHighlight(entry) {
+    if (!entry || entry.type === "pass") return;
+    const cells = Shape.cellsAt(entry.shape, entry.anchorRow, entry.anchorCol);
+    const cellSet = new Set(cells.map(([r, c]) => Board.key(r, c)));
+    this.ctx.strokeStyle = THEME.moveHighlight;
+    this.ctx.lineWidth = 3;
+    this._strokeCellSetBorder(cellSet);
+  }
+
+  // shared edge-detection stroke: draw a border edge only where the
+  // orthogonal neighbor isn't in the same set.
+  _strokeCellSetBorder(cellSet) {
     const ctx = this.ctx;
-    for (const key of zone.cellSet) {
+    for (const key of cellSet) {
       const [r, c] = Board.parse(key);
       const x = c * this.cellSize,
         y = r * this.cellSize;
@@ -103,7 +137,7 @@ export class Renderer {
       for (const [dr, dc, edge] of ORTHOGONAL_EDGES) {
         const nr = r + dr,
           nc = c + dc;
-        if (zone.cellSet.has(Board.key(nr, nc))) continue;
+        if (cellSet.has(Board.key(nr, nc))) continue;
 
         ctx.beginPath();
         if (edge === "top") {

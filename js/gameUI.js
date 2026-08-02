@@ -22,7 +22,17 @@ export class GameUI {
 
     this.gesture = new GestureInput();
     this.zoneTooltip = new ZoneTooltip(canvas);
-    this.historyPanel = new HistoryPanel(document.querySelector(".move-history__body"));
+
+    this.hoveredMoveIndex = null;
+    this.hoveredZoneIds = null;
+    this.historyPanelHovered = false;
+
+    this.historyPanel = new HistoryPanel(
+      document.querySelector(".move-history__body"),
+      (index) => this.hoverMove(index),
+      (zoneIds) => this.hoverZone(zoneIds),
+      (active) => this.hoverPanel(active),
+    );
 
     this._bindCanvasEvents();
     this._bindControls();
@@ -95,6 +105,25 @@ export class GameUI {
     if (this.flipped) cells = Shape.reflect(cells);
     for (let i = 0; i < this.rotationStep; i++) cells = Shape.rotate(cells);
     return cells;
+  }
+
+  hoverMove(index) {
+    this.hoveredMoveIndex = index;
+    this._syncCanvas();
+  }
+
+  hoverZone(zoneIds) {
+    this.hoveredZoneIds = zoneIds;
+    this._syncCanvas();
+  }
+
+  hoverPanel(active) {
+    this.historyPanelHovered = active;
+    if (!active) {
+      this.hoveredMoveIndex = null;
+      this.hoveredZoneIds = null;
+    }
+    this._syncCanvas();
   }
 
   // ===================== intents: gesture drawing =====================
@@ -258,6 +287,10 @@ export class GameUI {
     const cursorInPreview =
       zonePreview && this.cursorCell && zonePreview.cellSet.has(Board.key(this.cursorCell[0], this.cursorCell[1]));
 
+    const entries = this.game.history.all();
+    const highlightIndex = this.historyPanelHovered ? this.hoveredMoveIndex : entries.length - 1;
+    const highlightEntry = highlightIndex != null && highlightIndex >= 0 ? entries[highlightIndex] : null;
+
     this.renderer.render(
       this.game.board,
       this.game.zones,
@@ -268,6 +301,8 @@ export class GameUI {
       anchorCell,
       this.cursorCell,
       this.gesture.path,
+      highlightEntry,
+      this.hoveredZoneIds,
     );
 
     this.zoneTooltip.update(this.cursorCell, this.game.board, this.game.zones, cursorInPreview ? zonePreview : null);

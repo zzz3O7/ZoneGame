@@ -65,9 +65,11 @@ export class Game {
       completions,
     });
 
+    /*
     console.log(`type: ${entry.type}, ${entry.pieceType}\n
       zone ${entry.zoneEvent.zoneId} ${entry.zoneEvent.kind}\n
       completions: ${JSON.stringify(entry.completions)}`); // DEBUG
+    */
 
     this._checkGameEnd();
     this._advanceTurn();
@@ -84,7 +86,7 @@ export class Game {
     const penalty = preScore - this.currentPlayer.score;
 
     const entry = this.history.record({ playerIndex, type: "pass", penalty });
-    console.log(`type: ${entry.type}, penalty: ${entry.penalty}`); // DEBUG
+    //console.log(`type: ${entry.type}, penalty: ${entry.penalty}`); // DEBUG
 
     this._advanceTurn();
     this._checkGameEnd();

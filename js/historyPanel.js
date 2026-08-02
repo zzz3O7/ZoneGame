@@ -1,8 +1,16 @@
 const GLYPH_SPANS = { domino: 2, tromino: 3, tetromino: 4 };
 
 export class HistoryPanel {
-  constructor(container) {
+  constructor(container, onMoveHover = () => {}, onChipHover = () => {}, onPanelHover = () => {}) {
     this.container = container;
+    this.onMoveHover = onMoveHover;
+    this.onChipHover = onChipHover;
+    this.onPanelHover = onPanelHover;
+
+    if (this.container) {
+      this.container.addEventListener("mouseenter", () => this.onPanelHover(true));
+      this.container.addEventListener("mouseleave", () => this.onPanelHover(false));
+    }
   }
 
   // baseIndex is the "blue" player for this view: 0 in hotseat,
@@ -31,6 +39,8 @@ export class HistoryPanel {
     const move = document.createElement("div");
     move.className = `mh-move mh-move--${side}`;
     move.appendChild(this._buildGlyph(entry));
+    move.addEventListener("mouseenter", () => this.onMoveHover(index));
+    move.addEventListener("mouseleave", () => this.onMoveHover(null));
     row.appendChild(move);
 
     const totals = this._totals(entry, baseIndex);
@@ -56,34 +66,46 @@ export class HistoryPanel {
   }
 
   // combines every score-changing side effect of this entry (zone
-  // completions, pass penalty) into one total per column -- this is what
-  // lets the panel always show two fixed chip slots instead of a variable
+  // completions, pass penalty) into one chip-slot per column, plus
+  // which zoneIds fed it (for hover highlight) -- this is what lets
+  // the panel always show two fixed chip slots instead of a variable
   // list, per row
   _totals(entry, baseIndex) {
-    const totals = { a: 0, b: 0 };
+    const totals = {
+      a: { value: 0, zoneIds: null, visible: false, isPenalty: false },
+      b: { value: 0, zoneIds: null, visible: false, isPenalty: false },
+    };
 
     if (entry.type === "pass") {
       const side = entry.playerIndex === baseIndex ? "a" : "b";
-      totals[side] = -entry.penalty;
+      totals[side] = { value: -entry.penalty, zoneIds: null, visible: true, isPenalty: true };
       return totals;
     }
 
+    totals.a.zoneIds = [];
+    totals.b.zoneIds = [];
+
     for (const completion of entry.completions) {
       const side = completion.winnerIndex === baseIndex ? "a" : "b";
-      totals[side] += completion.points;
+      totals[side].value += completion.points;
+      totals[side].zoneIds.push(completion.zoneId);
+      totals[side].visible = true;
     }
     return totals;
   }
 
-  _buildChipSlot(value, side) {
+  _buildChipSlot(data, side) {
     const slot = document.createElement("div");
     slot.className = "mh-chip-slot";
 
-    if (value !== 0) {
-      const isPenalty = value < 0;
+    if (data.visible) {
       const chip = document.createElement("span");
-      chip.className = `mh-chip ${isPenalty ? "mh-chip--penalty" : `mh-chip--${side}`}`;
-      chip.textContent = (value > 0 ? "+" : "") + value;
+      chip.className = `mh-chip ${data.isPenalty ? "mh-chip--penalty" : `mh-chip--${side}`}`;
+      chip.textContent = data.isPenalty ? `-${Math.abs(data.value)}` : `+${data.value}`;
+      if (data.zoneIds) {
+        chip.addEventListener("mouseenter", () => this.onChipHover(new Set(data.zoneIds)));
+        chip.addEventListener("mouseleave", () => this.onChipHover(null));
+      }
       slot.appendChild(chip);
     }
 
