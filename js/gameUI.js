@@ -371,19 +371,111 @@ export class GameUI {
     if (dominoCountEl) dominoCountEl.textContent = player.dominoLeft;
   }
 
+  // Fallback when no matchClient (local hotseat) or names aren't loaded yet —
+  // Player already carries a default "Player 1"/"Player 2" name.
+  _playerName(index) {
+    return this.matchClient?.playerNames?.[index] ?? this.game.players[index].name;
+  }
+
   _syncGameOver() {
     const overlay = document.getElementById("gameOverOverlay");
-    const message = document.getElementById("gameOverMessage");
-    if (!overlay || !message) return;
+    if (!overlay) return;
 
     if (!this.game.gameOver) {
       overlay.hidden = true;
       return;
     }
-
-    const winner = this.game.winnerIndex;
-    const winnerName = winner === null ? null : (this.matchClient?.playerNames?.[winner] ?? `player_${winner + 1}`);
-    message.textContent = winner === null ? "Draw" : `${winnerName} wins`;
     overlay.hidden = false;
+
+    this._syncEndcardHeader();
+    this._syncEndcardScores();
+    this._syncEndcardBreakdown();
+    this._syncEndcardActions();
+  }
+
+  _syncEndcardHeader() {
+    const winner = this.game.winnerIndex;
+    const winnerEl = document.getElementById("endcardWinner");
+    const reasonEl = document.getElementById("endcardReason");
+
+    if (winnerEl) {
+      if (winner === null) {
+        winnerEl.textContent = "Draw";
+      } else {
+        const cls = winner === 0 ? "name-a" : "name-b";
+        winnerEl.innerHTML = `<span class="${cls}">${this._playerName(winner)}</span> wins`;
+      }
+    }
+    // Only termination condition today. Keep this a plain string swap point
+    // for when resign/disconnect/timeout show up later.
+    if (reasonEl) reasonEl.textContent = "No more moves available";
+  }
+
+  _syncEndcardScores() {
+    const [p0, p1] = this.game.players;
+    const winner = this.game.winnerIndex;
+
+    const nameA = document.getElementById("scoreNameA");
+    const nameB = document.getElementById("scoreNameB");
+    const valueA = document.getElementById("scoreValueA");
+    const valueB = document.getElementById("scoreValueB");
+    const sideA = document.querySelector('.score-side[data-side="a"]');
+    const sideB = document.querySelector('.score-side[data-side="b"]');
+
+    if (nameA) nameA.textContent = this._playerName(0);
+    if (nameB) nameB.textContent = this._playerName(1);
+    if (valueA) valueA.textContent = p0.score;
+    if (valueB) valueB.textContent = p1.score;
+    sideA?.classList.toggle("winner", winner === 0 || winner === null);
+    sideB?.classList.toggle("winner", winner === 1 || winner === null);
+  }
+
+  _syncEndcardBreakdown() {
+    const list = document.getElementById("breakdownList");
+    if (!list) return;
+    list.innerHTML = "";
+
+    const rows = [];
+    for (const entry of this.game.history.all()) {
+      if (entry.type === "piece") {
+        for (const completion of entry.completions) {
+          rows.push({
+            playerIndex: completion.winnerIndex,
+            label: `Zone #${completion.zoneId + 1} completed`,
+            points: completion.points,
+          });
+        }
+      } else if (entry.type === "pass" && entry.penalty > 0) {
+        rows.push({ playerIndex: entry.playerIndex, label: "Pass penalty", points: -entry.penalty });
+      }
+    }
+
+    if (rows.length === 0) {
+      const empty = document.createElement("div");
+      empty.className = "breakdown__empty";
+      empty.textContent = "No scoring events.";
+      list.appendChild(empty);
+      return;
+    }
+
+    for (const row of rows) {
+      const el = document.createElement("div");
+      el.className = "breakdown__row";
+      const sideClass = row.playerIndex === 0 ? "a" : "b";
+      const sign = row.points >= 0 ? "+" : "";
+      el.innerHTML = `
+        <span class="who ${sideClass}">${this._playerName(row.playerIndex)}</span>
+        <span class="label">${row.label}</span>
+        <span class="pts ${row.points >= 0 ? "pos" : "neg"}">${sign}${row.points}</span>
+      `;
+      list.appendChild(el);
+    }
+  }
+
+  _syncEndcardActions() {
+    // Rematch/same-board replay locally by reconstructing Game — no server
+    // protocol for this yet, so keep it local-hotseat only for now.
+    const localActions = document.getElementById("endcardLocalActions");
+    if (localActions) localActions.hidden = !!this.matchClient;
   }
 }

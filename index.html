@@ -217,7 +217,37 @@
             <canvas id="board-canvas"></canvas>
             <div class="zone-tooltip" id="zoneTooltip" hidden></div>
             <div class="board-overlay" id="gameOverOverlay" hidden>
-              <div class="board-overlay__message" id="gameOverMessage"></div>
+              <div class="endcard">
+                <div class="endcard__header">
+                  <div class="endcard__winner" id="endcardWinner"></div>
+                  <div class="endcard__reason" id="endcardReason"></div>
+                </div>
+
+                <div class="score-compare" id="scoreCompare">
+                  <div class="score-side" data-side="a">
+                    <div class="score-side__name a" id="scoreNameA"></div>
+                    <div class="score-side__value" id="scoreValueA"></div>
+                  </div>
+                  <div class="score-vs">vs</div>
+                  <div class="score-side" data-side="b">
+                    <div class="score-side__name b" id="scoreNameB"></div>
+                    <div class="score-side__value" id="scoreValueB"></div>
+                  </div>
+                </div>
+
+                <div class="breakdown">
+                  <div class="breakdown__label">Score breakdown</div>
+                  <div class="breakdown__list" id="breakdownList"></div>
+                </div>
+
+                <div class="endcard__actions">
+                  <div class="btn-row" id="endcardLocalActions">
+                    <button class="btn btn--primary" id="btnRematch">Rematch (new board)</button>
+                    <button class="btn btn--secondary" id="btnSameBoard">Same board</button>
+                  </div>
+                  <button class="btn btn--ghost" id="btnBackToMenu">Back to menu</button>
+                </div>
+              </div>
             </div>
           </div>
         </div>

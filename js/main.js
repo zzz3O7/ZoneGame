@@ -11,6 +11,7 @@ const waitingRoomScreen = document.getElementById("waitingRoomScreen");
 const gameScreen = document.getElementById("gameScreen");
 
 let ui = null;
+let lastLocalParams = null; // set only for local hotseat games; drives rematch/same-board
 
 function showScreen(screen) {
   [menuScreen, waitingRoomScreen, gameScreen].forEach((s) => (s.hidden = s !== screen));
@@ -46,6 +47,7 @@ function populateWaitingRoom(params, inviteCode) {
 
 new Menu({
   onStartLocal: (params) => {
+    lastLocalParams = params;
     startGame(new Game(params));
   },
 
@@ -85,5 +87,20 @@ document.getElementById("btnCopyCode").addEventListener("click", (event) => {
 
 document.getElementById("btnCancelWait").addEventListener("click", () => {
   // TODO: needs a proper leave/cancel message to server later.
+  showScreen(menuScreen);
+});
+
+document.getElementById("btnRematch").addEventListener("click", () => {
+  if (!lastLocalParams) return; // hidden for online matches, but guard anyway
+  startGame(new Game({ ...lastLocalParams, seed: undefined })); // fresh board
+});
+
+document.getElementById("btnSameBoard").addEventListener("click", () => {
+  if (!lastLocalParams || !ui) return;
+  startGame(new Game({ ...lastLocalParams, seed: ui.game.seed })); // same cave, roles reset
+});
+
+document.getElementById("btnBackToMenu").addEventListener("click", () => {
+  // TODO: online matches need a proper leave message too, once that exists.
   showScreen(menuScreen);
 });
