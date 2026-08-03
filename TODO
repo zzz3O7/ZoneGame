@@ -1,6 +1,7 @@
-game end + menu
-    main menu visuals
+    game end colors
     mobile support
+
+remove bonus value from game info
 
 calc drawings (+ undo/redo for drawings)
 
@@ -9,7 +10,6 @@ reconnect
 
 skip move - 10% penalty on all points ( concecutive passess are not allowed)
 
-modes
 time control
 
 sound

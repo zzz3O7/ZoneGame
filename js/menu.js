@@ -24,8 +24,11 @@ export class Menu {
       paramsPanel: document.getElementById("paramsPanel"),
 
       boardSize: document.getElementById("paramBoardSize"),
+      boardSizeValue: document.getElementById("paramBoardSizeValue"),
       zoneRadius: document.getElementById("paramZoneRadius"),
+      zoneRadiusValue: document.getElementById("paramZoneRadiusValue"),
       startingDominoes: document.getElementById("paramStartingDominoes"),
+      startingDominoesValue: document.getElementById("paramStartingDominoesValue"),
       seed: document.getElementById("paramSeed"),
 
       tabs: [...document.querySelectorAll("#menuScreen .tab")],
@@ -42,9 +45,17 @@ export class Menu {
   }
 
   _populateDefaults() {
-    this.els.boardSize.value = CUSTOM_DEFAULTS.boardSize;
-    this.els.zoneRadius.value = CUSTOM_DEFAULTS.zoneRadius;
-    this.els.startingDominoes.value = CUSTOM_DEFAULTS.startingDominoes;
+    this._initSlider(this.els.boardSize, this.els.boardSizeValue, CUSTOM_DEFAULTS.boardSize);
+    this._initSlider(this.els.zoneRadius, this.els.zoneRadiusValue, CUSTOM_DEFAULTS.zoneRadius);
+    this._initSlider(this.els.startingDominoes, this.els.startingDominoesValue, CUSTOM_DEFAULTS.startingDominoes);
+  }
+
+  _initSlider(input, valueEl, defaultValue) {
+    input.value = defaultValue;
+    valueEl.textContent = defaultValue;
+    input.addEventListener("input", () => {
+      valueEl.textContent = input.value;
+    });
   }
 
   _selectMode(mode) {

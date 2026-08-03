@@ -911,16 +911,65 @@ button {
 .param-row label {
   font-size: 13px;
   color: var(--color-text-secondary);
+  flex-shrink: 0;
 }
-.param-row input[type="number"],
-.param-row input[type="text"] {
-  width: 110px;
-  background: var(--color-bg);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-sm);
-  color: var(--color-text);
-  padding: 6px 8px;
+
+.param-slider {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  max-width: 220px;
+}
+
+.param-slider input[type="range"] {
+  flex: 1;
+  -webkit-appearance: none;
+  appearance: none;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--color-border);
+  outline: none;
+}
+.param-slider input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--color-accent);
+  border: 2px solid var(--color-bg);
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.param-slider input[type="range"]:hover::-webkit-slider-thumb {
+  background: #8fb877;
+}
+.param-slider input[type="range"]::-moz-range-thumb {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--color-accent);
+  border: 2px solid var(--color-bg);
+  cursor: pointer;
+}
+.param-slider input[type="range"]::-moz-range-track {
+  height: 4px;
+  border-radius: 2px;
+  background: var(--color-border);
+}
+
+.param-slider__value {
+  min-width: 24px;
+  text-align: right;
   font-family: var(--font-mono);
+  font-size: 13px;
+  color: var(--color-text);
+}
+
+.param-row .param-seed {
+  width: 140px;
+  padding: 6px 8px;
   font-size: 13px;
   text-align: right;
 }

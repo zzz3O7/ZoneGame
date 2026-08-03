@@ -34,19 +34,28 @@
         <div class="params collapsed" id="paramsPanel">
           <div class="param-row">
             <label for="paramBoardSize">Board size</label>
-            <input type="number" id="paramBoardSize" min="8" max="40" />
+            <div class="param-slider">
+              <input type="range" id="paramBoardSize" min="8" max="40" step="1" />
+              <span class="param-slider__value" id="paramBoardSizeValue"></span>
+            </div>
           </div>
           <div class="param-row">
             <label for="paramZoneRadius">Zone radius</label>
-            <input type="number" id="paramZoneRadius" min="1" max="10" />
+            <div class="param-slider">
+              <input type="range" id="paramZoneRadius" min="1" max="10" step="1" />
+              <span class="param-slider__value" id="paramZoneRadiusValue"></span>
+            </div>
           </div>
           <div class="param-row">
             <label for="paramStartingDominoes">Starting dominoes</label>
-            <input type="number" id="paramStartingDominoes" min="0" max="10" />
+            <div class="param-slider">
+              <input type="range" id="paramStartingDominoes" min="0" max="10" step="1" />
+              <span class="param-slider__value" id="paramStartingDominoesValue"></span>
+            </div>
           </div>
           <div class="param-row">
             <label for="paramSeed">Seed</label>
-            <input type="text" id="paramSeed" placeholder="random" />
+            <input type="text" class="field param-seed" id="paramSeed" placeholder="random" />
           </div>
           <div class="param-hint">Leave seed blank for a random cave.</div>
         </div>
