@@ -31,7 +31,7 @@ export class Match {
 
   _start() {
     this.status = "active";
-    const finalParams = { ...this.params, seed: Math.random() };
+    const finalParams = { ...this.params, seed: Date.now() };
     this.game = new Game(finalParams);
 
     this.broadcastPersonalized((p) => ({

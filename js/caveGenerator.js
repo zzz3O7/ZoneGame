@@ -2,7 +2,7 @@ import { shuffle } from "./rng.js";
 import { ORTHOGONAL_OFFSETS } from "./directions.js";
 
 export class CaveGenerator {
-  static randomFill(rows, cols, fillProb, rng = Math.random) {
+  static randomFill(rows, cols, fillProb, rng) {
     const g = [];
     for (let row = 0; row < rows; row++) {
       const gridRow = [];

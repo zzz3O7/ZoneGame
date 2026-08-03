@@ -18,7 +18,7 @@ export class Game {
     this.boardSize = params.boardSize;
     this.zoneRadius = params.zoneRadius;
     this.startingDominoes = params.startingDominoes;
-    this.seed = params.seed ?? Math.random();
+    this.seed = params.seed ?? Date.now();
 
     const rng = createRng(this.seed);
 
