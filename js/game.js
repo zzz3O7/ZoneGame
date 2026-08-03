@@ -9,7 +9,7 @@ import { MoveHistory } from "./history.js";
 import { ZONE_RADIUS, STARTING_DOMINOS, PASS_PENALTY } from "./config.js";
 
 export class Game {
-  constructor(cols, rows, seed = Date.now()) {
+  constructor(cols, rows, seed = Math.random()) {
     this.seed = seed;
     const rng = createRng(seed);
 

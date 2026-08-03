@@ -165,7 +165,7 @@ export class Renderer {
   _drawPieces(entries) {
     const ctx = this.ctx;
     ctx.fillStyle = THEME.piece;
-    const inset = 2;
+    const inset = 3;
 
     for (const entry of entries) {
       if (entry.type === "pass") continue;

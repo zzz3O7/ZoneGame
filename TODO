@@ -5,10 +5,12 @@ game end + menu
 calc drawings (+ undo/redo for drawings)
 
 on opponent disconected show a message
+reconnect
 
 skip move - 10% penalty on all points ( concecutive passess are not allowed)
 
 modes
+time control
 
 sound
 undo/redo

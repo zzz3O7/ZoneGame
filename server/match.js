@@ -27,7 +27,7 @@ export class Match {
 
   _start() {
     this.status = "active";
-    const seed = Date.now();
+    const seed = Math.random();
     this.game = new Game(DEFAULT_COLS, DEFAULT_ROWS, seed);
 
     this.broadcastPersonalized((p) => ({
