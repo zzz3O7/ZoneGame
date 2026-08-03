@@ -49,11 +49,13 @@ export class GameUI {
     const seedEl = document.getElementById("seedValue");
     const boardSizeEl = document.getElementById("boardSizeValue");
     const zoneRadiusEl = document.getElementById("zoneRadiusValue");
+    const startingDominoesEl = document.getElementById("startingDominoesValue");
 
     if (modeEl) modeEl.textContent = game.mode === "classic" ? "Classic" : "Custom";
     if (seedEl) seedEl.textContent = game.seed;
     if (boardSizeEl) boardSizeEl.textContent = `${game.board.cols} x ${game.board.rows}`;
     if (zoneRadiusEl) zoneRadiusEl.textContent = game.zoneRadius;
+    if (startingDominoesEl) startingDominoesEl.textContent = game.startingDominoes;
   }
 
   refresh() {
@@ -431,44 +433,48 @@ export class GameUI {
   }
 
   _syncEndcardBreakdown() {
-    const list = document.getElementById("breakdownList");
-    if (!list) return;
-    list.innerHTML = "";
+    const columnA = document.getElementById("breakdownColumnA");
+    const columnB = document.getElementById("breakdownColumnB");
+    if (!columnA || !columnB) return;
 
-    const rows = [];
+    const rowsByPlayer = [[], []];
     for (const entry of this.game.history.all()) {
       if (entry.type === "piece") {
         for (const completion of entry.completions) {
-          rows.push({
-            playerIndex: completion.winnerIndex,
+          rowsByPlayer[completion.winnerIndex].push({
             label: `Zone #${completion.zoneId + 1} completed`,
             points: completion.points,
           });
         }
       } else if (entry.type === "pass" && entry.penalty > 0) {
-        rows.push({ playerIndex: entry.playerIndex, label: "Pass penalty", points: -entry.penalty });
+        rowsByPlayer[entry.playerIndex].push({ label: "Pass penalty", points: -entry.penalty });
       }
     }
+
+    this._renderBreakdownColumn(columnA, rowsByPlayer[0]);
+    this._renderBreakdownColumn(columnB, rowsByPlayer[1]);
+  }
+
+  _renderBreakdownColumn(container, rows) {
+    container.innerHTML = "";
 
     if (rows.length === 0) {
       const empty = document.createElement("div");
       empty.className = "breakdown__empty";
       empty.textContent = "No scoring events.";
-      list.appendChild(empty);
+      container.appendChild(empty);
       return;
     }
 
     for (const row of rows) {
       const el = document.createElement("div");
       el.className = "breakdown__row";
-      const sideClass = row.playerIndex === 0 ? "a" : "b";
       const sign = row.points >= 0 ? "+" : "";
       el.innerHTML = `
-        <span class="who ${sideClass}">${this._playerName(row.playerIndex)}</span>
         <span class="label">${row.label}</span>
         <span class="pts ${row.points >= 0 ? "pos" : "neg"}">${sign}${row.points}</span>
       `;
-      list.appendChild(el);
+      container.appendChild(el);
     }
   }
 

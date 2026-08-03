@@ -1,10 +1,8 @@
-maybe game end score breakdown into two colums
+zone tooltip box size calculation (fixed 3 by 1 breaks at big sizes)
 
     mobile support
 
 rematch for multiplayer
-
-remove bonus value from game info
 
 calc drawings (+ undo/redo for drawings)
 

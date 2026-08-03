@@ -1244,8 +1244,15 @@ button {
   letter-spacing: 1px;
   color: var(--color-text-muted);
   margin-bottom: 8px;
+  text-align: center;
 }
-.breakdown__list {
+.breakdown__columns {
+  display: flex;
+  gap: 12px;
+}
+.breakdown__column {
+  flex: 1;
+  min-width: 0;
   display: flex;
   flex-direction: column;
   gap: 6px;
@@ -1256,25 +1263,19 @@ button {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
   font-size: 13px;
-  padding: 6px 10px;
+  padding: 6px 8px;
   background: var(--color-surface-alt);
   border-radius: var(--radius-sm);
 }
-.breakdown__row .who {
-  color: var(--color-text-secondary);
-  flex-shrink: 0;
-}
-.breakdown__row .who.a {
-  color: var(--color-player-a);
-}
-.breakdown__row .who.b {
-  color: var(--color-player-b);
-}
 .breakdown__row .label {
   flex: 1;
+  min-width: 0;
   color: var(--color-text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .breakdown__row .pts {
   font-family: var(--font-mono);
@@ -1289,7 +1290,8 @@ button {
 .breakdown__empty {
   font-size: 12px;
   color: var(--color-text-muted);
-  padding: 6px 10px;
+  padding: 6px 8px;
+  text-align: center;
 }
 
 .endcard__actions {
