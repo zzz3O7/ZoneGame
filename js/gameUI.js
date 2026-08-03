@@ -302,7 +302,7 @@ export class GameUI {
       zonePreview && this.cursorCell && zonePreview.cellSet.has(Board.key(this.cursorCell[0], this.cursorCell[1]));
 
     const entries = this.game.history.all();
-    const highlightIndex = this.historyPanelHovered ? this.hoveredMoveIndex : entries.length - 1;
+    const highlightIndex = this.hoveredMoveIndex;
     const highlightEntry = highlightIndex != null && highlightIndex >= 0 ? entries[highlightIndex] : null;
 
     this.renderer.render(
