@@ -23,14 +23,14 @@ export class MatchManager {
     return null;
   }
 
-  createMatch(nickname, ws) {
+  createMatch(nickname, ws, params) {
     const matchId = randomUUID();
     let inviteCode;
     do {
       inviteCode = genInviteCode();
     } while (this.matchesByCode.has(inviteCode));
 
-    const match = new Match(matchId, inviteCode);
+    const match = new Match(matchId, inviteCode, params);
     match.addPlayer(nickname, ws);
 
     this.matchesById.set(matchId, match);

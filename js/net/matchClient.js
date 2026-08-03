@@ -28,8 +28,8 @@ export class MatchClient {
     connection.on(MSG.ERROR, (msg) => this.onError?.(msg.message));
   }
 
-  createMatch(nickname) {
-    this.connection.send({ type: MSG.CREATE_MATCH, nickname });
+  createMatch(nickname, params) {
+    this.connection.send({ type: MSG.CREATE_MATCH, nickname, params });
   }
 
   joinMatch(inviteCode, nickname) {
@@ -64,7 +64,7 @@ export class MatchClient {
 
   _handleMatchStart(msg) {
     this.myPlayerIndex = msg.yourPlayerIndex;
-    this.game = new Game(msg.cols, msg.rows, msg.seed);
+    this.game = new Game(msg.params);
     this.playerNames = msg.players.map((p) => p.nickname);
     this.onMatchStart?.(this.game);
   }

@@ -16,7 +16,7 @@ export const THEME = {
   unavailibleZone: "rgba(184,89,63,0.22)",
   inactiveZone: "rgba(92,101,112,0.2)",
   zoneBorders: "#7d8896", // bright on purpose: must hold up over any zone fill
-  zoneBordersHighlight: "#c6c8c9", // hover state, distinct from the border above
+  zoneBordersHighlight: "#b7b9ba", // hover state, distinct from the border above
   moveHighlight: "#3fbfc9",
 };
 
@@ -25,6 +25,20 @@ export const LAYOUT = {
   bonusFontRatio: 0.5,
 };
 
-export const ZONE_RADIUS = 4;
-export const STARTING_DOMINOS = 2;
-export const PASS_PENALTY = 0.9;
+export const PASS_PENALTY = 0.9; // global, not mode-tunable (yet)
+
+// Fixed presets. Adding a new mode later = one more entry here, nothing else changes.
+export const MODES = {
+  classic: { label: "Classic", boardSize: 20, zoneRadius: 4, startingDominoes: 2 },
+};
+
+// Defaults shown in the custom-params panel before the player touches anything.
+export const CUSTOM_DEFAULTS = { boardSize: 20, zoneRadius: 4, startingDominoes: 2 };
+
+// Inclusive [min, max] per custom field. Enforced both client-side (menu.js)
+// and server-side (Match) so a modified client can't send out-of-range values.
+export const CUSTOM_LIMITS = {
+  boardSize: [8, 40],
+  zoneRadius: [3, 10],
+  startingDominoes: [0, 10],
+};

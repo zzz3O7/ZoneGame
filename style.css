@@ -799,3 +799,320 @@ button {
     --board-computed-size: min(var(--board-size), calc(100vw - (var(--layout-padding) * 2)));
   }
 }
+
+/* ===================== MENU / WAITING ROOM SCREENS ===================== */
+#menuScreen,
+#waitingRoomScreen {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 40px 20px;
+  overflow-y: auto;
+}
+
+#menuScreen[hidden],
+#waitingRoomScreen[hidden] {
+  display: none;
+}
+
+/* ---------- main menu ---------- */
+.menu {
+  width: 100%;
+  max-width: 480px;
+  display: flex;
+  flex-direction: column;
+  gap: 28px;
+}
+
+.menu__title {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 32px;
+  text-align: center;
+  letter-spacing: 0.5px;
+}
+.menu__title span {
+  color: var(--color-score);
+}
+
+.section-label {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: var(--color-text-muted);
+  margin-bottom: 10px;
+}
+
+.mode-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+.mode-card {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: 14px;
+  cursor: pointer;
+  transition:
+    border-color 0.15s,
+    background 0.15s;
+}
+.mode-card:hover {
+  border-color: var(--color-text-muted);
+}
+.mode-card.selected {
+  border-color: var(--color-accent);
+  background: var(--color-surface-alt);
+}
+.mode-card__name {
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 15px;
+}
+.mode-card__desc {
+  font-size: 12px;
+  color: var(--color-text-secondary);
+  margin-top: 4px;
+  line-height: 1.4;
+}
+
+.params {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border-soft);
+  border-radius: var(--radius-md);
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  max-height: 500px;
+  overflow: hidden;
+  transition:
+    max-height 0.2s ease,
+    opacity 0.2s ease,
+    padding 0.2s ease;
+}
+.params.collapsed {
+  max-height: 0;
+  padding-top: 0;
+  padding-bottom: 0;
+  opacity: 0;
+  border-width: 0;
+}
+.param-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.param-row label {
+  font-size: 13px;
+  color: var(--color-text-secondary);
+}
+.param-row input[type="number"],
+.param-row input[type="text"] {
+  width: 110px;
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  color: var(--color-text);
+  padding: 6px 8px;
+  font-family: var(--font-mono);
+  font-size: 13px;
+  text-align: right;
+}
+.param-hint {
+  font-size: 11px;
+  color: var(--color-text-muted);
+}
+
+.tabs {
+  display: flex;
+  gap: 4px;
+  background: var(--color-surface);
+  border-radius: var(--radius-md);
+  padding: 4px;
+}
+.tab {
+  flex: 1;
+  text-align: center;
+  padding: 8px 0;
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+}
+.tab.active {
+  background: var(--color-surface-raised);
+  color: var(--color-text);
+}
+
+.tab-panel {
+  display: none;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 14px;
+}
+.tab-panel.active {
+  display: flex;
+}
+
+.field {
+  width: 100%;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  color: var(--color-text);
+  padding: 10px 12px;
+  font-size: 14px;
+}
+.field::placeholder {
+  color: var(--color-text-muted);
+}
+
+.btn {
+  border: none;
+  border-radius: var(--radius-sm);
+  padding: 12px 16px;
+  font-family: var(--font-body);
+  font-weight: 600;
+  font-size: 14px;
+  cursor: pointer;
+}
+.btn--primary {
+  background: var(--color-accent);
+  color: var(--color-bg);
+}
+.btn--primary:hover {
+  background: #8fb877;
+}
+.btn--secondary {
+  background: var(--color-surface-raised);
+  color: var(--color-text);
+  border: 1px solid var(--color-border);
+}
+.btn--secondary:hover {
+  border-color: var(--color-text-muted);
+}
+.btn--ghost {
+  background: transparent;
+  color: var(--color-text-secondary);
+  border: 1px solid var(--color-border);
+}
+.btn-row {
+  display: flex;
+  gap: 10px;
+}
+.btn-row .btn {
+  flex: 1;
+}
+
+.join-row {
+  display: flex;
+  gap: 8px;
+}
+.join-row .field {
+  flex: 1;
+}
+.join-row .btn {
+  flex: none;
+}
+
+/* ---------- waiting room ---------- */
+.waitcard {
+  width: 100%;
+  max-width: 420px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: 28px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  align-items: center;
+  text-align: center;
+}
+.waitcard__spinner {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  border: 3px solid var(--color-border);
+  border-top-color: var(--color-accent);
+  animation: spin 0.9s linear infinite;
+}
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+.waitcard__title {
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 18px;
+}
+.waitcard__sub {
+  font-size: 12px;
+  color: var(--color-text-secondary);
+}
+
+.code-box {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  padding: 12px 14px;
+}
+.code-box__value {
+  flex: 1;
+  font-family: var(--font-mono);
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: 4px;
+  color: var(--color-score);
+}
+.code-box__copy {
+  background: var(--color-surface-raised);
+  color: var(--color-text);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  padding: 8px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.code-box__copy:hover {
+  border-color: var(--color-text-muted);
+}
+.code-box__copy.copied {
+  color: var(--color-accent);
+  border-color: var(--color-accent);
+}
+
+.wait-info {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-top: 4px;
+  border-top: 1px solid var(--color-border-soft);
+}
+.wait-info__row {
+  display: flex;
+  justify-content: space-between;
+  font-size: 12px;
+}
+.wait-info__row .label {
+  color: var(--color-text-muted);
+}
+.wait-info__row .value {
+  font-family: var(--font-mono);
+  color: var(--color-text-secondary);
+}

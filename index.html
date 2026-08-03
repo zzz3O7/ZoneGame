@@ -14,21 +14,98 @@
   </head>
   <body>
     <div id="menuScreen">
-      <button id="btnLocalGame">Play Local (Hotseat)</button>
-      <button id="btnCreateMatch">Create Match</button>
-      <div>
-        <input id="joinCodeInput" placeholder="Invite code" />
-        <button id="btnJoinMatch">Join</button>
+      <div class="menu">
+        <div class="menu__title">Zone<span>Game</span></div>
+
+        <div>
+          <div class="section-label">Mode</div>
+          <div class="mode-grid">
+            <div class="mode-card selected" id="modeCardClassic">
+              <div class="mode-card__name">Classic</div>
+              <div class="mode-card__desc">20 x 20 board · zone radius 4 · 2 dominoes each</div>
+            </div>
+            <div class="mode-card" id="modeCardCustom">
+              <div class="mode-card__name">Custom</div>
+              <div class="mode-card__desc">Set your own board size, zone radius, dominoes, seed</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="params collapsed" id="paramsPanel">
+          <div class="param-row">
+            <label for="paramBoardSize">Board size</label>
+            <input type="number" id="paramBoardSize" min="8" max="40" />
+          </div>
+          <div class="param-row">
+            <label for="paramZoneRadius">Zone radius</label>
+            <input type="number" id="paramZoneRadius" min="1" max="10" />
+          </div>
+          <div class="param-row">
+            <label for="paramStartingDominoes">Starting dominoes</label>
+            <input type="number" id="paramStartingDominoes" min="0" max="10" />
+          </div>
+          <div class="param-row">
+            <label for="paramSeed">Seed</label>
+            <input type="text" id="paramSeed" placeholder="random" />
+          </div>
+          <div class="param-hint">Leave seed blank for a random cave.</div>
+        </div>
+
+        <div>
+          <div class="tabs">
+            <div class="tab active" data-tab="tabLocal">Local</div>
+            <div class="tab" data-tab="tabCreate">Create</div>
+            <div class="tab" data-tab="tabJoin">Join</div>
+          </div>
+
+          <div class="tab-panel active" id="tabLocal">
+            <button class="btn btn--primary" id="btnLocalGame">Start local game</button>
+          </div>
+
+          <div class="tab-panel" id="tabCreate">
+            <input class="field" type="text" id="nicknameCreateInput" placeholder="Nickname" />
+            <button class="btn btn--primary" id="btnCreateMatch">Create match</button>
+          </div>
+
+          <div class="tab-panel" id="tabJoin">
+            <input class="field" type="text" id="nicknameJoinInput" placeholder="Nickname" />
+            <div class="join-row">
+              <input class="field" type="text" id="joinCodeInput" placeholder="Invite code" />
+              <button class="btn btn--secondary" id="btnJoinMatch">Join</button>
+            </div>
+          </div>
+        </div>
       </div>
-      <input id="nicknameInput" placeholder="Nickname" />
-      <!-- only needed for create/join -->
     </div>
 
     <div id="waitingRoomScreen" hidden>
-      <h2>Waiting for opponent…</h2>
-      <p>Share this code:</p>
-      <div id="inviteCodeDisplay"></div>
-      <button id="btnCancelWait">Cancel</button>
+      <div class="waitcard">
+        <div class="waitcard__spinner"></div>
+        <div>
+          <div class="waitcard__title">Waiting for opponent…</div>
+          <div class="waitcard__sub">Share this code with your opponent</div>
+        </div>
+
+        <div class="code-box">
+          <div class="code-box__value" id="inviteCodeDisplay"></div>
+          <button class="code-box__copy" id="btnCopyCode">Copy</button>
+        </div>
+
+        <div class="wait-info">
+          <div class="wait-info__row"><span class="label">Mode</span><span class="value" id="waitModeValue"></span></div>
+          <div class="wait-info__row">
+            <span class="label">Board size</span><span class="value" id="waitBoardValue"></span>
+          </div>
+          <div class="wait-info__row">
+            <span class="label">Zone radius</span><span class="value" id="waitZoneRadiusValue"></span>
+          </div>
+          <div class="wait-info__row">
+            <span class="label">Dominoes</span><span class="value" id="waitDominoValue"></span>
+          </div>
+        </div>
+
+        <button class="btn btn--ghost" id="btnCancelWait" style="width: 100%">Cancel</button>
+      </div>
     </div>
 
     <div id="gameScreen" hidden>
@@ -40,7 +117,7 @@
             <div class="panel__body">
               <div class="game-info__row">
                 <span class="game-info__label">Mode</span>
-                <span class="game-info__value">Local game</span>
+                <span class="game-info__value" id="modeValue">Classic</span>
               </div>
               <div class="game-info__row">
                 <span class="game-info__label">Seed</span>
@@ -48,11 +125,11 @@
               </div>
               <div class="game-info__row">
                 <span class="game-info__label">Board size</span>
-                <span class="game-info__value">20 x 20</span>
+                <span class="game-info__value" id="boardSizeValue">20 x 20</span>
               </div>
               <div class="game-info__row">
                 <span class="game-info__label">Zone radius</span>
-                <span class="game-info__value">5</span>
+                <span class="game-info__value" id="zoneRadiusValue">4</span>
               </div>
               <div class="game-info__row">
                 <span class="game-info__label">Bonus value</span>

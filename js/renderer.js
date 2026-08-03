@@ -1,4 +1,4 @@
-import { LAYOUT, THEME, ZONE_RADIUS } from "./config.js";
+import { LAYOUT, THEME } from "./config.js";
 import { Board } from "./board.js";
 import { Shape } from "./shape.js";
 import { Zone } from "./zone.js";
@@ -6,9 +6,10 @@ import { Rules } from "./rules.js";
 import { ORTHOGONAL_EDGES } from "./directions.js";
 
 export class Renderer {
-  constructor(canvas, board) {
+  constructor(canvas, board, zoneRadius) {
     this.canvas = canvas;
     this.ctx = canvas.getContext("2d");
+    this.zoneRadius = zoneRadius;
 
     this.cellSize = Math.floor(LAYOUT.canvasResolution / Math.max(board.cols, board.rows));
     canvas.width = board.cols * this.cellSize;
@@ -197,7 +198,7 @@ export class Renderer {
   _drawZonePreview(board, anchorShape, anchorCell) {
     if (!anchorCell || !anchorShape) return;
     const [r, c] = anchorCell;
-    const preview = Zone.preview(board, r, c, ZONE_RADIUS);
+    const preview = Zone.preview(board, r, c, this.zoneRadius);
     if (!preview) return;
 
     const { ctx } = this;

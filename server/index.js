@@ -28,7 +28,7 @@ wss.on("connection", (ws) => {
 
     try {
       if (msg.type === MSG.CREATE_MATCH) {
-        const match = manager.createMatch(msg.nickname, ws);
+        const match = manager.createMatch(msg.nickname, ws, msg.params);
         ws.send(
           JSON.stringify({
             type: MSG.MATCH_CREATED,

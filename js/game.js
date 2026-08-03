@@ -6,19 +6,30 @@ import { Rules } from "./rules.js";
 import { Shape } from "./shape.js";
 import { CaveGenerator } from "./caveGenerator.js";
 import { MoveHistory } from "./history.js";
-import { ZONE_RADIUS, STARTING_DOMINOS, PASS_PENALTY } from "./config.js";
+import { PASS_PENALTY } from "./config.js";
 
 export class Game {
-  constructor(cols, rows, seed = Math.random()) {
-    this.seed = seed;
-    const rng = createRng(seed);
+  // params: { mode, boardSize, zoneRadius, startingDominoes, seed? }
+  // Always pass a params object built via resolveParams() (js/params.js) —
+  // that's what clamps values and fills in mode presets. Game itself trusts
+  // whatever it's given, since resolveParams is the single validation point.
+  constructor(params) {
+    this.mode = params.mode;
+    this.boardSize = params.boardSize;
+    this.zoneRadius = params.zoneRadius;
+    this.seed = params.seed ?? Date.now();
 
-    const grid = CaveGenerator.generate(rows, cols, 0.6, rng, 3, 0.4, 0.6, 30);
+    const rng = createRng(this.seed);
+
+    const grid = CaveGenerator.generate(this.boardSize, this.boardSize, 0.6, rng, 3, 0.4, 0.6, 30);
     const bonusMarkers = CaveGenerator.placeBonusMarkers(grid, 5, 6, rng);
 
     this.board = new Board(grid, bonusMarkers);
     this.zones = [];
-    this.players = [new Player(0, "Player 1", STARTING_DOMINOS), new Player(1, "Player 2", STARTING_DOMINOS)];
+    this.players = [
+      new Player(0, "Player 1", params.startingDominoes),
+      new Player(1, "Player 2", params.startingDominoes),
+    ];
     this.currentPlayerIndex = 0;
     this.gameOver = false;
     this.history = new MoveHistory();
@@ -45,7 +56,7 @@ export class Game {
     const existingZoneId = this.board.zoneIdAt(anchorRow, anchorCol);
     let zoneEvent;
     if (existingZoneId === null) {
-      const zone = Zone.create(this.board, this.zones, anchorRow, anchorCol, this.currentPlayerIndex, ZONE_RADIUS);
+      const zone = Zone.create(this.board, this.zones, anchorRow, anchorCol, this.currentPlayerIndex, this.zoneRadius);
       zoneEvent = { kind: "created", zoneId: zone.id };
     } else {
       this.zones[existingZoneId].localTurn = 1 - this.currentPlayerIndex;

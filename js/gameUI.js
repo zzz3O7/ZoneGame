@@ -1,5 +1,5 @@
 import { Shape, SHAPES_BASE } from "./shape.js";
-import { PASS_PENALTY, ZONE_RADIUS } from "./config.js";
+import { PASS_PENALTY } from "./config.js";
 import { GestureInput } from "./gestureInput.js";
 import { ZoneTooltip } from "./zoneTooltip.js";
 import { Zone } from "./zone.js";
@@ -39,9 +39,21 @@ export class GameUI {
   }
 
   init() {
-    const seedEl = document.getElementById("seedValue");
-    if (seedEl) seedEl.textContent = this.game.seed;
+    this._syncMatchInfo();
     this._render();
+  }
+
+  _syncMatchInfo() {
+    const { game } = this;
+    const modeEl = document.getElementById("modeValue");
+    const seedEl = document.getElementById("seedValue");
+    const boardSizeEl = document.getElementById("boardSizeValue");
+    const zoneRadiusEl = document.getElementById("zoneRadiusValue");
+
+    if (modeEl) modeEl.textContent = game.mode === "classic" ? "Classic" : "Custom";
+    if (seedEl) seedEl.textContent = game.seed;
+    if (boardSizeEl) boardSizeEl.textContent = `${game.board.cols} x ${game.board.rows}`;
+    if (zoneRadiusEl) zoneRadiusEl.textContent = game.zoneRadius;
   }
 
   refresh() {
@@ -283,12 +295,14 @@ export class GameUI {
     const pieceType = this.gesture.pending ? this.gesture.pending.type : this.selectedType;
     const viewerIndex = this.matchClient ? this.matchClient.myPlayerIndex : this.game.currentPlayerIndex;
 
-    const zonePreview = anchorCell ? Zone.preview(this.game.board, anchorCell[0], anchorCell[1], ZONE_RADIUS) : null;
+    const zonePreview = anchorCell
+      ? Zone.preview(this.game.board, anchorCell[0], anchorCell[1], this.game.zoneRadius)
+      : null;
     const cursorInPreview =
       zonePreview && this.cursorCell && zonePreview.cellSet.has(Board.key(this.cursorCell[0], this.cursorCell[1]));
 
     const entries = this.game.history.all();
-    const highlightIndex = this.hoveredMoveIndex;
+    const highlightIndex = this.historyPanelHovered ? this.hoveredMoveIndex : entries.length - 1;
     const highlightEntry = highlightIndex != null && highlightIndex >= 0 ? entries[highlightIndex] : null;
 
     this.renderer.render(

@@ -1,16 +1,20 @@
 import { Game } from "../js/game.js";
+import { resolveParams } from "../js/params.js";
 import { MSG } from "../js/net/protocol.js";
 
-const DEFAULT_COLS = 20; // TODO game creation by gamemode object
-const DEFAULT_ROWS = 20;
-
 export class Match {
-  constructor(matchId, inviteCode) {
+  constructor(matchId, inviteCode, rawParams) {
     this.matchId = matchId;
     this.inviteCode = inviteCode;
     this.players = []; // { nickname, playerIndex, ws }
     this.status = "waiting"; // waiting | active | done
     this.game = null;
+
+    // Re-resolve on the server: the creator's client already clamped these,
+    // but the server never trusts client-sent values directly. This is the
+    // same function the client uses, so there's exactly one place that
+    // defines what a valid params object looks like.
+    this.params = resolveParams(rawParams?.mode, rawParams);
   }
 
   addPlayer(nickname, ws) {
@@ -27,15 +31,13 @@ export class Match {
 
   _start() {
     this.status = "active";
-    const seed = Math.random();
-    this.game = new Game(DEFAULT_COLS, DEFAULT_ROWS, seed);
+    const finalParams = { ...this.params, seed: Date.now() };
+    this.game = new Game(finalParams);
 
     this.broadcastPersonalized((p) => ({
       type: MSG.MATCH_START,
       matchId: this.matchId,
-      seed: this.game.seed,
-      cols: DEFAULT_COLS,
-      rows: DEFAULT_ROWS,
+      params: finalParams,
       yourPlayerIndex: p.playerIndex,
       players: this.players.map((pp) => ({ index: pp.playerIndex, nickname: pp.nickname })),
     }));
