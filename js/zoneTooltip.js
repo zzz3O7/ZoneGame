@@ -35,99 +35,116 @@ export class ZoneTooltip {
       return;
     }
 
-    // ----- target point -----
+    const { cssCellW, cssCellH, offsetX, offsetY } = this._boardRectInfo(board);
+
+    // ----- zone centroid (what we're trying to sit next to) -----
     const sumRow = cells.reduce((s, [r]) => s + r, 0);
     const sumCol = cells.reduce((s, [, c]) => s + c, 0);
     const targetRow = sumRow / cells.length;
     const targetCol = sumCol / cells.length;
 
-    // ----- board limits -----
-    const maxCol = board.cols - 2;
-    const minCol = 1;
-    const isFree = (r, c) => !cellSet.has(`${r},${c}`);
-
-    // ----- collect all valid placements -----
-    const placements = []; // { r, c, hasBelow, hasAbove, hDist, vDist }
-
-    for (let r = 0; r < board.rows; r++) {
-      for (let c = minCol; c <= maxCol; c++) {
-        // 1. No overlap in tooltip row
-        if (!isFree(r, c - 1) || !isFree(r, c) || !isFree(r, c + 1)) continue;
-
-        // 2. Must be adjacent (touching zone from above or below)
-        let hasBelow = false;
-        let hasAbove = false;
-        for (let dc = -1; dc <= 1; dc++) {
-          const col = c + dc;
-          if (r + 1 < board.rows && cellSet.has(`${r + 1},${col}`)) hasBelow = true;
-          if (r - 1 >= 0 && cellSet.has(`${r - 1},${col}`)) hasAbove = true;
-        }
-        if (!hasBelow && !hasAbove) continue;
-
-        const hDist = Math.abs(c - targetCol);
-        const vDist = Math.abs(r - targetRow);
-        placements.push({ r, c, hasBelow, hasAbove, hDist, vDist });
-      }
-    }
-
-    // sub cell placements
-    for (let r = 0; r < board.rows; r++) {
-      for (let c = minCol; c <= maxCol - 1; c++) {
-        // 1. No overlap in tooltip row
-        if (!isFree(r, c - 1) || !isFree(r, c) || !isFree(r, c + 1) || !isFree(r, c + 2)) continue;
-
-        // 2. Must be adjacent (touching zone from above or below)
-        let hasBelow = false;
-        let hasAbove = false;
-        for (let dc = 0; dc <= 1; dc++) {
-          const col = c + dc;
-          if (r + 1 < board.rows && cellSet.has(`${r + 1},${col}`)) hasBelow = true;
-          if (r - 1 >= 0 && cellSet.has(`${r - 1},${col}`)) hasAbove = true;
-        }
-        if (!hasBelow && !hasAbove) continue;
-
-        const subC = c + 0.5;
-        const hDist = Math.abs(subC - targetCol);
-        const vDist = Math.abs(r - targetRow);
-        placements.push({ r, c: subC, hasBelow, hasAbove, hDist, vDist });
-      }
-    }
-
-    if (placements.length === 0) {
-      this._fallbackBoundingBox(cellSet, cost, board);
-      return;
-    }
-
-    // ----- prefer above if possible -----
-    const abovePlacements = placements.filter((p) => p.hasBelow);
-    const candidates = abovePlacements.length > 0 ? abovePlacements : placements.filter((p) => p.hasAbove);
-
-    const score = (a) => 4 * a.hDist * a.hDist + a.vDist * a.vDist;
-
-    // ----- sort by score -----
-    candidates.sort((a, b) => {
-      const scoreA = score(a);
-      const scoreB = score(b);
-      if (scoreA !== scoreB) return scoreA - scoreB;
-      if (a.vDist !== b.vDist) return a.vDist - b.vDist;
-      if (a.hDist !== b.hDist) return a.hDist - b.hDist;
-      return 0;
-    });
-
-    const chosen = candidates[0];
-
-    // ----- pixel coordinates (tooltip centre) -----
-    const { cssCellW, cssCellH, offsetX, offsetY } = this._boardRectInfo(board);
-    const centerX = offsetX + (chosen.c + 0.5) * cssCellW;
-    const centerY = offsetY + (chosen.r + 0.5) * cssCellH;
-
+    // ----- real box size, converted to how many board cells it covers -----
     this.el.textContent = `Reward: ${cost}`;
-    this.el.style.left = `${centerX}px`;
-    this.el.style.top = `${centerY}px`;
+    const { wCells, hCells } = this._measureBoxCells(cssCellW, cssCellH);
+
+    const chosen = this._findPlacement(cellSet, board, wCells, hCells, targetRow, targetCol);
+
+    let centerRow, centerCol;
+    if (chosen) {
+      centerRow = chosen.r0 + hCells / 2;
+      centerCol = chosen.c0 + wCells / 2;
+    } else {
+      ({ centerRow, centerCol } = this._boundingBoxCenter(cellSet));
+    }
+
+    this.el.style.left = `${offsetX + centerCol * cssCellW}px`;
+    this.el.style.top = `${offsetY + centerRow * cssCellH}px`;
     this.el.hidden = false;
   }
 
-  _fallbackBoundingBox(cellSet, cost, board) {
+  // Measures the tooltip's real pixel footprint and converts it to a
+  // width/height in board cells, so the search below always reasons in
+  // the box's *actual* size instead of an assumed 3x1.
+  _measureBoxCells(cssCellW, cssCellH) {
+    this.el.style.visibility = "hidden";
+    this.el.hidden = false;
+    const rect = this.el.getBoundingClientRect();
+    this.el.style.visibility = "";
+
+    return {
+      wCells: Math.max(1, Math.ceil(rect.width / cssCellW)),
+      hCells: Math.max(1, Math.ceil(rect.height / cssCellH)),
+    };
+  }
+
+  // Searches every (r0, c0) top-left corner for a wCells x hCells box that:
+  //  1. doesn't overlap any zone cell
+  //  2. touches the zone directly above or below it
+  // then picks the candidate closest to the zone centroid (horizontal
+  // distance weighted heavier so the box doesn't drift too far sideways).
+  _findPlacement(cellSet, board, wCells, hCells, targetRow, targetCol) {
+    const margin = board.cols - wCells >= 2 ? 1 : 0;
+    const minCol = margin;
+    const maxCol0 = board.cols - wCells - margin;
+    const maxRow0 = board.rows - hCells;
+
+    const isBoxFree = (r0, c0) => {
+      for (let r = r0; r < r0 + hCells; r++) {
+        for (let c = c0; c < c0 + wCells; c++) {
+          if (cellSet.has(`${r},${c}`)) return false;
+        }
+      }
+      return true;
+    };
+
+    const touchesZoneAt = (row, c0) => {
+      if (row < 0 || row >= board.rows) return false;
+      for (let c = c0; c < c0 + wCells; c++) {
+        if (cellSet.has(`${row},${c}`)) return true;
+      }
+      return false;
+    };
+
+    const placements = [];
+    for (let r0 = 0; r0 <= maxRow0; r0++) {
+      for (let c0 = minCol; c0 <= maxCol0; c0++) {
+        if (!isBoxFree(r0, c0)) continue;
+
+        const hasAbove = touchesZoneAt(r0 - 1, c0);
+        const hasBelow = touchesZoneAt(r0 + hCells, c0);
+        if (!hasAbove && !hasBelow) continue;
+
+        const centerRow = r0 + hCells / 2;
+        const centerCol = c0 + wCells / 2;
+        placements.push({
+          r0,
+          c0,
+          hasAbove,
+          hasBelow,
+          hDist: Math.abs(centerCol - targetCol),
+          vDist: Math.abs(centerRow - targetRow),
+        });
+      }
+    }
+
+    if (placements.length === 0) return null;
+
+    // prefer the box sitting above the zone (its bottom edge touches the zone)
+    const preferred = placements.filter((p) => p.hasBelow);
+    const candidates = preferred.length > 0 ? preferred : placements.filter((p) => p.hasAbove);
+
+    const score = (p) => 4 * p.hDist * p.hDist + p.vDist * p.vDist;
+    candidates.sort((a, b) => {
+      const diff = score(a) - score(b);
+      if (diff !== 0) return diff;
+      if (a.vDist !== b.vDist) return a.vDist - b.vDist;
+      return a.hDist - b.hDist;
+    });
+
+    return candidates[0];
+  }
+
+  _boundingBoxCenter(cellSet) {
     let minRow = Infinity,
       maxRow = -Infinity,
       minCol = Infinity,
@@ -139,14 +156,10 @@ export class ZoneTooltip {
       if (c < minCol) minCol = c;
       if (c > maxCol) maxCol = c;
     }
-    const { cssCellW, cssCellH, offsetX, offsetY } = this._boardRectInfo(board);
-    const centerX = offsetX + ((minCol + maxCol + 1) / 2) * cssCellW;
-    const centerY = offsetY + ((minRow + maxRow + 1) / 2) * cssCellH;
-
-    this.el.textContent = `Reward: ${cost}`;
-    this.el.style.left = `${centerX}px`;
-    this.el.style.top = `${centerY}px`;
-    this.el.hidden = false;
+    return {
+      centerRow: (minRow + maxRow + 1) / 2,
+      centerCol: (minCol + maxCol + 1) / 2,
+    };
   }
 
   _boardRectInfo(board) {

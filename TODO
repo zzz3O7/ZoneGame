@@ -1,11 +1,8 @@
-zone tooltip box size calculation (fixed 3 by 1 breaks at big sizes)
-
     mobile support
-
-rematch for multiplayer
 
 calc drawings (+ undo/redo for drawings)
 
+rematch for multiplayer
 on opponent disconected show a message
 reconnect
 
