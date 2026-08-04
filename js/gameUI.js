@@ -8,6 +8,19 @@ import { HistoryPanel } from "./historyPanel.js";
 
 const KEY_TO_TYPE = { 1: "gesture", 2: "domino", 3: "tromino", 4: "tetromino" };
 
+// Touch gesture-arbiter tuning. A single-finger touchstart can't tell
+// whether it's the start of a placement drag or the first-arriving finger
+// of a two-finger pinch — both look identical for the first ~tens of ms.
+// PINCH_DISAMBIGUATE_MS is how long we hold off committing to "placement"
+// before a second finger would prove it wrong.
+const PINCH_DISAMBIGUATE_MS = 60;
+// Tap/double-tap detection (for the zoom-reset gesture) — a touch counts
+// as a tap if it didn't move far and didn't linger.
+const TAP_MAX_DIST = 10;
+const TAP_MAX_DURATION_MS = 250;
+const DOUBLE_TAP_MAX_INTERVAL_MS = 300;
+const DOUBLE_TAP_MAX_DIST = 30;
+
 export class GameUI {
   constructor(game, renderer, canvas, matchClient = null) {
     this.game = game;
@@ -27,6 +40,11 @@ export class GameUI {
     // already reflects the live transform.
     this.viewTransform = { scale: 1, x: 0, y: 0 };
     this._pinch = null; // { dist, midX, midY } while 2+ touches are down
+    this._pendingTouch = null; // { cell } during the pinch-disambiguation delay
+    this._pendingTouchTimer = null;
+    this._suppressHoverUntilLift = false; // true for a leftover finger after a pinch ends
+    this._touchStartInfo = null; // { x, y, time } of the current single touch, for tap detection
+    this._lastTap = null; // { time, x, y } of the previous qualifying tap, for double-tap
 
     this.gesture = new GestureInput();
     this.zoneTooltip = new ZoneTooltip(canvas);
@@ -68,13 +86,7 @@ export class GameUI {
   }
 
   refresh() {
-    // public alias, so main.js can trigger re-render on remote moves.
-    // Only fired from matchClient.onMoveApplied today, so resetting the
-    // view here means "a move landed" recenters the board — exactly what
-    // we want (see opponent's move even if you'd zoomed/panned elsewhere).
-    // If refresh() ever gets called for a non-move reason, move the reset
-    // call out to a dedicated hook instead of leaving it here.
-    this.resetView();
+    // public alias, so main.js can trigger re-render on remote moves
     this._render();
   }
 
@@ -91,7 +103,7 @@ export class GameUI {
       this.matchClient.sendMove(pieceType, shape, anchorRow, anchorCol);
       // no local mutation, no _render() here — wait for moveApplied broadcast
     } else {
-      if (this.game.attemptPlacement(pieceType, shape, anchorRow, anchorCol)) this.resetView();
+      this.game.attemptPlacement(pieceType, shape, anchorRow, anchorCol);
       this._render();
     }
   }
@@ -104,7 +116,6 @@ export class GameUI {
       // same: wait for broadcast, don't mutate/render yet
     } else {
       if (!this.game.pass()) return;
-      this.resetView();
       this._render();
     }
   }
@@ -340,23 +351,42 @@ export class GameUI {
 
     // Touch: 1 finger = existing mouse-equivalent flow (hover / gesture
     // draw), never touches the view transform. 2 fingers = pinch-zoom/pan,
-    // never touches placement state. Branching on e.touches.length (not a
-    // stored "mode") means a mid-gesture finger add/drop self-corrects
-    // without extra bookkeeping — see comments below.
+    // never touches placement state. A short delay before committing a
+    // fresh single-finger touch (see PINCH_DISAMBIGUATE_MS) stops the
+    // ghost/gesture-path from flashing at finger 1's position the instant
+    // before finger 2 lands for a pinch-from-rest.
     this.canvas.addEventListener(
       "touchstart",
       (e) => {
         e.preventDefault();
         if (e.touches.length === 1) {
+          const touch = e.touches[0];
           this._pinch = null;
-          const cell = this._cellFromTouch(e.touches[0]);
-          this.hover(cell);
-          this.startGesture(cell);
+          this._suppressHoverUntilLift = false;
+          this._touchStartInfo = { x: touch.clientX, y: touch.clientY, time: Date.now() };
+          this._pendingTouch = { cell: this._cellFromTouch(touch) };
+          this._pendingTouchTimer = setTimeout(() => {
+            this._pendingTouchTimer = null;
+            const pending = this._pendingTouch;
+            this._pendingTouch = null;
+            if (!pending) return;
+            this.hover(pending.cell);
+            this.startGesture(pending.cell);
+          }, PINCH_DISAMBIGUATE_MS);
         } else if (e.touches.length === 2) {
-          // A second finger landing mid-stroke means "zoom", not "place" —
-          // drop the in-progress freehand draw. A completed-but-unconfirmed
-          // shape (gesture.pending) is left alone, only isDrawing is cut.
-          if (this.gesture.isDrawing) this.cancelGesture();
+          if (this._pendingTouchTimer) {
+            // Second finger arrived before we committed finger 1 to
+            // anything — this was a pinch from rest, not an interrupted
+            // drag. Drop the pending commit entirely.
+            clearTimeout(this._pendingTouchTimer);
+            this._pendingTouchTimer = null;
+            this._pendingTouch = null;
+          } else if (this.gesture.isDrawing) {
+            // Delay already resolved — a real single-finger draw was in
+            // progress and got interrupted by a second finger.
+            this.cancelGesture();
+          }
+          this._suppressHoverUntilLift = true;
           this._startPinch(e.touches);
         }
       },
@@ -367,8 +397,14 @@ export class GameUI {
       "touchmove",
       (e) => {
         e.preventDefault();
-        if (e.touches.length === 1 && !this._pinch) {
-          this.hover(this._cellFromTouch(e.touches[0]));
+        if (e.touches.length === 1) {
+          if (this._pendingTouch) {
+            // Still inside the disambiguation window — track where the
+            // finger is, but don't act on it until it resolves.
+            this._pendingTouch.cell = this._cellFromTouch(e.touches[0]);
+          } else if (!this._suppressHoverUntilLift) {
+            this.hover(this._cellFromTouch(e.touches[0]));
+          }
         } else if (e.touches.length >= 2) {
           this._applyPinch(e.touches);
         }
@@ -381,20 +417,58 @@ export class GameUI {
       (e) => {
         e.preventDefault();
         const remaining = e.touches.length;
+
         if (remaining === 0) {
+          if (this._pendingTouchTimer) {
+            // Lifted before the delay resolved — a genuine quick tap,
+            // not an aborted pinch. Commit it now rather than dropping it.
+            clearTimeout(this._pendingTouchTimer);
+            this._pendingTouchTimer = null;
+            const pending = this._pendingTouch;
+            this._pendingTouch = null;
+            if (pending) {
+              this.hover(pending.cell);
+              this.startGesture(pending.cell);
+            }
+          }
           this._pinch = null;
+          this._suppressHoverUntilLift = false;
+          this._checkDoubleTap(e.changedTouches[0]);
           this.finishGesture();
         } else if (remaining === 1) {
-          // Dropped from pinch back to a single finger — that finger was
-          // mid-pinch, not placing, so just stop zooming and wait for a
-          // fresh touchstart rather than repurposing it as a placement drag.
+          // Dropped from a pinch back to one finger — that finger was
+          // mid-pinch, not placing. Wait for a fresh touchstart rather
+          // than repurposing it as a placement drag.
           this._pinch = null;
+          this._suppressHoverUntilLift = true;
         } else {
           this._startPinch(e.touches); // still 2+, rebase to avoid a jump
         }
       },
       { passive: false },
     );
+  }
+
+  _checkDoubleTap(touch) {
+    if (!touch || !this._touchStartInfo) return;
+    const dist = Math.hypot(touch.clientX - this._touchStartInfo.x, touch.clientY - this._touchStartInfo.y);
+    const duration = Date.now() - this._touchStartInfo.time;
+    this._touchStartInfo = null;
+
+    if (dist >= TAP_MAX_DIST || duration >= TAP_MAX_DURATION_MS) {
+      this._lastTap = null; // a drag breaks the double-tap chain
+      return;
+    }
+
+    const last = this._lastTap;
+    const withinInterval = last && Date.now() - last.time < DOUBLE_TAP_MAX_INTERVAL_MS;
+    const withinDist = last && Math.hypot(touch.clientX - last.x, touch.clientY - last.y) < DOUBLE_TAP_MAX_DIST;
+    if (withinInterval && withinDist) {
+      this.resetView();
+      this._lastTap = null;
+    } else {
+      this._lastTap = { time: Date.now(), x: touch.clientX, y: touch.clientY };
+    }
   }
 
   _bindControls() {
