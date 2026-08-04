@@ -249,6 +249,9 @@ button {
   flex-wrap: nowrap;
   gap: 4px;
 }
+.piece-selector--touch {
+  margin-top: 6px;
+}
 .piece-selector--controls .piece-btn {
   flex: 1;
   min-width: 0;
@@ -432,6 +435,7 @@ button {
   display: block;
   width: 100%;
   height: 100%;
+  touch-action: none;
 }
 
 .zone-tooltip {

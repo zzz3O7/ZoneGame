@@ -195,19 +195,49 @@ export class GameUI {
     this._submitPass();
   }
 
+  // Touch has no hover, so a non-gesture placement is staged on cursorCell
+  // (set by touchmove) instead of placed immediately — confirm/discard
+  // buttons resolve it. Mouse click still places directly, unaffected.
+  confirmStaged() {
+    if (this.gesture.pending) {
+      this.confirmGesture();
+      return;
+    }
+    if (this.selectedType !== "gesture" && this.cursorCell) {
+      this.placeAt(this.cursorCell);
+      this.clearHover();
+    }
+  }
+
+  discardStaged() {
+    if (this.gesture.pending) {
+      this.cancelGesture();
+      return;
+    }
+    this.clearHover();
+  }
+
   // ===================== input: DOM event listeners =====================
 
-  _cellFromEvent(event) {
+  _cellFromPoint(clientX, clientY) {
     const rect = this.canvas.getBoundingClientRect();
     const scaleX = this.canvas.width / rect.width;
     const scaleY = this.canvas.height / rect.height;
-    const x = (event.clientX - rect.left - this.canvas.clientLeft) * scaleX;
-    const y = (event.clientY - rect.top - this.canvas.clientTop) * scaleY;
+    const x = (clientX - rect.left - this.canvas.clientLeft) * scaleX;
+    const y = (clientY - rect.top - this.canvas.clientTop) * scaleY;
     const cellSize = this.renderer.cellSize;
     const board = this.game.board;
     const col = Math.min(Math.max(Math.floor(x / cellSize), 0), board.cols - 1);
     const row = Math.min(Math.max(Math.floor(y / cellSize), 0), board.rows - 1);
     return [row, col];
+  }
+
+  _cellFromEvent(event) {
+    return this._cellFromPoint(event.clientX, event.clientY);
+  }
+
+  _cellFromTouch(touch) {
+    return this._cellFromPoint(touch.clientX, touch.clientY);
   }
 
   _bindCanvasEvents() {
@@ -240,6 +270,38 @@ export class GameUI {
       e.preventDefault();
       this.rotate(e.deltaY > 0 ? 1 : -1);
     });
+
+    // Touch: drag moves the ghost (hover), lift just leaves it staged —
+    // no auto-place. startGesture/finishGesture are no-ops outside draw
+    // mode, so these three lines cover both gesture and normal placement.
+    this.canvas.addEventListener(
+      "touchstart",
+      (e) => {
+        e.preventDefault();
+        const cell = this._cellFromTouch(e.touches[0]);
+        this.hover(cell);
+        this.startGesture(cell);
+      },
+      { passive: false },
+    );
+
+    this.canvas.addEventListener(
+      "touchmove",
+      (e) => {
+        e.preventDefault();
+        this.hover(this._cellFromTouch(e.touches[0]));
+      },
+      { passive: false },
+    );
+
+    this.canvas.addEventListener(
+      "touchend",
+      (e) => {
+        e.preventDefault();
+        this.finishGesture();
+      },
+      { passive: false },
+    );
   }
 
   _bindControls() {
@@ -252,6 +314,12 @@ export class GameUI {
     document.querySelectorAll(".piece-btn--skip").forEach((btn) => {
       btn.addEventListener("click", () => this.skipTurn());
     });
+
+    document.getElementById("btnRotateLeft")?.addEventListener("click", () => this.rotate(-1));
+    document.getElementById("btnRotateRight")?.addEventListener("click", () => this.rotate(1));
+    document.getElementById("btnFlip")?.addEventListener("click", () => this.flip());
+    document.getElementById("btnConfirm")?.addEventListener("click", () => this.confirmStaged());
+    document.getElementById("btnDiscard")?.addEventListener("click", () => this.discardStaged());
 
     document.addEventListener("keydown", (event) => {
       const type = KEY_TO_TYPE[event.key];
@@ -344,6 +412,12 @@ export class GameUI {
       const countEl = skipBtn.querySelector(".piece-btn__count");
       if (countEl) countEl.textContent = `-${skipPenalty}`;
     }
+
+    const hasStaged = !!this.gesture.pending || (this.selectedType !== "gesture" && !!this.cursorCell);
+    const confirmBtn = document.getElementById("btnConfirm");
+    const discardBtn = document.getElementById("btnDiscard");
+    if (confirmBtn) confirmBtn.disabled = this.game.gameOver || !myTurn || !hasStaged;
+    if (discardBtn) discardBtn.disabled = this.game.gameOver || !hasStaged;
   }
 
   _syncSidePlates() {

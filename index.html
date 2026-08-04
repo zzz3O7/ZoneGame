@@ -176,6 +176,24 @@
                   <span class="piece-btn__count">0</span>
                 </button>
               </div>
+
+              <div class="piece-selector piece-selector--controls piece-selector--touch">
+                <button class="piece-btn" id="btnDiscard" title="Discard staged piece" disabled>
+                  <span class="piece-btn__icon">✕</span>
+                </button>
+                <button class="piece-btn" id="btnRotateLeft" title="Rotate left">
+                  <span class="piece-btn__icon">↺</span>
+                </button>
+                <button class="piece-btn" id="btnFlip" title="Flip">
+                  <span class="piece-btn__icon">⇄</span>
+                </button>
+                <button class="piece-btn" id="btnRotateRight" title="Rotate right">
+                  <span class="piece-btn__icon">↻</span>
+                </button>
+                <button class="piece-btn" id="btnConfirm" title="Confirm staged piece" disabled>
+                  <span class="piece-btn__icon">✓</span>
+                </button>
+              </div>
             </div>
           </section>
 
@@ -206,6 +224,10 @@
               <div class="hints__item">
                 <span class="hints__key">LMB</span>
                 <span>Place the shape, or confirm a drawn gesture</span>
+              </div>
+              <div class="hints__item">
+                <span class="hints__key">Touch</span>
+                <span>Drag to move the ghost, lift to stage it, then ✓ / ✕ to confirm or discard</span>
               </div>
             </div>
           </section>
