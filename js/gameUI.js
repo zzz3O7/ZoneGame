@@ -1,5 +1,5 @@
 import { Shape, SHAPES_BASE } from "./shape.js";
-import { PASS_PENALTY } from "./config.js";
+import { PASS_PENALTY, LAYOUT } from "./config.js";
 import { GestureInput } from "./gestureInput.js";
 import { ZoneTooltip } from "./zoneTooltip.js";
 import { Zone } from "./zone.js";
@@ -19,6 +19,14 @@ export class GameUI {
     this.rotationStep = 0;
     this.flipped = false;
     this.cursorCell = null;
+
+    // Board-local pinch-zoom/pan (mobile). Lives entirely as a CSS transform
+    // on the canvas, clipped by .board-wrap's overflow:hidden — the board's
+    // on-page footprint never changes, only what's visible inside it.
+    // _cellFromPoint needs no awareness of this: getBoundingClientRect()
+    // already reflects the live transform.
+    this.viewTransform = { scale: 1, x: 0, y: 0 };
+    this._pinch = null; // { dist, midX, midY } while 2+ touches are down
 
     this.gesture = new GestureInput();
     this.zoneTooltip = new ZoneTooltip(canvas);
@@ -40,6 +48,7 @@ export class GameUI {
 
   init() {
     this._syncMatchInfo();
+    this.resetView();
     this._render();
   }
 
@@ -59,7 +68,13 @@ export class GameUI {
   }
 
   refresh() {
-    // public alias, so main.js can trigger re-render on remote moves
+    // public alias, so main.js can trigger re-render on remote moves.
+    // Only fired from matchClient.onMoveApplied today, so resetting the
+    // view here means "a move landed" recenters the board — exactly what
+    // we want (see opponent's move even if you'd zoomed/panned elsewhere).
+    // If refresh() ever gets called for a non-move reason, move the reset
+    // call out to a dedicated hook instead of leaving it here.
+    this.resetView();
     this._render();
   }
 
@@ -76,7 +91,7 @@ export class GameUI {
       this.matchClient.sendMove(pieceType, shape, anchorRow, anchorCol);
       // no local mutation, no _render() here — wait for moveApplied broadcast
     } else {
-      this.game.attemptPlacement(pieceType, shape, anchorRow, anchorCol);
+      if (this.game.attemptPlacement(pieceType, shape, anchorRow, anchorCol)) this.resetView();
       this._render();
     }
   }
@@ -89,6 +104,7 @@ export class GameUI {
       // same: wait for broadcast, don't mutate/render yet
     } else {
       if (!this.game.pass()) return;
+      this.resetView();
       this._render();
     }
   }
@@ -195,6 +211,57 @@ export class GameUI {
     this._submitPass();
   }
 
+  // ===================== board zoom / pan (touch) =====================
+
+  resetView() {
+    this.viewTransform = { scale: 1, x: 0, y: 0 };
+    this._applyViewTransform();
+  }
+
+  _applyViewTransform() {
+    const { scale, x, y } = this.viewTransform;
+    this.canvas.style.transform = `translate(${x}px, ${y}px) scale(${scale})`;
+  }
+
+  _clampView() {
+    const rect = this.canvas.parentElement.getBoundingClientRect();
+    const { scale } = this.viewTransform;
+    this.viewTransform.x = Math.min(0, Math.max(rect.width - rect.width * scale, this.viewTransform.x));
+    this.viewTransform.y = Math.min(0, Math.max(rect.height - rect.height * scale, this.viewTransform.y));
+  }
+
+  _touchDist(t0, t1) {
+    return Math.hypot(t1.clientX - t0.clientX, t1.clientY - t0.clientY);
+  }
+
+  _touchMid(t0, t1) {
+    return { midX: (t0.clientX + t1.clientX) / 2, midY: (t0.clientY + t1.clientY) / 2 };
+  }
+
+  _startPinch(touches) {
+    this._pinch = { dist: this._touchDist(touches[0], touches[1]), ...this._touchMid(touches[0], touches[1]) };
+  }
+
+  _applyPinch(touches) {
+    const rect = this.canvas.parentElement.getBoundingClientRect();
+    const dist = this._touchDist(touches[0], touches[1]);
+    const { midX, midY } = this._touchMid(touches[0], touches[1]);
+
+    const ratio = dist / this._pinch.dist;
+    const newScale = Math.min(LAYOUT.maxZoom, Math.max(1, this.viewTransform.scale * ratio));
+
+    // Keep the point under the fingers stationary on screen while scaling.
+    const localX = (this._pinch.midX - rect.left - this.viewTransform.x) / this.viewTransform.scale;
+    const localY = (this._pinch.midY - rect.top - this.viewTransform.y) / this.viewTransform.scale;
+    this.viewTransform.x = midX - rect.left - localX * newScale;
+    this.viewTransform.y = midY - rect.top - localY * newScale;
+    this.viewTransform.scale = newScale;
+
+    this._clampView();
+    this._applyViewTransform();
+    this._pinch = { dist, midX, midY };
+  }
+
   // Touch has no hover, so a non-gesture placement is staged on cursorCell
   // (set by touchmove) instead of placed immediately — confirm/discard
   // buttons resolve it. Mouse click still places directly, unaffected.
@@ -271,16 +338,27 @@ export class GameUI {
       this.rotate(e.deltaY > 0 ? 1 : -1);
     });
 
-    // Touch: drag moves the ghost (hover), lift just leaves it staged —
-    // no auto-place. startGesture/finishGesture are no-ops outside draw
-    // mode, so these three lines cover both gesture and normal placement.
+    // Touch: 1 finger = existing mouse-equivalent flow (hover / gesture
+    // draw), never touches the view transform. 2 fingers = pinch-zoom/pan,
+    // never touches placement state. Branching on e.touches.length (not a
+    // stored "mode") means a mid-gesture finger add/drop self-corrects
+    // without extra bookkeeping — see comments below.
     this.canvas.addEventListener(
       "touchstart",
       (e) => {
         e.preventDefault();
-        const cell = this._cellFromTouch(e.touches[0]);
-        this.hover(cell);
-        this.startGesture(cell);
+        if (e.touches.length === 1) {
+          this._pinch = null;
+          const cell = this._cellFromTouch(e.touches[0]);
+          this.hover(cell);
+          this.startGesture(cell);
+        } else if (e.touches.length === 2) {
+          // A second finger landing mid-stroke means "zoom", not "place" —
+          // drop the in-progress freehand draw. A completed-but-unconfirmed
+          // shape (gesture.pending) is left alone, only isDrawing is cut.
+          if (this.gesture.isDrawing) this.cancelGesture();
+          this._startPinch(e.touches);
+        }
       },
       { passive: false },
     );
@@ -289,7 +367,11 @@ export class GameUI {
       "touchmove",
       (e) => {
         e.preventDefault();
-        this.hover(this._cellFromTouch(e.touches[0]));
+        if (e.touches.length === 1 && !this._pinch) {
+          this.hover(this._cellFromTouch(e.touches[0]));
+        } else if (e.touches.length >= 2) {
+          this._applyPinch(e.touches);
+        }
       },
       { passive: false },
     );
@@ -298,7 +380,18 @@ export class GameUI {
       "touchend",
       (e) => {
         e.preventDefault();
-        this.finishGesture();
+        const remaining = e.touches.length;
+        if (remaining === 0) {
+          this._pinch = null;
+          this.finishGesture();
+        } else if (remaining === 1) {
+          // Dropped from pinch back to a single finger — that finger was
+          // mid-pinch, not placing, so just stop zooming and wait for a
+          // fresh touchstart rather than repurposing it as a placement drag.
+          this._pinch = null;
+        } else {
+          this._startPinch(e.touches); // still 2+, rebase to avoid a jump
+        }
       },
       { passive: false },
     );

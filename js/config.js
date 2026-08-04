@@ -23,6 +23,7 @@ export const THEME = {
 export const LAYOUT = {
   canvasResolution: 720,
   bonusFontRatio: 0.5,
+  maxZoom: 4, // pinch-zoom ceiling on the board (mobile), 1 = fit-to-view
 };
 
 export const PASS_PENALTY = 0.9; // global, not mode-tunable (yet)
