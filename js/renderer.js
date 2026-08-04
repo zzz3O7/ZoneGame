@@ -11,7 +11,18 @@ export class Renderer {
     this.ctx = canvas.getContext("2d");
     this.zoneRadius = zoneRadius;
 
-    this.cellSize = Math.floor(LAYOUT.canvasResolution / Math.max(board.cols, board.rows));
+    // Rasterized once per render() call (a discrete game event — hover,
+    // rotate, placement), never per animation frame: pinch-zoom is a pure
+    // CSS transform on the canvas element (see gameUI.js _applyPinch), so
+    // it never triggers a redraw. That means we can afford a much higher
+    // base resolution than the on-screen board size would suggest, so the
+    // raster stays crisp instead of blurring when the CSS transform scales
+    // it up — capped so we don't exceed mobile GPU canvas-size limits.
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    const targetResolution = LAYOUT.canvasResolution * dpr * LAYOUT.maxZoom;
+    const resolution = Math.min(targetResolution, LAYOUT.maxCanvasDimension);
+
+    this.cellSize = Math.floor(resolution / Math.max(board.cols, board.rows));
     canvas.width = board.cols * this.cellSize;
     canvas.height = board.rows * this.cellSize;
   }

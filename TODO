@@ -1,6 +1,6 @@
     mobile support
 
-    while pinching dont render or move the preview - it jumps around
+    while pinching dont render or move the peice preview (we do it already for gesture path) - it jumps around
 
 calc drawings (+ undo/redo for drawings)
 
