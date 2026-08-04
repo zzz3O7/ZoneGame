@@ -1,14 +1,19 @@
-calc drawings (+ undo/redo for drawings)
+perfomance
+cache zone tooltip positions - main suspect
+zone tooltip remove sorting - just take the min element
+think of other costly operations
 
 rematch for multiplayer
 on opponent disconected show a message
 reconnect
 
-skip move - 10% penalty on all points ( concecutive passess are not allowed)
+calc drawings (+ undo/redo for drawings)
+
+??? skip move - 10% penalty on all points ( concecutive passess are not allowed)
 
 time control
 
 sound
 undo/redo
 
-on different grid sizes board is still a square not a rectangle and tiles are squished
+??? on different grid sizes board is still a square not a rectangle and tiles are squished
