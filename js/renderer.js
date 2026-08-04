@@ -25,6 +25,15 @@ export class Renderer {
     this.cellSize = Math.floor(resolution / Math.max(board.cols, board.rows));
     canvas.width = board.cols * this.cellSize;
     canvas.height = board.rows * this.cellSize;
+
+    // Precomputed once per Renderer instance (cellSize is fixed for its
+    // lifetime) — see LAYOUT.*Ratio comment in config.js for why these are
+    // ratios instead of fixed px.
+    this.gridLineWidth = this.cellSize * LAYOUT.gridLineRatio;
+    this.zoneBorderWidth = this.cellSize * LAYOUT.zoneBorderRatio;
+    this.zoneBorderHighlightWidth = this.cellSize * LAYOUT.zoneBorderHighlightRatio;
+    this.moveHighlightWidth = this.cellSize * LAYOUT.moveHighlightRatio;
+    this.pieceInset = this.cellSize * LAYOUT.pieceInsetRatio;
   }
 
   render(
@@ -55,7 +64,7 @@ export class Renderer {
 
   _drawBoard(board) {
     const { ctx } = this;
-    ctx.lineWidth = 1;
+    ctx.lineWidth = this.gridLineWidth;
 
     for (let row = 0; row < board.rows; row++) {
       for (let col = 0; col < board.cols; col++) {
@@ -105,7 +114,7 @@ export class Renderer {
   _drawZoneBorders(zones) {
     const ctx = this.ctx;
     ctx.strokeStyle = THEME.zoneBorders;
-    ctx.lineWidth = 2;
+    ctx.lineWidth = this.zoneBorderWidth;
     for (const zone of zones) this._strokeZoneBorder(zone);
   }
 
@@ -119,7 +128,7 @@ export class Renderer {
     if (!highlightedZoneIds || highlightedZoneIds.size === 0) return;
     const ctx = this.ctx;
     ctx.strokeStyle = THEME.zoneBordersHighlight;
-    ctx.lineWidth = 3;
+    ctx.lineWidth = this.zoneBorderHighlightWidth;
     for (const zone of zones) {
       if (highlightedZoneIds.has(zone.id)) this._strokeZoneBorder(zone);
     }
@@ -134,7 +143,7 @@ export class Renderer {
     const cells = Shape.cellsAt(entry.shape, entry.anchorRow, entry.anchorCol);
     const cellSet = new Set(cells.map(([r, c]) => Board.key(r, c)));
     this.ctx.strokeStyle = THEME.moveHighlight;
-    this.ctx.lineWidth = 3;
+    this.ctx.lineWidth = this.moveHighlightWidth;
     this._strokeCellSetBorder(cellSet);
   }
 
@@ -177,7 +186,7 @@ export class Renderer {
   _drawPieces(entries) {
     const ctx = this.ctx;
     ctx.fillStyle = THEME.piece;
-    const inset = 3;
+    const inset = this.pieceInset;
 
     for (const entry of entries) {
       if (entry.type === "pass") continue;

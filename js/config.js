@@ -25,6 +25,18 @@ export const LAYOUT = {
   bonusFontRatio: 0.5,
   maxZoom: 4, // pinch-zoom ceiling on the board (mobile), 1 = fit-to-view
   maxCanvasDimension: 4096, // conservative cap: some mobile GPUs clip/blank canvases above ~4096-8192px/side
+
+  // Line widths / insets as a fraction of cellSize instead of fixed px, so
+  // a 60x60 custom board doesn't get relatively-huge borders and a 10x10
+  // board doesn't get relatively-invisible ones. Ratios derived from the
+  // original fixed values (1px/2px/3px/3px/3px) at the classic-mode
+  // baseline cellSize (720 canvasResolution / 20 board = 36px), so the
+  // classic-mode look is unchanged and everything else now scales with it.
+  gridLineRatio: 1 / 36,
+  zoneBorderRatio: 2 / 36,
+  zoneBorderHighlightRatio: 3 / 36,
+  moveHighlightRatio: 3 / 36,
+  pieceInsetRatio: 3 / 36,
 };
 
 export const PASS_PENALTY = 0.9; // global, not mode-tunable (yet)
