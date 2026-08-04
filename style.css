@@ -802,7 +802,7 @@ button {
      pinch-zoom/pan (see #board-canvas below) this cap no longer costs
      precision on large boards — zoom happens inside the fixed footprint. */
   .board-wrap {
-    --board-computed-size: min(var(--board-size), calc(100vw - (var(--layout-padding) * 2)) /*, 65vh*/);
+    --board-computed-size: min(var(--board-size), calc(100vw - (var(--layout-padding) * 2)), 65vh);
   }
 }
 
