@@ -126,6 +126,7 @@ export class GameUI {
     this.selectedType = type;
     this.rotationStep = 0;
     this.flipped = false;
+    this.cursorCell = null; // otherwise the old anchor's ghost reappears for the new type out of nowhere
     this.gesture.reset();
     this._render();
   }
@@ -464,7 +465,13 @@ export class GameUI {
     const withinInterval = last && Date.now() - last.time < DOUBLE_TAP_MAX_INTERVAL_MS;
     const withinDist = last && Math.hypot(touch.clientX - last.x, touch.clientY - last.y) < DOUBLE_TAP_MAX_DIST;
     if (withinInterval && withinDist) {
+      // The two taps that make up this double-tap each staged a ghost via
+      // the normal single-tap flow already (see touchend) — a double-tap
+      // is a meta action, not a placement gesture, so undo that instead of
+      // leaving a piece preview behind that the user never asked to place.
       this.resetView();
+      this.clearHover();
+      if (this.gesture.isDrawing || this.gesture.pending) this.cancelGesture();
       this._lastTap = null;
     } else {
       this._lastTap = { time: Date.now(), x: touch.clientX, y: touch.clientY };
