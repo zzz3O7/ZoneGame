@@ -1,5 +1,7 @@
     mobile support
 
+    while pinching dont render or move the preview - it jumps around
+
 calc drawings (+ undo/redo for drawings)
 
 rematch for multiplayer

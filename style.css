@@ -205,6 +205,28 @@ button {
   gap: 10px;
   padding: 8px 0;
 }
+
+/* Capability-based show/hide, keyed off (pointer: coarse) — i.e. whether
+   the primary input is a finger, not the viewport width. A narrow desktop
+   window still gets mouse hints; a large touch tablet still gets touch
+   controls. Compound selectors (not a bare .touch-only utility) so the
+   override always wins over whatever base class sets display on the same
+   element, regardless of source order — add .<x>.touch-only /
+   .<x>.pointer-only to any element that should only exist for one input. */
+.piece-selector.touch-only,
+.hints__item.touch-only {
+  display: none;
+}
+
+@media (pointer: coarse) {
+  .piece-selector.touch-only,
+  .hints__item.touch-only {
+    display: flex;
+  }
+  .hints__item.pointer-only {
+    display: none;
+  }
+}
 .hints__item + .hints__item {
   border-top: 1px solid var(--color-border-soft);
 }
@@ -794,15 +816,25 @@ button {
   /* No side columns competing for horizontal space here, so the board's
      width budget is just the viewport minus the outer page padding —
      the wide-layout formula (which subtracts --side-columns-budget) would
-     go negative on a narrow viewport and collapse the board to 0.
-     Also re-adds a vh cap (dropped from the width-only formula before):
-     without it, on short/landscape viewports the board can grow to fill
-     the entire screen, leaving no touch-startable area to scroll down to
-     the controls below it. 65vh guarantees that margin. With board-side
-     pinch-zoom/pan (see #board-canvas below) this cap no longer costs
-     precision on large boards — zoom happens inside the fixed footprint. */
+     go negative on a narrow viewport and collapse the board to 0. */
   .board-wrap {
     --board-computed-size: min(var(--board-size), calc(100vw - (var(--layout-padding) * 2)));
+  }
+}
+
+/* Height cap for the board, touch devices only. Without it, on short or
+   landscape phone viewports the board can grow to fill the whole screen,
+   leaving no touch-startable area to scroll down to the controls below it
+   (a touch's scroll-ability is decided by its *starting* element — if that
+   element is the canvas, the gesture is fully captured regardless of where
+   the finger moves after, see touch-action on #board-canvas). Gated on
+   (pointer: coarse) rather than folded into the width-only query above, so
+   resizing a desktop browser window narrow doesn't trigger it. Board-local
+   pinch-zoom/pan (#board-canvas, gameUI.js) means this costs no precision
+   on large boards even though the on-page board is capped smaller. */
+@media (max-width: 1340px) and (pointer: coarse) {
+  .board-wrap {
+    --board-computed-size: min(var(--board-size), calc(100vw - (var(--layout-padding) * 2)), 65vh);
   }
 }
 

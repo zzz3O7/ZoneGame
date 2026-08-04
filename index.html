@@ -177,7 +177,7 @@
                 </button>
               </div>
 
-              <div class="piece-selector piece-selector--controls piece-selector--touch">
+              <div class="piece-selector piece-selector--controls piece-selector--touch touch-only">
                 <button class="piece-btn" id="btnDiscard" title="Discard staged piece" disabled>
                   <span class="piece-btn__icon">✕</span>
                 </button>
@@ -205,29 +205,37 @@
               </button>
             </div>
             <div class="panel__body hints" id="hintsBody">
-              <div class="hints__item">
+              <div class="hints__item pointer-only">
                 <span class="hints__key">1-4</span>
                 <span>Switch input mode: draw, domino, tromino, tetromino</span>
               </div>
-              <div class="hints__item">
+              <div class="hints__item pointer-only">
                 <span class="hints__key">Scroll / R</span>
                 <span>Rotate the current shape</span>
               </div>
-              <div class="hints__item">
+              <div class="hints__item pointer-only">
                 <span class="hints__key">RMB / F</span>
                 <span>Flip the shape, or cancel a gesture</span>
               </div>
-              <div class="hints__item">
+              <div class="hints__item pointer-only">
                 <span class="hints__key">Drag</span>
                 <span>Draw mode: click and drag across cells to sketch a shape</span>
               </div>
-              <div class="hints__item">
+              <div class="hints__item pointer-only">
                 <span class="hints__key">LMB</span>
                 <span>Place the shape, or confirm a drawn gesture</span>
               </div>
-              <div class="hints__item">
-                <span class="hints__key">Touch</span>
-                <span>Drag to move the ghost, lift to stage it, then ✓ / ✕ to confirm or discard</span>
+              <div class="hints__item touch-only">
+                <span class="hints__key">Drag</span>
+                <span>Sketch a gesture, or move the piece ghost — lift to stage it</span>
+              </div>
+              <div class="hints__item touch-only">
+                <span class="hints__key">↺ ⇄ ↻ ✓ ✕</span>
+                <span>Rotate, flip, confirm, or discard the staged piece</span>
+              </div>
+              <div class="hints__item touch-only">
+                <span class="hints__key">Pinch</span>
+                <span>Zoom the board; drag with two fingers to pan around</span>
               </div>
             </div>
           </section>
