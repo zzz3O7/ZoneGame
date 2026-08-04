@@ -40,25 +40,24 @@ export class ZoneTooltip {
     // ----- zone centroid (what we're trying to sit next to) -----
     const sumRow = cells.reduce((s, [r]) => s + r, 0);
     const sumCol = cells.reduce((s, [, c]) => s + c, 0);
-    const targetRow = sumRow / cells.length;
-    const targetCol = sumCol / cells.length;
+    // +0.5: a cell's index is its left/top edge in this coordinate space
+    // (matches the renderer, which draws cell c at [c, c+1)), so its true
+    // visual center is index + 0.5.
+    const targetRow = sumRow / cells.length + 0.5;
+    const targetCol = sumCol / cells.length + 0.5;
 
     // ----- real box size, converted to how many board cells it covers -----
     this.el.textContent = `Reward: ${cost}`;
     const { wCells, hCells } = this._measureBoxCells(cssCellW, cssCellH);
 
     const chosen = this._findPlacement(cellSet, board, wCells, hCells, targetRow, targetCol);
-
-    let centerRow, centerCol;
-    if (chosen) {
-      centerRow = chosen.r0 + hCells / 2;
-      centerCol = chosen.c0 + wCells / 2;
-    } else {
-      ({ centerRow, centerCol } = this._boundingBoxCenter(cellSet));
+    if (!chosen) {
+      this.hide();
+      return;
     }
 
-    this.el.style.left = `${offsetX + centerCol * cssCellW}px`;
-    this.el.style.top = `${offsetY + centerRow * cssCellH}px`;
+    this.el.style.left = `${offsetX + chosen.centerCol * cssCellW}px`;
+    this.el.style.top = `${offsetY + chosen.centerRow * cssCellH}px`;
     this.el.hidden = false;
   }
 
@@ -77,61 +76,33 @@ export class ZoneTooltip {
     };
   }
 
-  // Searches every (r0, c0) top-left corner for a wCells x hCells box that:
-  //  1. doesn't overlap any zone cell
-  //  2. touches the zone directly above or below it
-  // then picks the candidate closest to the zone centroid (horizontal
-  // distance weighted heavier so the box doesn't drift too far sideways).
+  // Searches for a wCells x hCells box that doesn't overlap any zone cell
+  // and touches the zone directly above or below it, then picks the
+  // candidate closest to the zone centroid (horizontal distance weighted
+  // heavier so the box doesn't drift too far sideways).
+  //
+  // Runs the horizontal scan at two alignments - grid-aligned (0) and
+  // shifted half a cell (0.5) - because a box's achievable center columns
+  // land on one or the other depending on wCells' parity. Even-width zones
+  // center on a half-cell, so without the shifted pass there'd be no
+  // candidate that actually sits centered on them.
   _findPlacement(cellSet, board, wCells, hCells, targetRow, targetCol) {
-    const margin = board.cols - wCells >= 2 ? 1 : 0;
-    const minCol = margin;
-    const maxCol0 = board.cols - wCells - margin;
-    const maxRow0 = board.rows - hCells;
+    const raw = [
+      ...this._scanColumns(cellSet, board, wCells, hCells, 0),
+      ...this._scanColumns(cellSet, board, wCells, hCells, 0.5),
+    ];
 
-    const isBoxFree = (r0, c0) => {
-      for (let r = r0; r < r0 + hCells; r++) {
-        for (let c = c0; c < c0 + wCells; c++) {
-          if (cellSet.has(`${r},${c}`)) return false;
-        }
-      }
-      return true;
-    };
-
-    const touchesZoneAt = (row, c0) => {
-      if (row < 0 || row >= board.rows) return false;
-      for (let c = c0; c < c0 + wCells; c++) {
-        if (cellSet.has(`${row},${c}`)) return true;
-      }
-      return false;
-    };
-
-    const placements = [];
-    for (let r0 = 0; r0 <= maxRow0; r0++) {
-      for (let c0 = minCol; c0 <= maxCol0; c0++) {
-        if (!isBoxFree(r0, c0)) continue;
-
-        const hasAbove = touchesZoneAt(r0 - 1, c0);
-        const hasBelow = touchesZoneAt(r0 + hCells, c0);
-        if (!hasAbove && !hasBelow) continue;
-
-        const centerRow = r0 + hCells / 2;
-        const centerCol = c0 + wCells / 2;
-        placements.push({
-          r0,
-          c0,
-          hasAbove,
-          hasBelow,
-          hDist: Math.abs(centerCol - targetCol),
-          vDist: Math.abs(centerRow - targetRow),
-        });
-      }
-    }
-
+    const placements = raw.map((p) => ({
+      ...p,
+      hDist: Math.abs(p.centerCol - targetCol),
+      vDist: Math.abs(p.centerRow - targetRow),
+    }));
     if (placements.length === 0) return null;
 
     // prefer the box sitting above the zone (its bottom edge touches the zone)
     const preferred = placements.filter((p) => p.hasBelow);
     const candidates = preferred.length > 0 ? preferred : placements.filter((p) => p.hasAbove);
+    if (candidates.length === 0) return null;
 
     const score = (p) => 4 * p.hDist * p.hDist + p.vDist * p.vDist;
     candidates.sort((a, b) => {
@@ -144,22 +115,59 @@ export class ZoneTooltip {
     return candidates[0];
   }
 
-  _boundingBoxCenter(cellSet) {
-    let minRow = Infinity,
-      maxRow = -Infinity,
-      minCol = Infinity,
-      maxCol = -Infinity;
-    for (const key of cellSet) {
-      const [r, c] = Board.parse(key);
-      if (r < minRow) minRow = r;
-      if (r > maxRow) maxRow = r;
-      if (c < minCol) minCol = c;
-      if (c > maxCol) maxCol = c;
-    }
-    return {
-      centerRow: (minRow + maxRow + 1) / 2,
-      centerCol: (minCol + maxCol + 1) / 2,
+  // colOffset 0: box left edge sits on a column line (checks exactly
+  // wCells columns). colOffset 0.5: box straddles a column line, so it
+  // partially covers one extra column on each side - those must still be
+  // free, but only the fully-covered "core" columns count for the
+  // zone-adjacency check.
+  _scanColumns(cellSet, board, wCells, hCells, colOffset) {
+    const straddling = colOffset > 0;
+    const overlapSpan = straddling ? wCells + 1 : wCells;
+    const coreStart = straddling ? 1 : 0;
+    const coreSpan = straddling ? wCells - 1 : wCells;
+    if (coreSpan <= 0) return []; // box too narrow to straddle meaningfully
+
+    const margin = board.cols - overlapSpan >= 2 ? 1 : 0;
+    const minI = margin;
+    const maxI = board.cols - overlapSpan - margin;
+    const maxRow0 = board.rows - hCells;
+
+    const isBoxFree = (r0, i) => {
+      for (let r = r0; r < r0 + hCells; r++) {
+        for (let c = i; c < i + overlapSpan; c++) {
+          if (cellSet.has(`${r},${c}`)) return false;
+        }
+      }
+      return true;
     };
+
+    const touchesZoneAt = (row, i) => {
+      if (row < 0 || row >= board.rows) return false;
+      for (let c = i + coreStart; c < i + coreStart + coreSpan; c++) {
+        if (cellSet.has(`${row},${c}`)) return true;
+      }
+      return false;
+    };
+
+    const results = [];
+    for (let r0 = 0; r0 <= maxRow0; r0++) {
+      for (let i = minI; i <= maxI; i++) {
+        if (!isBoxFree(r0, i)) continue;
+
+        const hasAbove = touchesZoneAt(r0 - 1, i);
+        const hasBelow = touchesZoneAt(r0 + hCells, i);
+        if (!hasAbove && !hasBelow) continue;
+
+        results.push({
+          r0,
+          centerRow: r0 + hCells / 2,
+          centerCol: i + colOffset + wCells / 2,
+          hasAbove,
+          hasBelow,
+        });
+      }
+    }
+    return results;
   }
 
   _boardRectInfo(board) {
