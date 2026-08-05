@@ -4,6 +4,25 @@ export class ZoneTooltip {
   constructor(canvas) {
     this.canvas = canvas;
     this.el = document.getElementById("zoneTooltip");
+
+    // Real zones are write-once (Zone.cellSet/Zone.cost never change after
+    // Zone.create()), so once we've found where its tooltip box sits in
+    // cell-space, that answer is good for the rest of the match — cache it
+    // instead of re-running the box search (and re-measuring the DOM
+    // element) on every hover of a zone we've already solved.
+    // Not used for zone *previews* (unclaimed cells): those regenerate a
+    // fresh ad-hoc cellSet on nearly every hover, so there's nothing stable
+    // to key a cache on — see update() below, zoneId stays null for them.
+    this._placementCache = new Map(); // zoneId -> { chosen, cost }
+
+    // The cache is keyed purely on cell-space geometry (which board cells
+    // the tooltip box would land on), but that answer depends on how many
+    // board cells the tooltip's fixed CSS size covers right now — which
+    // changes with pinch-zoom (CSS transform scale) or a window resize.
+    // We already read cssCellW/cssCellH every call (needed for live pixel
+    // positioning regardless of caching), so comparing against the last
+    // seen values costs nothing extra and catches zoom *and* resize.
+    this._geometryKey = null;
   }
 
   hide() {
@@ -14,7 +33,7 @@ export class ZoneTooltip {
     if (!this.el) return;
 
     if (zonePreview) {
-      this._show(zonePreview.cellSet, zonePreview.cost, board);
+      this._show(null, zonePreview.cellSet, zonePreview.cost, board);
       return;
     }
 
@@ -25,17 +44,55 @@ export class ZoneTooltip {
     }
 
     const zone = zones[zoneId];
-    this._show(zone.cellSet, zone.cost, board);
+    this._show(zoneId, zone.cellSet, zone.cost, board);
   }
 
-  _show(cellSet, cost, board) {
-    const cells = Array.from(cellSet, Board.parse);
-    if (cells.length === 0) {
+  // zoneId is null for zone previews — see the cache comment in the
+  // constructor for why those always fall through to a fresh computation.
+  _show(zoneId, cellSet, cost, board) {
+    if (cellSet.size === 0) {
       this.hide();
       return;
     }
 
     const { cssCellW, cssCellH, offsetX, offsetY } = this._boardRectInfo(board);
+    this._syncGeometry(cssCellW, cssCellH);
+
+    let cached = zoneId !== null ? this._placementCache.get(zoneId) : null;
+    if (!cached) {
+      const chosen = this._computePlacement(cellSet, board, cost, cssCellW, cssCellH);
+      if (!chosen) {
+        this.hide();
+        return;
+      }
+      cached = { chosen, cost };
+      if (zoneId !== null) this._placementCache.set(zoneId, cached);
+    } else {
+      this.el.textContent = `Reward: ${cached.cost}`;
+    }
+
+    this.el.style.left = `${offsetX + cached.chosen.centerCol * cssCellW}px`;
+    this.el.style.top = `${offsetY + cached.chosen.centerRow * cssCellH}px`;
+    this.el.hidden = false;
+  }
+
+  // Clears the placement cache whenever the board's on-screen cell size
+  // changes (zoom or resize) — a cached box was chosen assuming the
+  // tooltip's fixed CSS footprint covered a certain number of *board*
+  // cells, and that count shifts with cell size even though nothing about
+  // the zone itself changed.
+  _syncGeometry(cssCellW, cssCellH) {
+    const key = `${cssCellW},${cssCellH}`;
+    if (key !== this._geometryKey) {
+      this._geometryKey = key;
+      this._placementCache.clear();
+    }
+  }
+
+  // Everything that's only needed on a cache miss: centroid, DOM
+  // measurement, and the box search.
+  _computePlacement(cellSet, board, cost, cssCellW, cssCellH) {
+    const cells = Array.from(cellSet, Board.parse);
 
     // ----- zone centroid (what we're trying to sit next to) -----
     const sumRow = cells.reduce((s, [r]) => s + r, 0);
@@ -50,15 +107,7 @@ export class ZoneTooltip {
     this.el.textContent = `Reward: ${cost}`;
     const { wCells, hCells } = this._measureBoxCells(cssCellW, cssCellH);
 
-    const chosen = this._findPlacement(cellSet, board, wCells, hCells, targetRow, targetCol);
-    if (!chosen) {
-      this.hide();
-      return;
-    }
-
-    this.el.style.left = `${offsetX + chosen.centerCol * cssCellW}px`;
-    this.el.style.top = `${offsetY + chosen.centerRow * cssCellH}px`;
-    this.el.hidden = false;
+    return this._findPlacement(cellSet, board, wCells, hCells, targetRow, targetCol);
   }
 
   // Measures the tooltip's real pixel footprint and converts it to a
@@ -91,13 +140,13 @@ export class ZoneTooltip {
       ...this._scanColumns(cellSet, board, wCells, hCells, 0),
       ...this._scanColumns(cellSet, board, wCells, hCells, 0.5),
     ];
+    if (raw.length === 0) return null;
 
     const placements = raw.map((p) => ({
       ...p,
       hDist: Math.abs(p.centerCol - targetCol),
       vDist: Math.abs(p.centerRow - targetRow),
     }));
-    if (placements.length === 0) return null;
 
     // prefer the box sitting above the zone (its bottom edge touches the zone)
     const preferred = placements.filter((p) => p.hasBelow);
@@ -105,14 +154,22 @@ export class ZoneTooltip {
     if (candidates.length === 0) return null;
 
     const score = (p) => 4 * p.hDist * p.hDist + p.vDist * p.vDist;
-    candidates.sort((a, b) => {
-      const diff = score(a) - score(b);
-      if (diff !== 0) return diff;
-      if (a.vDist !== b.vDist) return a.vDist - b.vDist;
-      return a.hDist - b.hDist;
-    });
-
-    return candidates[0];
+    // Single min-pass instead of a full sort — we only ever need the best
+    // candidate, not the whole ordering.
+    let best = candidates[0];
+    let bestScore = score(best);
+    for (let i = 1; i < candidates.length; i++) {
+      const p = candidates[i];
+      const s = score(p);
+      const better =
+        s < bestScore ||
+        (s === bestScore && (p.vDist < best.vDist || (p.vDist === best.vDist && p.hDist < best.hDist)));
+      if (better) {
+        best = p;
+        bestScore = s;
+      }
+    }
+    return best;
   }
 
   // colOffset 0: box left edge sits on a column line (checks exactly

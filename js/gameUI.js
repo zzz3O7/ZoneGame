@@ -137,17 +137,24 @@ export class GameUI {
     this.flipped = false;
     this.cursorCell = null; // otherwise the old anchor's ghost reappears for the new type out of nowhere
     this.gesture.reset();
-    this._render();
+    // Changes the ghost (canvas), which piece button is marked selected,
+    // and hasStaged (cursorCell/gesture just got reset) — but never the
+    // history panel, side plates, or game-over overlay.
+    this._syncCanvas();
+    this._syncControls();
   }
 
   rotate(direction) {
     this.rotationStep = (this.rotationStep + direction + 4) % 4;
-    this._render();
+    // Only the ghost shape's orientation changes — no button, panel, or
+    // plate depends on rotationStep.
+    this._syncCanvas();
   }
 
   flip() {
     this.flipped = !this.flipped;
-    this._render();
+    // Same as rotate: canvas-only.
+    this._syncCanvas();
   }
 
   currentShape() {
@@ -182,25 +189,35 @@ export class GameUI {
   startGesture(cell) {
     if (this.selectedType !== "gesture") return;
     this.gesture.start(cell);
-    this._render();
+    // Path/ghost on canvas + staged-button state — same footprint as a
+    // hover, so reuse it instead of a full render.
+    this._renderHover();
   }
 
   finishGesture() {
     if (!this.gesture.finish()) return;
-    this._render();
+    // finish() may populate gesture.pending, which flips hasStaged —
+    // canvas + staged buttons is exactly what changed.
+    this._renderHover();
   }
 
   cancelGesture() {
     this.gesture.cancel();
-    this._render();
+    this._renderHover();
   }
 
   confirmGesture() {
     const confirmed = this.gesture.confirm((type, shape, anchorRow, anchorCol) => {
       this._submitPlacement(type, shape, anchorRow, anchorCol);
     });
-    //if (confirmed && !this.matchClient) this._render();
-    this._render();
+    if (!confirmed) return; // nothing was pending — nothing changed
+
+    // Local placements: _submitPlacement() above already ran a full
+    // _render() (real game state changed — history, scores, turn, etc).
+    // Anything else (matchClient waiting on the server broadcast, or a
+    // turn-gated no-op) only cleared gesture state, so the cheap path
+    // is enough to make the now-empty ghost/path disappear.
+    if (this.matchClient) this._renderHover();
   }
 
   secondaryAction() {
