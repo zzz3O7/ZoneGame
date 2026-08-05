@@ -1,9 +1,13 @@
-perfomance
+    perfomance
 cache zone tooltip positions - main suspect
 zone tooltip remove sorting - just take the min element
-think of other costly operations
 Zone tooltip position cache maybe even for zone previews: cell -> cell
 Maybe try to separate render logic
+
+cache zone border calculation
+    split render
+cache zoneTooltip's position
+canvas splitting into a static layer and a dynamic layer
 
 rematch for multiplayer
 on opponent disconected show a message

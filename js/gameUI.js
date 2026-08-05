@@ -214,14 +214,22 @@ export class GameUI {
   // ===================== intents: board interaction =====================
 
   hover(cell) {
+    // mousemove/touchmove fire far more often than the resolved board cell
+    // actually changes (many events per cell while the pointer sits still
+    // or crawls within one cell) — bail before touching state or rendering
+    // anything. Clicks, piece-select, rotate/flip, gesture confirm etc. all
+    // trigger their own _render() independently of this, so this guard only
+    // ever skips genuinely redundant hover work, never a real update.
+    if (this.cursorCell && cell[0] === this.cursorCell[0] && cell[1] === this.cursorCell[1]) return;
     this.cursorCell = cell;
     this.gesture.extend(cell);
-    this._render();
+    this._renderHover();
   }
 
   clearHover() {
+    if (!this.cursorCell) return;
     this.cursorCell = null;
-    this._render();
+    this._renderHover();
   }
 
   placeAt([row, col]) {
@@ -565,6 +573,10 @@ export class GameUI {
     return [this.cursorCell, this.currentShape()];
   }
 
+  // Full re-sync: everything that can only change on an actual game-state
+  // event (placement, pass, selection/rotation/flip, gesture lifecycle,
+  // remote move applied, game over). Never call this from hover/pointer
+  // movement — see _renderHover below.
   _render() {
     this.canvas.classList.toggle("board--waiting", !this._isMyTurn());
     this._syncCanvas();
@@ -574,6 +586,18 @@ export class GameUI {
 
     const baseIndex = this.matchClient ? this.matchClient.myPlayerIndex : 0;
     this.historyPanel.render(this.game.history.all(), baseIndex);
+  }
+
+  // Cheap path for pointer movement (hover/clearHover). Only touches what
+  // cursor position can actually affect: the canvas (ghost/zone-preview/
+  // tooltip) and the confirm/discard buttons (staged-placement enablement
+  // depends on cursorCell for non-gesture piece types). Everything else in
+  // _render() — history panel rebuild, piece-selector buttons, side plates,
+  // game-over overlay — is invariant under hover and would just be wasted
+  // DOM/canvas work on every mousemove.
+  _renderHover() {
+    this._syncCanvas();
+    this._syncStagedButtons();
   }
 
   _syncCanvas() {
@@ -610,6 +634,14 @@ export class GameUI {
   }
 
   _syncControls() {
+    this._syncPieceButtons();
+    this._syncStagedButtons();
+  }
+
+  // Piece-type buttons + skip button: depend on selectedType, dominoLeft,
+  // turn/gameOver state — never on cursorCell. Only needs to run after
+  // real game/selection events, not on every hover.
+  _syncPieceButtons() {
     const player = this.game.currentPlayer;
     const canMove = this.game.canCurrentPlayerMove();
     const myTurn = this._isMyTurn(); // true always in local mode, real check online
@@ -628,7 +660,14 @@ export class GameUI {
       const countEl = skipBtn.querySelector(".piece-btn__count");
       if (countEl) countEl.textContent = `-${skipPenalty}`;
     }
+  }
 
+  // Confirm/discard buttons: hasStaged depends on cursorCell for non-gesture
+  // piece types (mouse hover alone stages a placement, same as touch), so
+  // this DOES need to run on hover — kept separate from _syncPieceButtons
+  // so hover doesn't pay for the querySelectorAll piece-button loop too.
+  _syncStagedButtons() {
+    const myTurn = this._isMyTurn();
     const hasStaged = !!this.gesture.pending || (this.selectedType !== "gesture" && !!this.cursorCell);
     const confirmBtn = document.getElementById("btnConfirm");
     const discardBtn = document.getElementById("btnDiscard");
