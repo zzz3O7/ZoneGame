@@ -28,6 +28,15 @@ export class GameUI {
     this.canvas = canvas;
     this.matchClient = matchClient; // null = local hotseat
 
+    // main.js reuses the same #board-canvas / document / control buttons
+    // across matches instead of recreating them, so every listener this
+    // instance registers must be revocable in one shot via destroy() —
+    // otherwise a rematch stacks a second full set of listeners on top of
+    // the first, and the old (finished) game's stale state keeps firing
+    // alongside the new one (e.g. the old game-over overlay flashing back
+    // on the very next touch).
+    this._abort = new AbortController();
+
     this.selectedType = "gesture";
     this.rotationStep = 0;
     this.flipped = false;
@@ -320,35 +329,53 @@ export class GameUI {
   }
 
   _bindCanvasEvents() {
-    this.canvas.addEventListener("mousedown", (e) => {
-      if (e.button !== 0) return;
-      this.startGesture(this._cellFromEvent(e));
-    });
+    const signal = this._abort.signal;
 
-    document.addEventListener("mouseup", () => this.finishGesture());
+    this.canvas.addEventListener(
+      "mousedown",
+      (e) => {
+        if (e.button !== 0) return;
+        this.startGesture(this._cellFromEvent(e));
+      },
+      { signal },
+    );
 
-    this.canvas.addEventListener("mousemove", (e) => this.hover(this._cellFromEvent(e)));
-    this.canvas.addEventListener("mouseleave", () => this.clearHover());
+    document.addEventListener("mouseup", () => this.finishGesture(), { signal });
 
-    this.canvas.addEventListener("click", (e) => {
-      if (this.gesture.consumeSuppressedClick()) return;
-      if (this.gesture.pending) {
-        this.confirmGesture();
-        return;
-      }
-      if (this.selectedType === "gesture") return; // nothing drawn/confirmed yet
-      this.placeAt(this._cellFromEvent(e));
-    });
+    this.canvas.addEventListener("mousemove", (e) => this.hover(this._cellFromEvent(e)), { signal });
+    this.canvas.addEventListener("mouseleave", () => this.clearHover(), { signal });
 
-    this.canvas.addEventListener("contextmenu", (e) => {
-      e.preventDefault();
-      this.secondaryAction();
-    });
+    this.canvas.addEventListener(
+      "click",
+      (e) => {
+        if (this.gesture.consumeSuppressedClick()) return;
+        if (this.gesture.pending) {
+          this.confirmGesture();
+          return;
+        }
+        if (this.selectedType === "gesture") return; // nothing drawn/confirmed yet
+        this.placeAt(this._cellFromEvent(e));
+      },
+      { signal },
+    );
 
-    this.canvas.addEventListener("wheel", (e) => {
-      e.preventDefault();
-      this.rotate(e.deltaY > 0 ? 1 : -1);
-    });
+    this.canvas.addEventListener(
+      "contextmenu",
+      (e) => {
+        e.preventDefault();
+        this.secondaryAction();
+      },
+      { signal },
+    );
+
+    this.canvas.addEventListener(
+      "wheel",
+      (e) => {
+        e.preventDefault();
+        this.rotate(e.deltaY > 0 ? 1 : -1);
+      },
+      { signal },
+    );
 
     // Touch: 1 finger = existing mouse-equivalent flow (hover / gesture
     // draw), never touches the view transform. 2 fingers = pinch-zoom/pan,
@@ -391,7 +418,7 @@ export class GameUI {
           this._startPinch(e.touches);
         }
       },
-      { passive: false },
+      { passive: false, signal },
     );
 
     this.canvas.addEventListener(
@@ -410,7 +437,7 @@ export class GameUI {
           this._applyPinch(e.touches);
         }
       },
-      { passive: false },
+      { passive: false, signal },
     );
 
     this.canvas.addEventListener(
@@ -446,7 +473,7 @@ export class GameUI {
           this._startPinch(e.touches); // still 2+, rebase to avoid a jump
         }
       },
-      { passive: false },
+      { passive: false, signal },
     );
   }
 
@@ -479,37 +506,52 @@ export class GameUI {
   }
 
   _bindControls() {
+    const signal = this._abort.signal;
+
     // Single shared control row (lives in the left "Controls" panel) — it
     // always acts on whichever player's turn it currently is.
     document.querySelectorAll(".piece-selector button[data-type]").forEach((btn) => {
-      btn.addEventListener("click", () => this.selectType(btn.dataset.type));
+      btn.addEventListener("click", () => this.selectType(btn.dataset.type), { signal });
     });
 
     document.querySelectorAll(".piece-btn--skip").forEach((btn) => {
-      btn.addEventListener("click", () => this.skipTurn());
+      btn.addEventListener("click", () => this.skipTurn(), { signal });
     });
 
-    document.getElementById("btnRotateLeft")?.addEventListener("click", () => this.rotate(-1));
-    document.getElementById("btnRotateRight")?.addEventListener("click", () => this.rotate(1));
-    document.getElementById("btnFlip")?.addEventListener("click", () => this.flip());
-    document.getElementById("btnConfirm")?.addEventListener("click", () => this.confirmStaged());
-    document.getElementById("btnDiscard")?.addEventListener("click", () => this.discardStaged());
+    document.getElementById("btnRotateLeft")?.addEventListener("click", () => this.rotate(-1), { signal });
+    document.getElementById("btnRotateRight")?.addEventListener("click", () => this.rotate(1), { signal });
+    document.getElementById("btnFlip")?.addEventListener("click", () => this.flip(), { signal });
+    document.getElementById("btnConfirm")?.addEventListener("click", () => this.confirmStaged(), { signal });
+    document.getElementById("btnDiscard")?.addEventListener("click", () => this.discardStaged(), { signal });
 
-    document.addEventListener("keydown", (event) => {
-      const type = KEY_TO_TYPE[event.key];
-      if (type) {
-        this.selectType(type);
-        return;
-      }
-      if (event.key === "r") {
-        this.rotate(1);
-        return;
-      }
-      if (event.key === "f") {
-        this.secondaryAction();
-        return;
-      }
-    });
+    document.addEventListener(
+      "keydown",
+      (event) => {
+        const type = KEY_TO_TYPE[event.key];
+        if (type) {
+          this.selectType(type);
+          return;
+        }
+        if (event.key === "r") {
+          this.rotate(1);
+          return;
+        }
+        if (event.key === "f") {
+          this.secondaryAction();
+          return;
+        }
+      },
+      { signal },
+    );
+  }
+
+  // Revoke every listener this instance registered (canvas, document,
+  // and the shared control buttons) in one shot. main.js must call this
+  // before creating a new GameUI for a rematch — see the constructor
+  // comment for why: those DOM nodes are reused, not recreated, per match.
+  destroy() {
+    this._abort.abort();
+    this.historyPanel.destroy();
   }
 
   // ===================== render: fully re-derive the DOM from state =====================

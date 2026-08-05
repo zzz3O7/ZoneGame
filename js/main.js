@@ -27,6 +27,8 @@ function setupMatchClient(conn) {
 function startGame(game, matchClient = null) {
   showScreen(gameScreen);
 
+  ui?.destroy(); // tear down the previous match's listeners before reusing the same DOM
+
   const canvas = document.getElementById("board-canvas");
   const renderer = new Renderer(canvas, game.board, game.zoneRadius);
 

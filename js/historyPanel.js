@@ -7,10 +7,21 @@ export class HistoryPanel {
     this.onChipHover = onChipHover;
     this.onPanelHover = onPanelHover;
 
+    // Same reused-DOM situation as GameUI (see its constructor comment):
+    // a new HistoryPanel is created per match against the same container
+    // element, so these need to be revocable — otherwise a rematch's old
+    // instance keeps firing onPanelHover with its stale game reference.
+    this._abort = new AbortController();
+
     if (this.container) {
-      this.container.addEventListener("mouseenter", () => this.onPanelHover(true));
-      this.container.addEventListener("mouseleave", () => this.onPanelHover(false));
+      const signal = this._abort.signal;
+      this.container.addEventListener("mouseenter", () => this.onPanelHover(true), { signal });
+      this.container.addEventListener("mouseleave", () => this.onPanelHover(false), { signal });
     }
+  }
+
+  destroy() {
+    this._abort.abort();
   }
 
   // baseIndex is the "blue" player for this view: 0 in hotseat,

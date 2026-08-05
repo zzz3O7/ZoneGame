@@ -22,11 +22,49 @@ export class GestureInput {
   }
 
   extend(cell) {
-    if (!this.isDrawing) return;
-    const key = Board.key(...cell);
-    if (this.seen.has(key)) return;
-    this.seen.add(key);
-    this.path.push(cell);
+    if (!this.isDrawing) return false;
+    const last = this.path[this.path.length - 1];
+    // Consecutive touchmove/mousemove events can be more than one cell
+    // apart on a slow frame (fast finger swipe, low framerate, or just a
+    // sparse browser event rate) — walk the grid line between the last
+    // recorded point and this one so the path has no gaps, instead of
+    // just recording the endpoints.
+    const cells = last ? GestureInput._lineCells(last, cell) : [cell];
+    let grew = false;
+    for (const c of cells) {
+      const key = Board.key(...c);
+      if (this.seen.has(key)) continue;
+      this.seen.add(key);
+      this.path.push(c);
+      grew = true;
+    }
+    return grew;
+  }
+
+  // Bresenham grid-line walk from `from` to `to`, exclusive of `from`
+  // (which is already in the path) and inclusive of `to`.
+  static _lineCells([r0, c0], [r1, c1]) {
+    const cells = [];
+    const dr = Math.abs(r1 - r0);
+    const dc = Math.abs(c1 - c0);
+    const sr = r0 < r1 ? 1 : -1;
+    const sc = c0 < c1 ? 1 : -1;
+    let err = dr - dc;
+    let r = r0;
+    let c = c0;
+    while (r !== r1 || c !== c1) {
+      const e2 = 2 * err;
+      if (e2 > -dc) {
+        err -= dc;
+        r += sr;
+      }
+      if (e2 < dr) {
+        err += dr;
+        c += sc;
+      }
+      cells.push([r, c]);
+    }
+    return cells;
   }
 
   finish() {
