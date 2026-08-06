@@ -12,6 +12,7 @@ const gameScreen = document.getElementById("gameScreen");
 
 let ui = null;
 let lastLocalParams = null; // set only for local hotseat games; drives rematch/same-board
+let currentConnection = null; // ADDED: so leaving (back to menu / cancel) can actually close the socket
 
 function showScreen(screen) {
   [menuScreen, waitingRoomScreen, gameScreen].forEach((s) => (s.hidden = s !== screen));
@@ -56,6 +57,7 @@ new Menu({
 
   onCreateMatch: async (nickname, params) => {
     const conn = new Connection(`wss://${location.host}/ws`);
+    currentConnection = conn; // ADDED
     await conn.connect();
 
     const matchClient = setupMatchClient(conn);
@@ -68,6 +70,7 @@ new Menu({
 
   onJoinMatch: async (nickname, code) => {
     const conn = new Connection(`wss://${location.host}/ws`);
+    currentConnection = conn; // ADDED
     await conn.connect();
 
     const matchClient = setupMatchClient(conn);
@@ -89,7 +92,11 @@ document.getElementById("btnCopyCode").addEventListener("click", (event) => {
 });
 
 document.getElementById("btnCancelWait").addEventListener("click", () => {
-  // TODO: needs a proper leave/cancel message to server later.
+  // FIXED: actually tear down the socket so the server's disconnect/abort
+  // handling (server/match.js) runs instead of leaving a ghost connection open.
+  // Still just a raw close, not a clean LEAVE_MATCH — that comes with resign/rematch.
+  currentConnection?.close();
+  currentConnection = null;
   showScreen(menuScreen);
 });
 
@@ -104,6 +111,12 @@ document.getElementById("btnSameBoard").addEventListener("click", () => {
 });
 
 document.getElementById("btnBackToMenu").addEventListener("click", () => {
-  // TODO: online matches need a proper leave message too, once that exists.
+  // FIXED: same as cancel — close the socket so the server sees this player
+  // leave instead of the match sitting open with a dead-in-practice connection.
+  // Mid-game this still just reads as an ordinary disconnect to the server
+  // (10s grace period, then abort) rather than an immediate forfeit — that
+  // distinction goes away once resign/leave are wired through properly.
+  currentConnection?.close();
+  currentConnection = null;
   showScreen(menuScreen);
 });

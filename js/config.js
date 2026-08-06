@@ -41,6 +41,12 @@ export const LAYOUT = {
 
 export const PASS_PENALTY = 0.9; // global, not mode-tunable (yet)
 
+// How long a match stays alive after a player disconnects before the server
+// gives up and aborts it. Server-only concern, but lives here with the other
+// tunables rather than buried in match.js. 10s for testing — bump way up
+// (60-90s) before this goes live for real.
+export const DISCONNECT_ABORT_MS = 10_000;
+
 // Fixed presets. Adding a new mode later = one more entry here, nothing else changes.
 export const MODES = {
   classic: { label: "Classic", boardSize: 20, zoneRadius: 4, startingDominoes: 2 },

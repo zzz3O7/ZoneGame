@@ -14,7 +14,6 @@ export const MSG = {
   OPPONENT_RECONNECTED: "opponentReconnected", // server -> client
   RECONNECT_ATTEMPT: "reconnectAttempt", // client -> server: { matchId, sessionId }
   RECONNECT_FAILED: "reconnectFailed", // server -> client: { reason }
-  MATCH_ABORTED: "matchAborted", // server -> remaining client: { reason }
 
   // ADDED: state sync — shared by reconnect success AND hash-mismatch resync
   REQUEST_RESYNC: "requestResync", // client -> server
@@ -23,8 +22,12 @@ export const MSG = {
   // ADDED: leaving / ending outside the normal move flow
   RESIGN: "resign", // client -> server
   LEAVE_MATCH: "leaveMatch", // client -> server (waiting-room cancel, or mid/post-game leave — mid-game counts as resign)
-  MATCH_ENDED: "matchEnded", // server -> both: { reason: "resign" | "abort", winnerIndex }
-  OPPONENT_LEFT: "opponentLeft", // server -> remaining client
+  // reason: "resign" | "abort" — abort covers both a live-game forfeit-by-
+  // disconnect-timeout AND the natural "no-moves" end broadcast via moveApplied's
+  // own gameOver flag; MATCH_ENDED is specifically for endings that don't come
+  // from a move being applied. winnerIndex is null only if truly moot (shouldn't happen).
+  MATCH_ENDED: "matchEnded", // server -> remaining/both: { reason, winnerIndex }
+  OPPONENT_LEFT: "opponentLeft", // server -> remaining client (match was already over — no forfeit, just no rematch coming)
 
   // ADDED: rematch
   REMATCH_REQUEST: "rematchRequest", // client -> server

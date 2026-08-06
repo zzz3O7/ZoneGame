@@ -3,6 +3,7 @@ export class Connection {
     this.url = url;
     this.ws = null;
     this.handlers = new Map();
+    this.intentionalClose = false; // ADDED: set by close(); lets a later reconnect flow (step 3) tell "user left on purpose" apart from "connection dropped"
   }
 
   connect() {
@@ -41,5 +42,15 @@ export class Connection {
     }
     this.ws.send(JSON.stringify(msg));
     return true;
+  }
+
+  // ADDED: explicit teardown for "the user walked away" (back to menu,
+  // cancel waiting room, starting a different match). Without this the old
+  // socket just sits open in the background forever — the server's
+  // disconnect/abort handling only ever runs off a real 'close' event, so
+  // if we never close it, the server has no idea the player left.
+  close() {
+    this.intentionalClose = true;
+    this.ws?.close();
   }
 }

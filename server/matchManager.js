@@ -37,7 +37,9 @@ export class MatchManager {
       inviteCode = genInviteCode();
     } while (this.matchesByCode.has(inviteCode));
 
-    const match = new Match(matchId, inviteCode, params);
+    // ADDED: match tells us when it's actually done (abort timeout), instead
+    // of us guessing and removing it the instant a socket drops.
+    const match = new Match(matchId, inviteCode, params, () => this.removeMatch(matchId));
     const player = match.addPlayer(nickname, ws);
 
     this.matchesById.set(matchId, match);

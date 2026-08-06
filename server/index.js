@@ -79,12 +79,11 @@ wss.on("connection", (ws) => {
   });
 
   ws.on("close", () => {
-    // ADDED: notify opponent + cleanup, instead of TODO stub
+    // FIXED: disconnect no longer force-removes the match — handleDisconnect
+    // starts a grace-period timer and only the match itself decides when
+    // it's truly done (see Match._onAbortTimeout / the onClose callback).
     const match = manager.findMatchByWs(ws);
-    if (match) {
-      match.handleDisconnect(ws);
-      manager.removeMatch(match.matchId);
-    }
+    if (match) match.handleDisconnect(ws);
   });
 });
 
