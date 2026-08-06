@@ -34,6 +34,16 @@ export class Game {
     this.currentPlayerIndex = 0;
     this.gameOver = false;
     this.history = new MoveHistory();
+
+    // Cache of "can this player move at all" per player, refreshed once
+    // whenever board/zone/domino state actually changes (see
+    // _refreshMoveAvailability). Rules.canPlayerMove is a full-board scan
+    // (rows x cols x piece types x shape variants) — reading a cached
+    // value instead of rescanning is what canCurrentPlayerMove(),
+    // _checkGameEnd(), and pass()'s gate check all do now, instead of each
+    // independently rescanning the same unchanged state.
+    this._canMove = [true, true];
+    this._refreshMoveAvailability();
   }
 
   get currentPlayer() {
@@ -41,7 +51,11 @@ export class Game {
   }
 
   canCurrentPlayerMove() {
-    return Rules.canPlayerMove(this.board, this.zones, this.currentPlayer);
+    return this._canMove[this.currentPlayerIndex];
+  }
+
+  _refreshMoveAvailability() {
+    this._canMove = this.players.map((player) => Rules.canPlayerMove(this.board, this.zones, player));
   }
 
   attemptPlacement(pieceType, shape, anchorRow, anchorCol) {
@@ -65,6 +79,12 @@ export class Game {
     }
 
     const completions = this._checkZoneCompletions();
+
+    // Board/zones/dominoLeft just changed — everything _checkGameEnd() and
+    // the UI's skip-button state need to know about move availability has
+    // to be recomputed here, once, rather than each reader rescanning the
+    // board independently.
+    this._refreshMoveAvailability();
 
     const entry = this.history.record({
       playerIndex: this.currentPlayerIndex,
@@ -125,7 +145,7 @@ export class Game {
   }
 
   _checkGameEnd() {
-    const noOneCanMove = this.players.every((player) => !Rules.canPlayerMove(this.board, this.zones, player));
+    const noOneCanMove = this._canMove.every((canMove) => !canMove);
     if (noOneCanMove) this.gameOver = true;
   }
 
