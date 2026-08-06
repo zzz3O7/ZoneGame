@@ -136,9 +136,18 @@ export class ZoneTooltip {
   // center on a half-cell, so without the shifted pass there'd be no
   // candidate that actually sits centered on them.
   _findPlacement(cellSet, board, wCells, hCells, targetRow, targetCol) {
+    // A valid box must directly touch a zone cell (its row/col-adjacent
+    // edge), so it can only ever land within hCells/wCells of the zone's
+    // own bounding box — scanning the whole board past that is guaranteed
+    // wasted work. Padding by hCells/wCells (rather than the exact tight
+    // bound) keeps this provably a superset of every valid candidate, so
+    // it can't skip a real placement, while still shrinking the search
+    // from board-sized to zone-sized for the common case of a small zone
+    // on a large board.
+    const bounds = this._searchBounds(cellSet, board, wCells, hCells);
     const raw = [
-      ...this._scanColumns(cellSet, board, wCells, hCells, 0),
-      ...this._scanColumns(cellSet, board, wCells, hCells, 0.5),
+      ...this._scanColumns(cellSet, board, wCells, hCells, 0, bounds),
+      ...this._scanColumns(cellSet, board, wCells, hCells, 0.5, bounds),
     ];
     if (raw.length === 0) return null;
 
@@ -172,12 +181,32 @@ export class ZoneTooltip {
     return best;
   }
 
+  _searchBounds(cellSet, board, wCells, hCells) {
+    let minRow = Infinity,
+      maxRow = -Infinity,
+      minCol = Infinity,
+      maxCol = -Infinity;
+    for (const key of cellSet) {
+      const [r, c] = Board.parse(key);
+      if (r < minRow) minRow = r;
+      if (r > maxRow) maxRow = r;
+      if (c < minCol) minCol = c;
+      if (c > maxCol) maxCol = c;
+    }
+    return {
+      minRow: Math.max(0, minRow - hCells),
+      maxRow: Math.min(board.rows - hCells, maxRow + 1),
+      minCol: Math.max(0, minCol - wCells - 1),
+      maxCol: Math.min(board.cols - 1, maxCol + wCells + 1),
+    };
+  }
+
   // colOffset 0: box left edge sits on a column line (checks exactly
   // wCells columns). colOffset 0.5: box straddles a column line, so it
   // partially covers one extra column on each side - those must still be
   // free, but only the fully-covered "core" columns count for the
   // zone-adjacency check.
-  _scanColumns(cellSet, board, wCells, hCells, colOffset) {
+  _scanColumns(cellSet, board, wCells, hCells, colOffset, bounds) {
     const straddling = colOffset > 0;
     const overlapSpan = straddling ? wCells + 1 : wCells;
     const coreStart = straddling ? 1 : 0;
@@ -185,9 +214,10 @@ export class ZoneTooltip {
     if (coreSpan <= 0) return []; // box too narrow to straddle meaningfully
 
     const margin = board.cols - overlapSpan >= 2 ? 1 : 0;
-    const minI = margin;
-    const maxI = board.cols - overlapSpan - margin;
-    const maxRow0 = board.rows - hCells;
+    const minI = Math.max(margin, bounds.minCol);
+    const maxI = Math.min(board.cols - overlapSpan - margin, bounds.maxCol);
+    const minRow0 = Math.max(0, bounds.minRow);
+    const maxRow0 = Math.min(board.rows - hCells, bounds.maxRow);
 
     const isBoxFree = (r0, i) => {
       for (let r = r0; r < r0 + hCells; r++) {
@@ -207,7 +237,7 @@ export class ZoneTooltip {
     };
 
     const results = [];
-    for (let r0 = 0; r0 <= maxRow0; r0++) {
+    for (let r0 = minRow0; r0 <= maxRow0; r0++) {
       for (let i = minI; i <= maxI; i++) {
         if (!isBoxFree(r0, i)) continue;
 
