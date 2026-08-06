@@ -13,6 +13,13 @@ export class HistoryPanel {
     // instance keeps firing onPanelHover with its stale game reference.
     this._abort = new AbortController();
 
+    // Entries are append-only (see history.js — record() only ever
+    // pushes) and baseIndex is fixed for the whole match, so once a row is
+    // rendered it never needs to be touched again. Tracking how many rows
+    // are already in the DOM lets render() append just the new ones
+    // instead of wiping and rebuilding the whole panel every move.
+    this._renderedCount = 0;
+
     if (this.container) {
       const signal = this._abort.signal;
       this.container.addEventListener("mouseenter", () => this.onPanelHover(true), { signal });
@@ -30,10 +37,21 @@ export class HistoryPanel {
   render(entries, baseIndex) {
     if (!this.container) return;
 
-    this.container.innerHTML = "";
-    for (let i = 0; i < entries.length; i++) {
+    // Defensive fallback: nothing today removes or truncates history, so
+    // this shouldn't trigger — but a future reconnect/resync could replace
+    // the log wholesale, and silently rendering an incremental diff
+    // against a shrunk list would produce a wrong panel instead of an
+    // obviously-broken one.
+    if (entries.length < this._renderedCount) {
+      this.container.innerHTML = "";
+      this._renderedCount = 0;
+    }
+
+    for (let i = this._renderedCount; i < entries.length; i++) {
       this.container.appendChild(this._buildRow(entries[i], i, baseIndex));
     }
+    this._renderedCount = entries.length;
+
     this.container.scrollTop = this.container.scrollHeight;
   }
 
