@@ -2,6 +2,8 @@ rematch for multiplayer
 on opponent disconected show a message
 reconnect
 
+in multiplauer dont block the domino button on opponent's turn if you have the domino and he doesn't
+
 calc drawings (+ undo/redo for drawings)
 
 ??? skip move - 10% penalty on all points ( concecutive passess are not allowed)
@@ -10,5 +12,7 @@ time control
 
 sound
 undo/redo
+
+matchStart currently arrives before matchJoined
 
 ??? on different grid sizes board is still a square not a rectangle and tiles are squished

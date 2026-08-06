@@ -13,6 +13,7 @@ export class MatchManager {
   constructor() {
     this.matchesById = new Map();
     this.matchesByCode = new Map();
+    this.matchesBySessionId = new Map(); // ADDED: durable identity -> match, for reconnect
   }
 
   findMatchByWs(ws) {
@@ -23,6 +24,12 @@ export class MatchManager {
     return null;
   }
 
+  // ADDED: used by the reconnect handshake — the incoming ws is brand new
+  // and not yet linked to anything, so we can't look up by ws here.
+  findMatchBySessionId(sessionId) {
+    return this.matchesBySessionId.get(sessionId) || null;
+  }
+
   createMatch(nickname, ws, params) {
     const matchId = randomUUID();
     let inviteCode;
@@ -31,11 +38,12 @@ export class MatchManager {
     } while (this.matchesByCode.has(inviteCode));
 
     const match = new Match(matchId, inviteCode, params);
-    match.addPlayer(nickname, ws);
+    const player = match.addPlayer(nickname, ws);
 
     this.matchesById.set(matchId, match);
     this.matchesByCode.set(inviteCode, match);
-    return match;
+    this.matchesBySessionId.set(player.sessionId, match);
+    return { match, player };
   }
 
   joinMatch(inviteCode, nickname, ws) {
@@ -43,8 +51,9 @@ export class MatchManager {
     if (!match) return { error: "Match not found" };
     if (match.isFull()) return { error: "Match already full" };
 
-    match.addPlayer(nickname, ws);
-    return match;
+    const player = match.addPlayer(nickname, ws);
+    this.matchesBySessionId.set(player.sessionId, match);
+    return { match, player };
   }
 
   removeMatch(matchId) {
@@ -52,5 +61,6 @@ export class MatchManager {
     if (!match) return;
     this.matchesById.delete(matchId);
     this.matchesByCode.delete(match.inviteCode);
+    for (const p of match.players) this.matchesBySessionId.delete(p.sessionId); // ADDED
   }
 }

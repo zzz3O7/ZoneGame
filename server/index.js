@@ -28,13 +28,14 @@ wss.on("connection", (ws) => {
 
     try {
       if (msg.type === MSG.CREATE_MATCH) {
-        const match = manager.createMatch(msg.nickname, ws, msg.params);
+        const { match, player } = manager.createMatch(msg.nickname, ws, msg.params);
         ws.send(
           JSON.stringify({
             type: MSG.MATCH_CREATED,
             matchId: match.matchId,
             inviteCode: match.inviteCode,
-            yourPlayerIndex: 0,
+            yourPlayerIndex: player.playerIndex,
+            sessionId: player.sessionId, // ADDED
           }),
         );
         return;
@@ -46,11 +47,13 @@ wss.on("connection", (ws) => {
           ws.send(JSON.stringify({ type: MSG.ERROR, message: result.error }));
           return;
         }
+        const { match, player } = result;
         ws.send(
           JSON.stringify({
             type: MSG.MATCH_JOINED,
-            matchId: result.matchId,
-            yourPlayerIndex: 1,
+            matchId: match.matchId,
+            yourPlayerIndex: player.playerIndex,
+            sessionId: player.sessionId, // ADDED
           }),
         );
         return;

@@ -1,3 +1,4 @@
+import { randomUUID } from "crypto";
 import { Game } from "../js/game.js";
 import { resolveParams } from "../js/params.js";
 import { MSG } from "../js/net/protocol.js";
@@ -6,7 +7,7 @@ export class Match {
   constructor(matchId, inviteCode, rawParams) {
     this.matchId = matchId;
     this.inviteCode = inviteCode;
-    this.players = []; // { nickname, playerIndex, ws }
+    this.players = []; // { nickname, playerIndex, ws, sessionId }
     this.status = "waiting"; // waiting | active | done
     this.game = null;
 
@@ -17,12 +18,23 @@ export class Match {
     this.params = resolveParams(rawParams?.mode, rawParams);
   }
 
+  // ADDED: sessionId is the durable player identity — a ws is just whichever
+  // socket currently happens to be attached to that identity, and it's
+  // expected to change across reconnects/refreshes. Never key player state
+  // off ws itself for anything meant to survive a reconnect.
   addPlayer(nickname, ws) {
     const playerIndex = this.players.length;
-    const player = { nickname, playerIndex, ws };
+    const sessionId = randomUUID();
+    const player = { nickname, playerIndex, ws, sessionId };
     this.players.push(player);
     if (this.players.length === 2) this._start();
     return player;
+  }
+
+  // ADDED: lookup used by the reconnect/resync handshake, before a new ws
+  // has been associated with this match.
+  findPlayerBySessionId(sessionId) {
+    return this.players.find((p) => p.sessionId === sessionId) || null;
   }
 
   isFull() {

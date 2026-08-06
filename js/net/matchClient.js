@@ -1,6 +1,8 @@
 import { Game } from "../game.js";
 import { MSG } from "./protocol.js";
 
+const SESSION_KEY = "zonegame.session"; // ADDED
+
 export class MatchClient {
   constructor(connection) {
     this.connection = connection;
@@ -9,6 +11,7 @@ export class MatchClient {
     this.myPlayerIndex = null;
     this.playerNames = null;
     this.game = null;
+    this.sessionId = null; // ADDED: durable identity, survives a ws reconnect
 
     this.onCreated = null; // (inviteCode) => void
     this.onMatchStart = null; // (game) => void
@@ -54,12 +57,50 @@ export class MatchClient {
     this.matchId = msg.matchId;
     this.inviteCode = msg.inviteCode;
     this.myPlayerIndex = msg.yourPlayerIndex;
+    this.sessionId = msg.sessionId; // ADDED
+    this._saveSession(); // ADDED
     this.onCreated?.(this.inviteCode);
   }
 
   _handleJoined(msg) {
     this.matchId = msg.matchId;
     this.myPlayerIndex = msg.yourPlayerIndex;
+    this.sessionId = msg.sessionId; // ADDED
+    this._saveSession(); // ADDED
+  }
+
+  // ADDED: session persistence — matchId + sessionId is enough for the
+  // server to identify this player on a fresh ws (see RECONNECT_ATTEMPT).
+  // sessionStorage (not localStorage) is deliberate: a reconnect should
+  // only be offered within the tab/session that was actually playing,
+  // not silently resurrected in unrelated tabs later.
+  _saveSession() {
+    try {
+      sessionStorage.setItem(SESSION_KEY, JSON.stringify({ matchId: this.matchId, sessionId: this.sessionId }));
+    } catch {
+      // storage unavailable (private browsing, etc.) — reconnect-on-refresh
+      // just won't be offered; not fatal.
+    }
+  }
+
+  // ADDED: read back on load, e.g. to decide whether to offer reconnect.
+  static loadSession() {
+    try {
+      const raw = sessionStorage.getItem(SESSION_KEY);
+      return raw ? JSON.parse(raw) : null;
+    } catch {
+      return null;
+    }
+  }
+
+  // ADDED: called once a match is truly over for this client (resigned,
+  // aborted, opponent left, or they backed out) — nothing left to reconnect to.
+  static clearSession() {
+    try {
+      sessionStorage.removeItem(SESSION_KEY);
+    } catch {
+      // ignore
+    }
   }
 
   _handleMatchStart(msg) {
