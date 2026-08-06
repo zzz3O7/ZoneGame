@@ -1,7 +1,6 @@
 import { LAYOUT, THEME } from "./config.js";
 import { Board } from "./board.js";
 import { Shape } from "./shape.js";
-import { Zone } from "./zone.js";
 import { Rules } from "./rules.js";
 import { ORTHOGONAL_EDGES } from "./directions.js";
 
@@ -87,12 +86,13 @@ export class Renderer {
     gesturePath,
     highlightEntry,
     hoveredZoneIds,
+    zonePreview,
   ) {
     const ctx = this.ctx;
     ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
     const zoneIds = hoveredZoneIds ?? this._cursorZoneIdSet(board, cursorCell);
     this._drawZoneHighlight(ctx, zones, zoneIds);
-    this._drawZonePreview(ctx, board, anchorShape, anchorCell);
+    this._drawZonePreview(ctx, zonePreview);
     this._drawMoveHighlight(ctx, highlightEntry);
     this._drawGesturePath(ctx, gesturePath);
     this._drawGhost(ctx, board, zones, currentPlayerIndex, viewer, pieceType, anchorShape, anchorCell);
@@ -245,10 +245,11 @@ export class Renderer {
     }
   }
 
-  _drawZonePreview(ctx, board, anchorShape, anchorCell) {
-    if (!anchorCell || !anchorShape) return;
-    const [r, c] = anchorCell;
-    const preview = Zone.preview(board, r, c, this.zoneRadius);
+  // preview is the already-computed Zone.preview() result (or null) —
+  // GameUI computes it once in _syncCanvas() for the tooltip's "is the
+  // cursor inside it" check, so the renderer just draws it instead of
+  // recomputing the same flood-fill a second time.
+  _drawZonePreview(ctx, preview) {
     if (!preview) return;
 
     ctx.fillStyle = THEME.pendingNewZone;
