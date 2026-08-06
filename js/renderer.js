@@ -5,15 +5,30 @@ import { Zone } from "./zone.js";
 import { Rules } from "./rules.js";
 import { ORTHOGONAL_EDGES } from "./directions.js";
 
+// Two stacked, same-size canvases instead of one:
+//  - staticCanvas: board grid, zone fills/borders, placed pieces. Only
+//    changes on a genuine game-state event (placement, pass, remote move),
+//    so it's only redrawn from renderStatic() — called once per real
+//    _render(), never from hover/rotate/flip/selection.
+//  - canvas: ghost/zone-preview/gesture-path/highlights. Depends on
+//    cursor/selection state, redrawn every renderDynamic() call (i.e.
+//    every hover too).
+// Splitting them means a hover no longer re-rasterizes the whole board —
+// the browser compositor reuses the static layer's pixels for free, and
+// renderDynamic() only has to clear+redraw the comparatively sparse
+// cursor-dependent bits. Both canvases stay perfectly aligned because
+// they're sized identically and share one CSS transform (applyTransform).
 export class Renderer {
-  constructor(canvas, board, zoneRadius) {
-    this.canvas = canvas;
+  constructor(canvas, staticCanvas, board, zoneRadius) {
+    this.canvas = canvas; // dynamic/interactive layer (also the pointer-event target)
+    this.staticCanvas = staticCanvas;
     this.ctx = canvas.getContext("2d");
+    this.staticCtx = staticCanvas.getContext("2d");
     this.zoneRadius = zoneRadius;
 
-    // Rasterized once per render() call (a discrete game event — hover,
+    // Rasterized once per render call (a discrete game event — hover,
     // rotate, placement), never per animation frame: pinch-zoom is a pure
-    // CSS transform on the canvas element (see gameUI.js _applyPinch), so
+    // CSS transform on the canvas elements (see gameUI.js _applyPinch), so
     // it never triggers a redraw. That means we can afford a much higher
     // base resolution than the on-screen board size would suggest, so the
     // raster stays crisp instead of blurring when the CSS transform scales
@@ -23,8 +38,8 @@ export class Renderer {
     const resolution = Math.min(targetResolution, LAYOUT.maxCanvasDimension);
 
     this.cellSize = Math.floor(resolution / Math.max(board.cols, board.rows));
-    canvas.width = board.cols * this.cellSize;
-    canvas.height = board.rows * this.cellSize;
+    canvas.width = staticCanvas.width = board.cols * this.cellSize;
+    canvas.height = staticCanvas.height = board.rows * this.cellSize;
 
     // Precomputed once per Renderer instance (cellSize is fixed for its
     // lifetime) — see LAYOUT.*Ratio comment in config.js for why these are
@@ -36,7 +51,32 @@ export class Renderer {
     this.pieceInset = this.cellSize * LAYOUT.pieceInsetRatio;
   }
 
-  render(
+  // Applies pinch-zoom/pan to both layers in one call, so they always move
+  // together — GameUI never has to know there are two canvases.
+  applyTransform(transform) {
+    this.canvas.style.transform = transform;
+    this.staticCanvas.style.transform = transform;
+  }
+
+  // "Waiting for opponent" dimming — applied to both layers so the effect
+  // reads as one dimmed board rather than just dimming the (mostly
+  // transparent) dynamic layer on top of a still-bright static one.
+  setWaiting(waiting) {
+    // <============================================================================= TODO remove active???
+    this.canvas.classList.toggle("board--waiting", waiting);
+    this.staticCanvas.classList.toggle("board--waiting", waiting);
+  }
+
+  renderStatic(board, zones, viewerIndex, entries) {
+    const ctx = this.staticCtx;
+    ctx.clearRect(0, 0, this.staticCanvas.width, this.staticCanvas.height);
+    this._drawBoard(ctx, board);
+    this._drawZones(ctx, zones, viewerIndex);
+    this._drawZoneBorders(ctx, zones);
+    this._drawPieces(ctx, entries);
+  }
+
+  renderDynamic(
     board,
     zones,
     currentPlayerIndex,
@@ -48,22 +88,18 @@ export class Renderer {
     gesturePath,
     highlightEntry,
     hoveredZoneIds,
-    entries,
   ) {
-    this._drawBoard(board);
-    this._drawZones(zones, viewer.id);
-    this._drawZoneBorders(zones);
+    const ctx = this.ctx;
+    ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
     const zoneIds = hoveredZoneIds ?? this._cursorZoneIdSet(board, cursorCell);
-    this._drawZoneHighlight(zones, zoneIds);
-    this._drawZonePreview(board, anchorShape, anchorCell);
-    this._drawPieces(entries);
-    this._drawMoveHighlight(highlightEntry);
-    this._drawGesturePath(gesturePath);
-    this._drawGhost(board, zones, currentPlayerIndex, viewer, pieceType, anchorShape, anchorCell);
+    this._drawZoneHighlight(ctx, zones, zoneIds);
+    this._drawZonePreview(ctx, board, anchorShape, anchorCell);
+    this._drawMoveHighlight(ctx, highlightEntry);
+    this._drawGesturePath(ctx, gesturePath);
+    this._drawGhost(ctx, board, zones, currentPlayerIndex, viewer, pieceType, anchorShape, anchorCell);
   }
 
-  _drawBoard(board) {
-    const { ctx } = this;
+  _drawBoard(ctx, board) {
     ctx.lineWidth = this.gridLineWidth;
 
     for (let row = 0; row < board.rows; row++) {
@@ -94,8 +130,7 @@ export class Renderer {
     }
   }
 
-  _drawZones(zones, viewerIndex) {
-    const { ctx } = this;
+  _drawZones(ctx, zones, viewerIndex) {
     for (const zone of zones) {
       const color = !zone.active
         ? THEME.inactiveZone
@@ -111,11 +146,10 @@ export class Renderer {
     }
   }
 
-  _drawZoneBorders(zones) {
-    const ctx = this.ctx;
+  _drawZoneBorders(ctx, zones) {
     ctx.strokeStyle = THEME.zoneBorders;
     ctx.lineWidth = this.zoneBorderWidth;
-    for (const zone of zones) this._strokeZoneBorder(zone);
+    for (const zone of zones) this._strokeZoneBorder(ctx, zone);
   }
 
   _cursorZoneIdSet(board, cursorCell) {
@@ -124,33 +158,31 @@ export class Renderer {
     return id == null ? null : new Set([id]);
   }
 
-  _drawZoneHighlight(zones, highlightedZoneIds) {
+  _drawZoneHighlight(ctx, zones, highlightedZoneIds) {
     if (!highlightedZoneIds || highlightedZoneIds.size === 0) return;
-    const ctx = this.ctx;
     ctx.strokeStyle = THEME.zoneBordersHighlight;
     ctx.lineWidth = this.zoneBorderHighlightWidth;
     for (const zone of zones) {
-      if (highlightedZoneIds.has(zone.id)) this._strokeZoneBorder(zone);
+      if (highlightedZoneIds.has(zone.id)) this._strokeZoneBorder(ctx, zone);
     }
   }
 
-  _strokeZoneBorder(zone) {
-    this._strokeCellSetBorder(zone.cellSet);
+  _strokeZoneBorder(ctx, zone) {
+    this._strokeCellSetBorder(ctx, zone.cellSet);
   }
 
-  _drawMoveHighlight(entry) {
+  _drawMoveHighlight(ctx, entry) {
     if (!entry || entry.type === "pass") return;
     const cells = Shape.cellsAt(entry.shape, entry.anchorRow, entry.anchorCol);
     const cellSet = new Set(cells.map(([r, c]) => Board.key(r, c)));
-    this.ctx.strokeStyle = THEME.moveHighlight;
-    this.ctx.lineWidth = this.moveHighlightWidth;
-    this._strokeCellSetBorder(cellSet);
+    ctx.strokeStyle = THEME.moveHighlight;
+    ctx.lineWidth = this.moveHighlightWidth;
+    this._strokeCellSetBorder(ctx, cellSet);
   }
 
   // shared edge-detection stroke: draw a border edge only where the
   // orthogonal neighbor isn't in the same set.
-  _strokeCellSetBorder(cellSet) {
-    const ctx = this.ctx;
+  _strokeCellSetBorder(ctx, cellSet) {
     for (const key of cellSet) {
       const [r, c] = Board.parse(key);
       const x = c * this.cellSize,
@@ -183,8 +215,7 @@ export class Renderer {
     }
   }
 
-  _drawPieces(entries) {
-    const ctx = this.ctx;
+  _drawPieces(ctx, entries) {
     ctx.fillStyle = THEME.piece;
     const inset = this.pieceInset;
 
@@ -215,13 +246,12 @@ export class Renderer {
     }
   }
 
-  _drawZonePreview(board, anchorShape, anchorCell) {
+  _drawZonePreview(ctx, board, anchorShape, anchorCell) {
     if (!anchorCell || !anchorShape) return;
     const [r, c] = anchorCell;
     const preview = Zone.preview(board, r, c, this.zoneRadius);
     if (!preview) return;
 
-    const { ctx } = this;
     ctx.fillStyle = THEME.pendingNewZone;
     for (const key of preview.cellSet) {
       const [pr, pc] = Board.parse(key);
@@ -235,8 +265,7 @@ export class Renderer {
     }
   }
 
-  _drawGesturePath(path) {
-    const { ctx } = this;
+  _drawGesturePath(ctx, path) {
     ctx.fillStyle = THEME.gesturePath;
     for (const cell of path) {
       const [r, c] = cell;
@@ -244,16 +273,16 @@ export class Renderer {
     }
   }
 
-  _drawGhost(board, zones, currentPlayerIndex, viewer, pieceType, anchorShape, anchorCell) {
+  _drawGhost(ctx, board, zones, currentPlayerIndex, viewer, pieceType, anchorShape, anchorCell) {
     if (!anchorCell || !anchorShape) return;
     const [hr, hc] = anchorCell;
     const valid =
       currentPlayerIndex == viewer.id && Rules.canPlaceHere(board, zones, viewer, pieceType, anchorShape, hr, hc);
 
-    this.ctx.fillStyle = valid ? THEME.ghostShapeValid : THEME.ghostShapeInvalid;
+    ctx.fillStyle = valid ? THEME.ghostShapeValid : THEME.ghostShapeInvalid;
     for (const [r, c] of Shape.cellsAt(anchorShape, hr, hc)) {
       if (board.isInside(r, c)) {
-        this.ctx.fillRect(c * this.cellSize, r * this.cellSize, this.cellSize, this.cellSize);
+        ctx.fillRect(c * this.cellSize, r * this.cellSize, this.cellSize, this.cellSize);
       }
     }
   }

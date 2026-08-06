@@ -266,7 +266,9 @@ export class GameUI {
 
   _applyViewTransform() {
     const { scale, x, y } = this.viewTransform;
-    this.canvas.style.transform = `translate(${x}px, ${y}px) scale(${scale})`;
+    // Goes through the renderer so both the static and dynamic canvases
+    // zoom/pan together — GameUI doesn't need to know there are two.
+    this.renderer.applyTransform(`translate(${x}px, ${y}px) scale(${scale})`);
   }
 
   _clampView() {
@@ -595,7 +597,8 @@ export class GameUI {
   // remote move applied, game over). Never call this from hover/pointer
   // movement — see _renderHover below.
   _render() {
-    this.canvas.classList.toggle("board--waiting", !this._isMyTurn());
+    this.renderer.setWaiting(!this._isMyTurn());
+    this._syncStaticCanvas();
     this._syncCanvas();
     this._syncControls();
     this._syncSidePlates();
@@ -603,6 +606,15 @@ export class GameUI {
 
     const baseIndex = this.matchClient ? this.matchClient.myPlayerIndex : 0;
     this.historyPanel.render(this.game.history.all(), baseIndex);
+  }
+
+  // Board grid, zone fills/borders, placed pieces — the static layer.
+  // Redrawn only here, i.e. only on a genuine game-state event, never on
+  // hover/rotate/flip/selection. See renderer.js for the compositing
+  // rationale.
+  _syncStaticCanvas() {
+    const viewerIndex = this.matchClient ? this.matchClient.myPlayerIndex : this.game.currentPlayerIndex;
+    this.renderer.renderStatic(this.game.board, this.game.zones, viewerIndex, this.game.history.all());
   }
 
   // Cheap path for pointer movement (hover/clearHover). Only touches what
@@ -632,7 +644,7 @@ export class GameUI {
     const highlightIndex = this.hoveredMoveIndex;
     const highlightEntry = highlightIndex != null && highlightIndex >= 0 ? entries[highlightIndex] : null;
 
-    this.renderer.render(
+    this.renderer.renderDynamic(
       this.game.board,
       this.game.zones,
       this.game.currentPlayerIndex,
@@ -644,7 +656,6 @@ export class GameUI {
       this.gesture.path,
       highlightEntry,
       this.hoveredZoneIds,
-      entries,
     );
 
     this.zoneTooltip.update(this.cursorCell, this.game.board, this.game.zones, cursorInPreview ? zonePreview : null);

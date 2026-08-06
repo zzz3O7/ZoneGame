@@ -30,7 +30,8 @@ function startGame(game, matchClient = null) {
   ui?.destroy(); // tear down the previous match's listeners before reusing the same DOM
 
   const canvas = document.getElementById("board-canvas");
-  const renderer = new Renderer(canvas, game.board, game.zoneRadius);
+  const staticCanvas = document.getElementById("board-canvas-static");
+  const renderer = new Renderer(canvas, staticCanvas, game.board, game.zoneRadius);
 
   ui = new GameUI(game, renderer, canvas, matchClient);
   ui.init();
