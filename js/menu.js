@@ -106,5 +106,13 @@ export class Menu {
       if (!code) return;
       this.onJoinMatch(nickname, code);
     });
+
+    // ADDED: force uppercase live as the user types, preserving cursor position
+    this.els.joinCode.addEventListener("input", () => {
+      const input = this.els.joinCode;
+      const { selectionStart, selectionEnd } = input;
+      input.value = input.value.toUpperCase();
+      input.setSelectionRange(selectionStart, selectionEnd);
+    });
   }
 }
