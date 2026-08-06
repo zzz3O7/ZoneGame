@@ -62,7 +62,6 @@ export class Renderer {
   // reads as one dimmed board rather than just dimming the (mostly
   // transparent) dynamic layer on top of a still-bright static one.
   setWaiting(waiting) {
-    // <============================================================================= TODO remove active???
     this.canvas.classList.toggle("board--waiting", waiting);
     this.staticCanvas.classList.toggle("board--waiting", waiting);
   }

@@ -288,6 +288,13 @@ export class GameUI {
 
   _startPinch(touches) {
     this._pinch = { dist: this._touchDist(touches[0], touches[1]), ...this._touchMid(touches[0], touches[1]) };
+    // The tooltip is a DOM element, not part of either canvas, so it never
+    // inherits the CSS transform pinch/pan applies to the board — left
+    // alone it stays visually stuck in place while the zone underneath it
+    // moves/scales. No hover fires during a pinch (_suppressHoverUntilLift)
+    // to refresh its position either, so just hide it; it reappears
+    // correctly positioned on the next real hover once the pinch ends.
+    this.zoneTooltip.hide();
   }
 
   _applyPinch(touches) {
