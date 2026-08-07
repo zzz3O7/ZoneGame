@@ -72,6 +72,34 @@ wss.on("connection", (ws) => {
         match.attemptPass(ws);
         return;
       }
+
+      // ADDED: reconnect — this ws is brand new and not yet linked to any
+      // match, so we look it up by the durable sessionId instead.
+      if (msg.type === MSG.RECONNECT_ATTEMPT) {
+        const match = manager.findMatchBySessionId(msg.sessionId);
+        if (!match || match.matchId !== msg.matchId) {
+          ws.send(JSON.stringify({ type: MSG.RECONNECT_FAILED, reason: "Match not found" }));
+          return;
+        }
+        const syncState = match.reconnect(msg.sessionId, ws);
+        if (!syncState) {
+          ws.send(JSON.stringify({ type: MSG.RECONNECT_FAILED, reason: "Session no longer valid" }));
+          return;
+        }
+        ws.send(JSON.stringify(syncState));
+        return;
+      }
+
+      // ADDED: hash-mismatch resync — same payload shape as reconnect, but
+      // this ws is already live and attached to the match.
+      if (msg.type === MSG.REQUEST_RESYNC) {
+        const match = manager.findMatchByWs(ws);
+        if (!match) return;
+        const player = match.players.find((p) => p.ws === ws);
+        if (!player) return;
+        ws.send(JSON.stringify(match.buildSyncState(player)));
+        return;
+      }
     } catch (err) {
       // ADDED: guard against throw inside handler (e.g. send to dead opponent socket)
       console.error("handler error:", err.message);

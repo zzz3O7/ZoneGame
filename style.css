@@ -1362,3 +1362,66 @@ button {
   padding: 18px 24px 24px;
   border-top: 1px solid var(--color-border-soft);
 }
+
+/* ---------- net status banner ---------- */
+/* ADDED: connection/match status banner (disconnect countdowns, reconnect
+   state, opponent left, etc). Fixed at the top so it can show over any of
+   the three screens, including the pre-menu reconnect check on load. */
+.net-banner {
+  position: fixed;
+  top: 14px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  max-width: min(92vw, 460px);
+  padding: 10px 14px;
+  border-radius: var(--radius-md);
+  background: var(--color-surface-raised);
+  border: 1px solid var(--color-border);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.35);
+  font-family: var(--font-body);
+  font-size: 13px;
+}
+.net-banner[hidden] {
+  display: none;
+}
+.net-banner__text {
+  color: var(--color-text);
+  flex: 1;
+}
+.net-banner__actions {
+  display: flex;
+  gap: 6px;
+  flex-shrink: 0;
+}
+.net-banner__actions .btn {
+  padding: 6px 10px;
+  font-size: 12px;
+}
+/* waiting on the other player, nothing wrong yet — amber, matches --color-score */
+.net-banner--warning {
+  border-color: var(--color-score);
+}
+.net-banner--warning .net-banner__text::before {
+  content: "● ";
+  color: var(--color-score);
+}
+/* our own connection dropped — more urgent */
+.net-banner--danger {
+  border-color: var(--color-danger);
+}
+.net-banner--danger .net-banner__text::before {
+  content: "● ";
+  color: var(--color-danger);
+}
+/* resolved/neutral (reconnected, opponent left, etc.) — accent green */
+.net-banner--info {
+  border-color: var(--color-accent);
+}
+.net-banner--info .net-banner__text::before {
+  content: "● ";
+  color: var(--color-accent);
+}

@@ -8,6 +8,19 @@ import { HistoryPanel } from "./historyPanel.js";
 
 const KEY_TO_TYPE = { 1: "gesture", 2: "domino", 3: "tromino", 4: "tetromino" };
 
+// ADDED: the "reason" a match ended, for the endcard's reason line.
+// "no-moves" is the only one reachable through the normal live-game path
+// (score-based winnerIndex is always correct there); "abort" covers a
+// forfeit-by-disconnect-timeout, where winnerIndex has to come from the
+// server's MATCH_ENDED message instead (see showForcedEnd) since the
+// forfeiting player may well have been ahead on score. "resign" isn't wired
+// up yet but costs nothing to have ready.
+const END_REASON_TEXT = {
+  "no-moves": "No more moves available",
+  abort: "Opponent disconnected and didn't return",
+  resign: "Opponent resigned",
+};
+
 // Touch gesture-arbiter tuning. A single-finger touchstart can't tell
 // whether it's the start of a placement drag or the first-arriving finger
 // of a two-finger pinch — both look identical for the first ~tens of ms.
@@ -61,6 +74,8 @@ export class GameUI {
     this.hoveredMoveIndex = null;
     this.hoveredZoneIds = null;
     this.historyPanelHovered = false;
+
+    this._endOverride = null; // ADDED: set via showForcedEnd() for a forfeit — see END_REASON_TEXT
 
     this.historyPanel = new HistoryPanel(
       document.querySelector(".move-history__body"),
@@ -744,6 +759,18 @@ export class GameUI {
     return this.matchClient?.playerNames?.[index] ?? this.game.players[index].name;
   }
 
+  // ADDED: end the match from outside the normal move flow (currently: a
+  // forfeit-by-disconnect-timeout via server MATCH_ENDED). Deliberately not
+  // touching this.game.winnerIndex — that getter is a score comparison and
+  // a forfeit winner is a different concept (the disconnected player may
+  // well have been ahead on points). The override lives alongside the game,
+  // not inside it, and only affects the endcard header.
+  showForcedEnd({ reason, winnerIndex }) {
+    this._endOverride = { reason, winnerIndex };
+    this.game.gameOver = true;
+    this._render();
+  }
+
   _syncGameOver() {
     const overlay = document.getElementById("gameOverOverlay");
     if (!overlay) return;
@@ -761,21 +788,23 @@ export class GameUI {
   }
 
   _syncEndcardHeader() {
-    const winner = this.game.winnerIndex;
+    const winner = this._endOverride ? this._endOverride.winnerIndex : this.game.winnerIndex;
     const winnerEl = document.getElementById("endcardWinner");
     const reasonEl = document.getElementById("endcardReason");
 
     if (winnerEl) {
-      if (winner === null) {
+      if (winner === null || winner === undefined) {
         winnerEl.textContent = "Draw";
       } else {
         const cls = winner === 0 ? "name-a" : "name-b";
         winnerEl.innerHTML = `<span class="${cls}">${this._playerName(winner)}</span> wins`;
       }
     }
-    // Only termination condition today. Keep this a plain string swap point
-    // for when resign/disconnect/timeout show up later.
-    if (reasonEl) reasonEl.textContent = "No more moves available";
+    if (reasonEl) {
+      reasonEl.textContent = this._endOverride
+        ? (END_REASON_TEXT[this._endOverride.reason] ?? "Match ended")
+        : END_REASON_TEXT["no-moves"];
+    }
   }
 
   _syncEndcardScores() {

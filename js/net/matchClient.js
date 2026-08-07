@@ -5,30 +5,81 @@ const SESSION_KEY = "zonegame.session"; // ADDED
 
 export class MatchClient {
   constructor(connection) {
-    this.connection = connection;
     this.matchId = null;
     this.inviteCode = null;
     this.myPlayerIndex = null;
     this.playerNames = null;
     this.game = null;
     this.sessionId = null; // ADDED: durable identity, survives a ws reconnect
+    this.status = null; // ADDED: mirrors Match.status once known — "waiting" | "active" | "over" | "aborted"
 
     this.onCreated = null; // (inviteCode) => void
     this.onMatchStart = null; // (game) => void
     this.onMoveApplied = null; // () => void
     this.onRejected = null; // (reason) => void
     this.onError = null; // (message) => void
-    this.onOpponentDisconnected = null; // (playerIndex) => void
+    this.onOpponentDisconnected = null; // (playerIndex, abortInMs) => void
+    this.onOpponentReconnected = null; // (playerIndex) => void // ADDED
+    this.onMatchEnded = null; // ({ reason, winnerIndex }) => void // ADDED
+    this.onOpponentLeft = null; // () => void // ADDED
+    this.onSynced = null; // (game | null, syncMsg) => void — after reconnect or resync // ADDED
+    this.onReconnectFailed = null; // (reason) => void // ADDED
     this.onConnectionLost = null; // () => void
+
+    this._bind(connection);
+  }
+
+  // ADDED: factored out of the constructor so a fresh Connection (built
+  // after an unexpected drop) can be wired up the same way, via rebindConnection().
+  _bind(connection) {
+    this.connection = connection;
 
     connection.on(MSG.MATCH_CREATED, (msg) => this._handleCreated(msg));
     connection.on(MSG.MATCH_JOINED, (msg) => this._handleJoined(msg));
     connection.on(MSG.MATCH_START, (msg) => this._handleMatchStart(msg));
     connection.on(MSG.MOVE_APPLIED, (msg) => this._handleMoveApplied(msg));
     connection.on(MSG.MOVE_REJECTED, (msg) => this.onRejected?.(msg.reason));
-    connection.on(MSG.OPPONENT_DISCONNECTED, (msg) => this.onOpponentDisconnected?.(msg.playerIndex));
-    connection.on("__close", () => this.onConnectionLost?.());
+    connection.on(MSG.OPPONENT_DISCONNECTED, (msg) => this.onOpponentDisconnected?.(msg.playerIndex, msg.abortInMs));
+    connection.on(MSG.OPPONENT_RECONNECTED, (msg) => this.onOpponentReconnected?.(msg.playerIndex)); // ADDED
+    connection.on(MSG.MATCH_ENDED, (msg) => this._handleMatchEnded(msg)); // ADDED
+    connection.on(MSG.OPPONENT_LEFT, () => this._handleOpponentLeft()); // ADDED
+    connection.on(MSG.SYNC_STATE, (msg) => this._handleSyncState(msg)); // ADDED
+    connection.on(MSG.RECONNECT_FAILED, (msg) => this._handleReconnectFailed(msg)); // ADDED
     connection.on(MSG.ERROR, (msg) => this.onError?.(msg.message));
+    // FIXED: don't fire onConnectionLost for a close *we* asked for (back to
+    // menu, cancel, or the reconnect flow tearing down a dead socket before
+    // opening a new one) — only for a genuinely unexpected drop.
+    connection.on("__close", () => {
+      if (!connection.intentionalClose) this.onConnectionLost?.();
+    });
+  }
+
+  // ADDED: swap in a freshly-connected socket after an unexpected drop,
+  // without losing any of the game/session state already held here.
+  rebindConnection(connection) {
+    this._bind(connection);
+  }
+
+  // ADDED: sends RECONNECT_ATTEMPT on whatever connection is currently
+  // bound. Caller (main.js) is responsible for making sure that connection
+  // is actually open first.
+  attemptReconnect() {
+    if (!this.matchId || !this.sessionId) return false;
+    this.connection.send({ type: MSG.RECONNECT_ATTEMPT, matchId: this.matchId, sessionId: this.sessionId });
+    return true;
+  }
+
+  // ADDED: for a page-load reconnect, where matchId/sessionId come from
+  // sessionStorage rather than a fresh createMatch/joinMatch response.
+  restoreSession({ matchId, sessionId }) {
+    this.matchId = matchId;
+    this.sessionId = sessionId;
+  }
+
+  // ADDED: hash-mismatch resync — same request regardless of why the client
+  // thinks it's out of sync.
+  requestResync() {
+    this.connection.send({ type: MSG.REQUEST_RESYNC });
   }
 
   createMatch(nickname, params) {
@@ -107,6 +158,7 @@ export class MatchClient {
     this.myPlayerIndex = msg.yourPlayerIndex;
     this.game = new Game(msg.params);
     this.playerNames = msg.players.map((p) => p.nickname);
+    this.status = "active"; // ADDED
     this.onMatchStart?.(this.game);
   }
 
@@ -120,9 +172,72 @@ export class MatchClient {
 
     const localHash = this.game.getStateHash();
     if (localHash !== msg.hash) {
-      console.warn("ZoneGame: state hash mismatch, resync needed"); // TODO
+      // FIXED: was a TODO — now actually resyncs instead of just logging.
+      // The reconstruction path (rebuild from params + replay actions) is
+      // exactly what _handleSyncState already does, so this just asks the
+      // server for that same payload rather than trying to patch state locally.
+      console.warn("ZoneGame: state hash mismatch, requesting resync");
+      this.requestResync();
     }
 
     this.onMoveApplied?.();
+  }
+
+  // ADDED: shared by reconnect success and hash-mismatch resync. Rebuilds
+  // by doing exactly what a live game already does — new Game(params), then
+  // replay each action through the same attemptPlacement/pass calls — so
+  // there's one reconstruction code path, not a second bespoke one.
+  _handleSyncState(msg) {
+    this.myPlayerIndex = msg.yourPlayerIndex;
+    this.playerNames = msg.players.map((p) => p.nickname);
+    this.inviteCode = msg.inviteCode;
+    this.params = msg.params; // ADDED: needed by populateWaitingRoom for the "waiting" case; harmless otherwise
+    this.status = msg.status;
+    this.endInfo = msg.endInfo;
+    this._saveSession();
+
+    if (msg.status === "waiting") {
+      // Nobody's opponent has joined yet — nothing to replay, no board yet.
+      this.game = null;
+      this.onSynced?.(null, msg);
+      return;
+    }
+
+    const game = new Game(msg.params);
+    for (const action of msg.actions) {
+      if (action.kind === "pass") game.pass();
+      else game.attemptPlacement(action.pieceType, action.shape, action.anchorRow, action.anchorCol);
+    }
+
+    if (msg.hash != null && game.getStateHash() !== msg.hash) {
+      // Replay landed somewhere different than the server — a real
+      // client/server logic divergence, not just a missed message (this IS
+      // the replay, there's nothing further to resync against). Surface
+      // it loudly rather than silently showing a possibly-wrong board.
+      console.error("ZoneGame: resync replay hash mismatch — client and server simulation have diverged");
+    }
+
+    this.game = game;
+    this.onSynced?.(game, msg);
+  }
+
+  // ADDED
+  _handleReconnectFailed(msg) {
+    MatchClient.clearSession();
+    this.onReconnectFailed?.(msg.reason);
+  }
+
+  // ADDED: forfeit-by-abandonment — match is already gone server-side.
+  _handleMatchEnded(msg) {
+    MatchClient.clearSession();
+    this.onMatchEnded?.(msg);
+  }
+
+  // ADDED: match already concluded normally and the opponent isn't coming
+  // back — also already gone server-side, but not a forfeit, nothing to
+  // recompute, just no rematch coming.
+  _handleOpponentLeft() {
+    MatchClient.clearSession();
+    this.onOpponentLeft?.();
   }
 }

@@ -13,6 +13,14 @@
     <link rel="stylesheet" href="style.css" />
   </head>
   <body>
+    <!-- ADDED: connection/match status banner — sits above all three screens
+         so it can show during the pre-menu reconnect check too, not just
+         inside an active game. -->
+    <div id="netBanner" class="net-banner" hidden>
+      <span id="netBannerText" class="net-banner__text"></span>
+      <div id="netBannerActions" class="net-banner__actions"></div>
+    </div>
+
     <div id="menuScreen">
       <div class="menu">
         <div class="menu__title">Zone<span>Game</span></div>

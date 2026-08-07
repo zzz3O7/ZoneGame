@@ -18,6 +18,9 @@ export class Match {
     // grace period expired — terminal, about to be removed.
     this.status = "waiting";
     this.game = null;
+    this.activeParams = null; // ADDED: the actual (seeded) params the current Game was built with — needed to replay it identically on reconnect
+    this.actions = []; // ADDED: ordered log of applied actions, replayable through a fresh Game — this IS the reconnect/resync payload
+    this.endInfo = null; // ADDED: { reason, winnerIndex } once status is "over" or "aborted"
     this._onClose = onClose;
     this._abortTimer = null;
 
@@ -54,7 +57,10 @@ export class Match {
   _start() {
     this.status = "active";
     const finalParams = { ...this.params, seed: Date.now() };
+    this.activeParams = finalParams; // ADDED: exact params to replay from, seed included
     this.game = new Game(finalParams);
+    this.actions = []; // ADDED: fresh log for this game (matters once rematch reuses this Match)
+    this.endInfo = null; // ADDED
 
     this.broadcastPersonalized((p) => ({
       type: MSG.MATCH_START,
@@ -81,11 +87,17 @@ export class Match {
       return;
     }
 
-    if (this.game.gameOver) this.status = "over"; // ADDED: game ended normally — not terminal, rematch still possible
+    if (this.game.gameOver) {
+      this.status = "over"; // game ended normally — not terminal, rematch still possible
+      this.endInfo = { reason: "no-moves", winnerIndex: this.game.winnerIndex }; // ADDED
+    }
+
+    const action = { kind: "placement", pieceType, shape, anchorRow, anchorCol, playerIndex: player.playerIndex };
+    this.actions.push(action); // ADDED: replay log for reconnect/resync
 
     this.broadcast({
       type: MSG.MOVE_APPLIED,
-      action: { kind: "placement", pieceType, shape, anchorRow, anchorCol, playerIndex: player.playerIndex },
+      action,
       hash: this.game.getStateHash(),
       gameOver: this.game.gameOver,
       winnerIndex: this.game.gameOver ? this.game.winnerIndex : null,
@@ -108,11 +120,17 @@ export class Match {
       return;
     }
 
-    if (this.game.gameOver) this.status = "over"; // ADDED: game ended normally — not terminal, rematch still possible
+    if (this.game.gameOver) {
+      this.status = "over"; // game ended normally — not terminal, rematch still possible
+      this.endInfo = { reason: "no-moves", winnerIndex: this.game.winnerIndex }; // ADDED
+    }
+
+    const action = { kind: "pass", playerIndex: player.playerIndex };
+    this.actions.push(action); // ADDED: replay log for reconnect/resync
 
     this.broadcast({
       type: MSG.MOVE_APPLIED,
-      action: { kind: "pass", playerIndex: player.playerIndex },
+      action,
       hash: this.game.getStateHash(),
       gameOver: this.game.gameOver,
       winnerIndex: this.game.gameOver ? this.game.winnerIndex : null,
@@ -151,6 +169,50 @@ export class Match {
     this._abortTimer = setTimeout(() => this._onAbortTimeout(), DISCONNECT_ABORT_MS);
   }
 
+  // ADDED: called for RECONNECT_ATTEMPT — sessionId is the durable identity,
+  // ws is whatever fresh socket just connected. Returns the SYNC_STATE
+  // payload to send back, or null if this session can't reconnect here
+  // (unknown, or the match is already terminal).
+  reconnect(sessionId, ws) {
+    if (this.status === "aborted") return null;
+
+    const player = this.findPlayerBySessionId(sessionId);
+    if (!player) return null;
+
+    clearTimeout(this._abortTimer);
+    player.ws = ws;
+    player.connected = true;
+
+    const opponent = this.players.find((p) => p !== player);
+    if (opponent?.connected) {
+      this._sendTo(opponent.ws, { type: MSG.OPPONENT_RECONNECTED, playerIndex: player.playerIndex });
+    }
+
+    return this.buildSyncState(player);
+  }
+
+  // ADDED: the reconstruction payload — shared by reconnect success AND
+  // hash-mismatch resync (REQUEST_RESYNC). Deliberately ships the action
+  // log, not a snapshot: the client rebuilds by doing exactly what it
+  // already does for a live game (new Game(params) + replay each action
+  // through the same attemptPlacement/pass calls), so there's exactly one
+  // code path that knows how to construct game state, not two to keep in
+  // sync. hash lets the client verify the replay actually landed on the
+  // same state instead of just trusting it did.
+  buildSyncState(forPlayer) {
+    return {
+      type: MSG.SYNC_STATE,
+      yourPlayerIndex: forPlayer.playerIndex,
+      players: this.players.map((p) => ({ index: p.playerIndex, nickname: p.nickname })),
+      inviteCode: this.inviteCode, // only meaningful while status === "waiting"
+      params: this.activeParams ?? this.params, // FIXED: fall back to the un-seeded config params while still "waiting" — activeParams isn't set until the game actually starts
+      actions: this.actions,
+      hash: this.game ? this.game.getStateHash() : null,
+      status: this.status,
+      endInfo: this.endInfo,
+    };
+  }
+
   // FIXED: two genuinely different situations, must not conflate them.
   // A disconnect can time out while the match is still "active" (game was
   // genuinely interrupted — this is a real forfeit) OR after it already
@@ -180,6 +242,7 @@ export class Match {
     // outcome lives only in this message; the client treats MATCH_ENDED as
     // authoritative and shows the endcard from it directly.
     this.status = "aborted";
+    this.endInfo = { reason: "abort", winnerIndex: remaining?.playerIndex ?? null }; // ADDED
     if (remaining) {
       this._sendTo(remaining.ws, { type: MSG.MATCH_ENDED, reason: "abort", winnerIndex: remaining.playerIndex });
     }
