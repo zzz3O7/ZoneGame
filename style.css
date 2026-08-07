@@ -158,6 +158,15 @@ button {
   padding: 14px;
 }
 
+/* ADDED: optional action row under a panel body (currently just Resign) */
+.panel__footer {
+  padding: 10px 14px 14px;
+  border-top: 1px solid var(--color-border-soft);
+}
+.panel__footer[hidden] {
+  display: none;
+}
+
 /* ===================== MATCH INFO ===================== */
 .game-info__row {
   display: flex;

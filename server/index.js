@@ -73,6 +73,22 @@ wss.on("connection", (ws) => {
         return;
       }
 
+      // ADDED: deliberate forfeit / leave — see Match.resign / Match.leave
+      // for why these are handled differently from a mere disconnect.
+      if (msg.type === MSG.RESIGN) {
+        const match = manager.findMatchByWs(ws);
+        if (!match) return;
+        match.resign(ws);
+        return;
+      }
+
+      if (msg.type === MSG.LEAVE_MATCH) {
+        const match = manager.findMatchByWs(ws);
+        if (!match) return;
+        match.leave(ws);
+        return;
+      }
+
       // ADDED: reconnect — this ws is brand new and not yet linked to any
       // match, so we look it up by the durable sessionId instead.
       if (msg.type === MSG.RECONNECT_ATTEMPT) {

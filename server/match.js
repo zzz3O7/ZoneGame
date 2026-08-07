@@ -152,7 +152,14 @@ export class Match {
     if (this.status === "aborted") return; // already terminal, nothing left to do
 
     const opponent = this.players.find((p) => p !== player);
-    if (opponent?.connected) {
+    // FIXED: only worth an immediate "they might come back" notice while a
+    // live game is actually in progress. Post-game (or pre-game "waiting"),
+    // a disconnect isn't urgent — and is often just the tail end of a
+    // deliberate resign/leave, whose own message already told the opponent
+    // what happened; a follow-up "opponent disconnected" would just be
+    // confusing noise after an already-settled result. The abort timer
+    // still cleans the match up regardless of status.
+    if (opponent?.connected && this.status === "active") {
       this._sendTo(opponent.ws, {
         type: MSG.OPPONENT_DISCONNECTED,
         playerIndex: player.playerIndex,
@@ -249,9 +256,66 @@ export class Match {
     this._onClose?.();
   }
 
+  // ADDED: deliberate, immediate forfeit — only meaningful mid-game.
+  // Match stays alive afterward (status "over", same as a natural end) since
+  // this is an active decision by an engaged player, not an abandonment —
+  // no reason to assume nobody's coming back for a rematch.
+  resign(ws) {
+    if (this.status !== "active") return;
+    const player = this.players.find((p) => p.ws === ws);
+    if (!player) return;
+    const opponent = this.players.find((p) => p !== player);
+
+    this.status = "over";
+    this.endInfo = { reason: "resign", winnerIndex: opponent.playerIndex };
+    this.broadcast({ type: MSG.MATCH_ENDED, reason: "resign", winnerIndex: opponent.playerIndex });
+  }
+
+  // ADDED: explicit "I'm done with this match" signal — waiting-room
+  // cancel, mid-game leave (counts as resign — no free walk-away from a
+  // losing position), or leaving after the game already ended. Unlike a
+  // mere disconnect, this is deliberate: no ambiguity to wait out, so it
+  // always ends in immediate cleanup rather than a grace period.
+  leave(ws) {
+    const player = this.players.find((p) => p.ws === ws);
+    if (!player) return;
+
+    if (this.status === "active") {
+      this.resign(ws);
+      // Deliberately not closing here: an active opponent might still be
+      // sitting on the resulting endcard (rematch, in a later step) — the
+      // match should live on exactly as it would after a natural game end,
+      // not be torn down just because the loser happened to be the one who left.
+      return;
+    }
+
+    if (this.status === "waiting") {
+      // Solo creator backing out before anyone joined — nobody else is
+      // waiting on anything, clean up immediately.
+      this.status = "aborted";
+      this._onClose?.();
+      return;
+    }
+
+    // status is already "over" or "aborted" — this is someone leaving after
+    // the result was already decided (declining a rematch, or just moving
+    // on). Nothing about the outcome changes; let a still-present opponent
+    // know no rematch is coming, then close it out for good.
+    const opponent = this.players.find((p) => p !== player);
+    if (opponent?.connected) {
+      this._sendTo(opponent.ws, { type: MSG.OPPONENT_LEFT });
+    }
+    this._onClose?.();
+  }
+
   // ADDED: guarded single-socket send, used by reject paths
   _sendTo(ws, msg) {
-    if (ws.readyState !== ws.OPEN) return;
+    // FIXED: a disconnected player has ws === null (see handleDisconnect) —
+    // broadcast() iterates all players unconditionally, and the game can
+    // keep going with one player disconnected (their opponent can still
+    // move on their own turns), so this is a real, reachable path now, not
+    // just a defensive nicety.
+    if (!ws || ws.readyState !== ws.OPEN) return;
     try {
       ws.send(JSON.stringify(msg));
     } catch (err) {

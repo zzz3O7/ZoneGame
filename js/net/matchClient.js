@@ -104,6 +104,18 @@ export class MatchClient {
     if (!ok) this.onConnectionLost?.();
   }
 
+  // ADDED
+  resign() {
+    this.connection.send({ type: MSG.RESIGN });
+  }
+
+  // ADDED: waiting-room cancel, or leaving mid/post-game — server treats a
+  // mid-game leave as a resign (see Match.leave), so this is safe to call
+  // unconditionally regardless of what status we think we're in.
+  leaveMatch() {
+    this.connection.send({ type: MSG.LEAVE_MATCH });
+  }
+
   _handleCreated(msg) {
     this.matchId = msg.matchId;
     this.inviteCode = msg.inviteCode;

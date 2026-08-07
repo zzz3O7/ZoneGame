@@ -15,7 +15,8 @@ const gameScreen = document.getElementById("gameScreen");
 let ui = null;
 let lastLocalParams = null; // set only for local hotseat games; drives rematch/same-board
 let currentConnection = null; // so leaving (back to menu / cancel) can actually close the socket
-let opponentDisconnectTimer = null; // ADDED: drives the live countdown text in the opponent-disconnected banner
+let currentMatchClient = null; // ADDED: so leaveCurrentMatch can send LEAVE_MATCH even before any GameUI exists (e.g. cancelling the waiting room)
+let opponentDisconnectTimer = null; // drives the live countdown text in the opponent-disconnected banner
 
 function showScreen(screen) {
   [menuScreen, waitingRoomScreen, gameScreen].forEach((s) => (s.hidden = s !== screen));
@@ -25,21 +26,33 @@ function wsUrl() {
   return `wss://${location.host}/ws`;
 }
 
-// ADDED: leaving on purpose (back to menu, cancel waiting room, giving up on
-// a reconnect) — one place that tears down the connection, clears any
-// pending banner/timer state, and forgets the stored session so a later
-// page load doesn't try to resurrect a match we deliberately walked away from.
-function leaveCurrentMatch() {
-  currentConnection?.close();
+// ADDED: shared teardown for "this match is done, one way or another" —
+// used both when we deliberately leave (leaveCurrentMatch, below) and when
+// the server/reconnect flow tells us the match is already gone and there's
+// nothing left to notify.
+function resetMatchState() {
   currentConnection = null;
+  currentMatchClient = null;
   clearInterval(opponentDisconnectTimer);
   opponentDisconnectTimer = null;
   hideBanner();
+}
+
+// Leaving on purpose (back to menu, cancel waiting room, giving up on a
+// reconnect) — tells the server we're actually leaving (a mid-game leave
+// counts as a resign — see Match.leave), then tears everything down and
+// forgets the stored session so a later page load doesn't try to resurrect
+// a match we deliberately walked away from.
+function leaveCurrentMatch() {
+  currentMatchClient?.leaveMatch();
+  currentConnection?.close();
+  resetMatchState();
   MatchClient.clearSession();
 }
 
 function setupMatchClient(conn) {
   const matchClient = new MatchClient(conn);
+  currentMatchClient = matchClient; // ADDED
   matchClient.onMatchStart = (game) => startGame(game, matchClient);
   matchClient.onMoveApplied = () => ui?.refresh(); // ui set once startGame runs
 
@@ -139,9 +152,21 @@ async function handleConnectionLost(matchClient) {
 
   const attempt = async () => {
     if (Date.now() >= deadline) {
+      resetMatchState(); // FIXED: was only clearing currentConnection, leaving currentMatchClient dangling
       showBanner("Couldn't reconnect — the match may be gone.", {
         kind: "danger",
-        actions: [{ label: "Back to menu", style: "primary", onClick: abandon }],
+        actions: [
+          {
+            label: "Back to menu",
+            style: "primary",
+            onClick: () => {
+              hideBanner();
+              ui?.destroy();
+              ui = null;
+              showScreen(menuScreen);
+            },
+          },
+        ],
       });
       return;
     }
@@ -171,7 +196,7 @@ async function handleConnectionLost(matchClient) {
 // ADDED: shared terminal outcome for a reconnect attempt that the server
 // explicitly rejected (session invalid, or the match is genuinely gone).
 function handleReconnectFailed() {
-  currentConnection = null;
+  resetMatchState(); // FIXED: was only clearing currentConnection
   showBanner("Couldn't reconnect — that match is gone.", {
     kind: "danger",
     actions: [
@@ -241,8 +266,7 @@ function attemptPageLoadReconnect(storedSession) {
       const matchClient = setupMatchClient(conn);
       matchClient.restoreSession(storedSession);
       matchClient.onReconnectFailed = () => {
-        currentConnection = null;
-        hideBanner();
+        resetMatchState(); // FIXED: was only clearing currentConnection
         menuScreen.hidden = false;
       };
       matchClient.attemptReconnect();

@@ -272,6 +272,18 @@ export class GameUI {
     this._submitPass();
   }
 
+  // ADDED: online only, guarded so a stray click can't fire it in local
+  // hotseat or after the game's already over — the button is hidden in
+  // both cases (see _syncOnlineActions), this is just defense in depth.
+  // No optimistic local effect: the actual end comes back through
+  // MATCH_ENDED -> showForcedEnd, same as if the opponent had resigned.
+  resign() {
+    if (!this.matchClient || this.game.gameOver) return;
+    const confirmed = window.confirm("Resign this match? Your opponent will win.");
+    if (!confirmed) return;
+    this.matchClient.resign();
+  }
+
   // ===================== board zoom / pan (touch) =====================
 
   resetView() {
@@ -572,6 +584,7 @@ export class GameUI {
     document.getElementById("btnFlip")?.addEventListener("click", () => this.flip(), { signal });
     document.getElementById("btnConfirm")?.addEventListener("click", () => this.confirmStaged(), { signal });
     document.getElementById("btnDiscard")?.addEventListener("click", () => this.discardStaged(), { signal });
+    document.getElementById("btnResign")?.addEventListener("click", () => this.resign(), { signal }); // ADDED
 
     document.addEventListener(
       "keydown",
@@ -687,6 +700,16 @@ export class GameUI {
   _syncControls() {
     this._syncPieceButtons();
     this._syncStagedButtons();
+    this._syncOnlineActions(); // ADDED
+  }
+
+  // ADDED: Resign is only meaningful for an online match that's still live —
+  // hidden entirely in local hotseat, and hidden again once the game ends
+  // (from any cause: a live move, a forced end via MATCH_ENDED, or
+  // reconnecting straight into an already-finished match).
+  _syncOnlineActions() {
+    const el = document.getElementById("onlineMatchActions");
+    if (el) el.hidden = !this.matchClient || this.game.gameOver;
   }
 
   // Piece-type buttons + skip button: depend on selectedType, dominoLeft,
