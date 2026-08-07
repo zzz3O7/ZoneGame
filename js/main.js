@@ -63,6 +63,8 @@ function setupMatchClient(conn) {
   matchClient.onOpponentLeft = () => handleOpponentLeft();
   matchClient.onConnectionLost = () => handleConnectionLost(matchClient);
   matchClient.onReconnectFailed = () => handleReconnectFailed();
+  matchClient.onOpponentWantsRematch = () => ui?.showOpponentWantsRematch(); // ADDED
+  matchClient.onRematchCancelled = () => ui?.resetRematchPrompt(); // ADDED — timed out; let them try again if they want
   // Shared by reconnect success AND hash-mismatch resync (see matchClient.js) —
   // either way, the correct move is just "rebuild the UI from what the
   // server says is true right now", same as a fresh match start.
@@ -130,6 +132,7 @@ function handleMatchEnded(info) {
 function handleOpponentLeft() {
   clearInterval(opponentDisconnectTimer);
   showBanner("Opponent left the match.", { kind: "info" });
+  ui?.resetRematchPrompt(); // ADDED — in case we were the one waiting on a rematch they were never going to accept
 }
 
 // ADDED: our OWN connection dropped unexpectedly. Auto-retry opening a fresh

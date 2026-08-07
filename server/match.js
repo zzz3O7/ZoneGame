@@ -2,7 +2,7 @@ import { randomUUID } from "crypto";
 import { Game } from "../js/game.js";
 import { resolveParams } from "../js/params.js";
 import { MSG } from "../js/net/protocol.js";
-import { DISCONNECT_ABORT_MS } from "../js/config.js";
+import { DISCONNECT_ABORT_MS, REMATCH_TIMEOUT_MS } from "../js/config.js";
 
 export class Match {
   // ADDED: onClose — called once this match is truly done and should be
@@ -23,6 +23,9 @@ export class Match {
     this.endInfo = null; // ADDED: { reason, winnerIndex } once status is "over" or "aborted"
     this._onClose = onClose;
     this._abortTimer = null;
+    this._rematchTimer = null; // ADDED
+    this.rematchRequestedBy = new Set(); // ADDED: playerIndex values that have asked for a rematch
+    this.lastStartingPlayerIndex = null; // ADDED: who moved first in the most recent game — null until the first game starts
 
     // Re-resolve on the server: the creator's client already clamped these,
     // but the server never trusts client-sent values directly. This is the
@@ -56,11 +59,23 @@ export class Match {
 
   _start() {
     this.status = "active";
-    const finalParams = { ...this.params, seed: Date.now() };
-    this.activeParams = finalParams; // ADDED: exact params to replay from, seed included
+
+    // ADDED: server decides who moves first — random on the very first
+    // game of this match, then deterministically alternated on every
+    // rematch (not a fresh coin flip each time). Kept separate from seat
+    // assignment (playerIndex 0/1 = creator/joiner) — that's just display
+    // bookkeeping and doesn't need to change.
+    const startingPlayerIndex =
+      this.lastStartingPlayerIndex === null ? (Math.random() < 0.5 ? 0 : 1) : 1 - this.lastStartingPlayerIndex;
+    this.lastStartingPlayerIndex = startingPlayerIndex;
+
+    const finalParams = { ...this.params, seed: Date.now(), startingPlayerIndex };
+    this.activeParams = finalParams; // exact params to replay from, seed included
     this.game = new Game(finalParams);
-    this.actions = []; // ADDED: fresh log for this game (matters once rematch reuses this Match)
-    this.endInfo = null; // ADDED
+    this.actions = []; // fresh log for this game (matters once rematch reuses this Match)
+    this.endInfo = null;
+    clearTimeout(this._rematchTimer); // ADDED: a fresh game means any pending rematch request is moot
+    this.rematchRequestedBy.clear(); // ADDED
 
     this.broadcastPersonalized((p) => ({
       type: MSG.MATCH_START,
@@ -235,6 +250,7 @@ export class Match {
     if (this.status === "over") {
       // Game already concluded on its own merits — just let the other
       // player know no rematch is coming, no result to change.
+      clearTimeout(this._rematchTimer); // ADDED: nothing left to rematch
       if (remaining) this._sendTo(remaining.ws, { type: MSG.OPPONENT_LEFT });
       this._onClose?.();
       return;
@@ -283,9 +299,9 @@ export class Match {
     if (this.status === "active") {
       this.resign(ws);
       // Deliberately not closing here: an active opponent might still be
-      // sitting on the resulting endcard (rematch, in a later step) — the
-      // match should live on exactly as it would after a natural game end,
-      // not be torn down just because the loser happened to be the one who left.
+      // sitting on the resulting endcard wanting a rematch — the match
+      // should live on exactly as it would after a natural game end, not be
+      // torn down just because the loser happened to be the one who left.
       return;
     }
 
@@ -301,11 +317,52 @@ export class Match {
     // the result was already decided (declining a rematch, or just moving
     // on). Nothing about the outcome changes; let a still-present opponent
     // know no rematch is coming, then close it out for good.
+    clearTimeout(this._rematchTimer); // ADDED
     const opponent = this.players.find((p) => p !== player);
     if (opponent?.connected) {
       this._sendTo(opponent.ws, { type: MSG.OPPONENT_LEFT });
     }
     this._onClose?.();
+  }
+
+  // ADDED: symmetric, no explicit accept/decline — first request marks that
+  // player ready and pings the opponent; once both have asked, the match
+  // just starts (same _start() as the very first game, on the same
+  // matchId/players — see the alternating-first-mover logic there). Not
+  // clicking rematch and clicking "back to menu" are effectively the same
+  // thing (see leave()), so there's no real "decline" message to send.
+  requestRematch(ws) {
+    if (this.status !== "over") return; // only a naturally-completed game can be rematched — not mid-game, not a forfeit/abort
+    const player = this.players.find((p) => p.ws === ws);
+    if (!player) return;
+
+    this.rematchRequestedBy.add(player.playerIndex);
+
+    if (this.rematchRequestedBy.size === 2) {
+      clearTimeout(this._rematchTimer);
+      this._start(); // broadcasts a fresh MATCH_START to both — same message a first game uses
+      return;
+    }
+
+    const opponent = this.players.find((p) => p !== player);
+    if (opponent?.connected) {
+      this._sendTo(opponent.ws, { type: MSG.OPPONENT_WANTS_REMATCH });
+    }
+
+    clearTimeout(this._rematchTimer);
+    this._rematchTimer = setTimeout(() => this._onRematchTimeout(), REMATCH_TIMEOUT_MS);
+  }
+
+  // ADDED
+  _onRematchTimeout() {
+    if (this.rematchRequestedBy.size === 0) return; // already resolved (both asked, or match moved on)
+    const requesterIndex = [...this.rematchRequestedBy][0];
+    this.rematchRequestedBy.clear();
+
+    const requester = this.players.find((p) => p.playerIndex === requesterIndex);
+    if (requester?.connected) {
+      this._sendTo(requester.ws, { type: MSG.REMATCH_CANCELLED, reason: "timeout" });
+    }
   }
 
   // ADDED: guarded single-socket send, used by reject paths

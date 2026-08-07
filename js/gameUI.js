@@ -584,7 +584,8 @@ export class GameUI {
     document.getElementById("btnFlip")?.addEventListener("click", () => this.flip(), { signal });
     document.getElementById("btnConfirm")?.addEventListener("click", () => this.confirmStaged(), { signal });
     document.getElementById("btnDiscard")?.addEventListener("click", () => this.discardStaged(), { signal });
-    document.getElementById("btnResign")?.addEventListener("click", () => this.resign(), { signal }); // ADDED
+    document.getElementById("btnResign")?.addEventListener("click", () => this.resign(), { signal });
+    document.getElementById("btnOnlineRematch")?.addEventListener("click", () => this.requestRematch(), { signal }); // ADDED // ADDED
 
     document.addEventListener(
       "keydown",
@@ -900,5 +901,61 @@ export class GameUI {
     // protocol for this yet, so keep it local-hotseat only for now.
     const localActions = document.getElementById("endcardLocalActions");
     if (localActions) localActions.hidden = !!this.matchClient;
+
+    // ADDED: online rematch — only offered while the match is still alive
+    // server-side for it (status "over": a naturally-completed or resigned
+    // game). Once it's "aborted" (forfeit-by-disconnect, or the opponent
+    // explicitly left), the match is already gone server-side — nothing to
+    // rematch, just leave "Back to menu".
+    const onlineActions = document.getElementById("endcardOnlineActions");
+    if (onlineActions) onlineActions.hidden = !this.matchClient || this.matchClient.status !== "over";
+
+    // Fresh endcard render, fresh status — clear any stale "waiting on
+    // opponent" text/disabled-button state left over from a previous game.
+    this.resetRematchPrompt();
+  }
+
+  // ADDED: bound to btnOnlineRematch. Symmetric with the opponent's own
+  // click — server just waits for both (see Match.requestRematch) and
+  // fires a normal MATCH_START once it has them, which the existing
+  // onMatchStart -> startGame() path already handles with no further
+  // wiring needed here.
+  requestRematch() {
+    if (!this.matchClient || this.matchClient.status !== "over") return;
+    this.matchClient.requestRematch();
+    this.setRematchStatus("Waiting for opponent to accept…");
+    const btn = document.getElementById("btnOnlineRematch");
+    if (btn) btn.disabled = true;
+  }
+
+  // ADDED: opponent clicked rematch before we did — nudge, doesn't disable
+  // our own button, since clicking it now is exactly how we accept.
+  showOpponentWantsRematch() {
+    this.setRematchStatus("Opponent wants a rematch — click Rematch to accept!", { active: true });
+  }
+
+  // ADDED: small imperative status-line helper for the online rematch
+  // prompt. Event-driven (who clicked/asked what) rather than derived from
+  // persistent state like the rest of _render(), so it lives outside the
+  // normal _syncX() cycle and is called directly from main.js's
+  // matchClient callbacks as well as from here.
+  setRematchStatus(text, { active = false } = {}) {
+    const el = document.getElementById("endcardRematchStatus");
+    if (!el) return;
+    if (!text) {
+      el.hidden = true;
+      return;
+    }
+    el.textContent = text;
+    el.hidden = false;
+    el.classList.toggle("endcard__rematch-status--active", active);
+  }
+
+  // ADDED: rematch fizzled (timeout) or is otherwise moot — clear the
+  // prompt and re-enable the button so they can try again.
+  resetRematchPrompt() {
+    this.setRematchStatus(null);
+    const btn = document.getElementById("btnOnlineRematch");
+    if (btn) btn.disabled = false;
   }
 }

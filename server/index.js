@@ -89,6 +89,14 @@ wss.on("connection", (ws) => {
         return;
       }
 
+      // ADDED
+      if (msg.type === MSG.REMATCH_REQUEST) {
+        const match = manager.findMatchByWs(ws);
+        if (!match) return;
+        match.requestRematch(ws);
+        return;
+      }
+
       // ADDED: reconnect — this ws is brand new and not yet linked to any
       // match, so we look it up by the durable sessionId instead.
       if (msg.type === MSG.RECONNECT_ATTEMPT) {

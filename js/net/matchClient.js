@@ -25,6 +25,8 @@ export class MatchClient {
     this.onSynced = null; // (game | null, syncMsg) => void — after reconnect or resync // ADDED
     this.onReconnectFailed = null; // (reason) => void // ADDED
     this.onConnectionLost = null; // () => void
+    this.onOpponentWantsRematch = null; // () => void // ADDED
+    this.onRematchCancelled = null; // (reason) => void // ADDED
 
     this._bind(connection);
   }
@@ -45,6 +47,8 @@ export class MatchClient {
     connection.on(MSG.OPPONENT_LEFT, () => this._handleOpponentLeft()); // ADDED
     connection.on(MSG.SYNC_STATE, (msg) => this._handleSyncState(msg)); // ADDED
     connection.on(MSG.RECONNECT_FAILED, (msg) => this._handleReconnectFailed(msg)); // ADDED
+    connection.on(MSG.OPPONENT_WANTS_REMATCH, () => this.onOpponentWantsRematch?.()); // ADDED
+    connection.on(MSG.REMATCH_CANCELLED, (msg) => this.onRematchCancelled?.(msg.reason)); // ADDED
     connection.on(MSG.ERROR, (msg) => this.onError?.(msg.message));
     // FIXED: don't fire onConnectionLost for a close *we* asked for (back to
     // menu, cancel, or the reconnect flow tearing down a dead socket before
@@ -114,6 +118,14 @@ export class MatchClient {
   // unconditionally regardless of what status we think we're in.
   leaveMatch() {
     this.connection.send({ type: MSG.LEAVE_MATCH });
+  }
+
+  // ADDED: symmetric — server starts the rematch once both players have
+  // called this (see Match.requestRematch). Only meaningful once status is
+  // "over" (a naturally-completed game); MatchClient doesn't gate on that
+  // itself, the server is the source of truth and just no-ops otherwise.
+  requestRematch() {
+    this.connection.send({ type: MSG.REMATCH_REQUEST });
   }
 
   _handleCreated(msg) {
@@ -242,6 +254,11 @@ export class MatchClient {
   // ADDED: forfeit-by-abandonment — match is already gone server-side.
   _handleMatchEnded(msg) {
     MatchClient.clearSession();
+    // Mirrors Match's own transition: resign leaves the match alive
+    // (status "over", rematch still possible), abort-forfeit removes it
+    // immediately server-side ("aborted" — terminal). GameUI gates the
+    // rematch button on this, so it needs to match reality exactly.
+    this.status = msg.reason === "resign" ? "over" : "aborted";
     this.onMatchEnded?.(msg);
   }
 
@@ -250,6 +267,7 @@ export class MatchClient {
   // recompute, just no rematch coming.
   _handleOpponentLeft() {
     MatchClient.clearSession();
+    this.status = "aborted"; // terminal from the client's perspective either way — match is gone server-side once this arrives
     this.onOpponentLeft?.();
   }
 }

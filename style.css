@@ -1372,6 +1372,20 @@ button {
   border-top: 1px solid var(--color-border-soft);
 }
 
+/* ADDED: small status line under the online rematch button ("Waiting for
+   opponent…", "Opponent wants a rematch!") */
+.endcard__rematch-status {
+  font-size: 12px;
+  color: var(--color-text-muted);
+  text-align: center;
+}
+.endcard__rematch-status[hidden] {
+  display: none;
+}
+.endcard__rematch-status--active {
+  color: var(--color-score);
+}
+
 /* ---------- net status banner ---------- */
 /* ADDED: connection/match status banner (disconnect countdowns, reconnect
    state, opponent left, etc). Fixed at the top so it can show over any of

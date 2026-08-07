@@ -31,7 +31,11 @@ export class Game {
       new Player(0, "Player 1", params.startingDominoes),
       new Player(1, "Player 2", params.startingDominoes),
     ];
-    this.currentPlayerIndex = 0;
+    // ADDED: defaults to 0 — local hotseat never sets this, so its behavior
+    // is unchanged. Online matches pass it explicitly (server decides who
+    // goes first — see Match._start), since a client-picked default would
+    // be trivially gameable.
+    this.currentPlayerIndex = params.startingPlayerIndex ?? 0;
     this.gameOver = false;
     this.history = new MoveHistory();
 

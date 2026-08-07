@@ -47,6 +47,10 @@ export const PASS_PENALTY = 0.9; // global, not mode-tunable (yet)
 // (60-90s) before this goes live for real.
 export const DISCONNECT_ABORT_MS = 10_000;
 
+// How long the server waits for the second player to also request a
+// rematch before giving up and telling the first requester it fizzled.
+export const REMATCH_TIMEOUT_MS = 20_000;
+
 // Fixed presets. Adding a new mode later = one more entry here, nothing else changes.
 export const MODES = {
   classic: { label: "Classic", boardSize: 20, zoneRadius: 4, startingDominoes: 2 },
