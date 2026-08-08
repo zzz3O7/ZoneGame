@@ -17,11 +17,24 @@ export class MatchManager {
   }
 
   findMatchByWs(ws) {
-    // TODO replace with match by player map
-    for (const match of this.matchesById.values()) {
-      if (match.players.some((p) => p.ws === ws)) return match;
-    }
-    return null;
+    // FIXED: was a linear scan over every match, then briefly stashed the
+    // match itself directly on the ws (ws.__match) — but that duplicated
+    // "where matches are stored" into a second place outside the manager's
+    // own maps, and required remembering to clear it on removal (missing
+    // that was a real bug: a still-connected player's socket could keep
+    // reaching an already-removed "zombie" match). Storing just the
+    // sessionId instead and routing through the SAME map reconnect already
+    // uses means matchesBySessionId stays the only place a match is ever
+    // actually registered — removeMatch's existing cleanup (below) is all
+    // that's needed, nothing extra to remember here.
+    return this.findMatchBySessionId(ws.__sessionId);
+  }
+
+  // ADDED: the one place that ties a ws to a session. Called from
+  // createMatch/joinMatch below, and by index.js after a successful
+  // reconnect (a fresh ws has no properties on it yet).
+  bindWs(ws, sessionId) {
+    ws.__sessionId = sessionId;
   }
 
   // ADDED: used by the reconnect handshake — the incoming ws is brand new
@@ -45,6 +58,7 @@ export class MatchManager {
     this.matchesById.set(matchId, match);
     this.matchesByCode.set(inviteCode, match);
     this.matchesBySessionId.set(player.sessionId, match);
+    this.bindWs(ws, player.sessionId); // ADDED
     return { match, player };
   }
 
@@ -55,6 +69,7 @@ export class MatchManager {
 
     const player = match.addPlayer(nickname, ws);
     this.matchesBySessionId.set(player.sessionId, match);
+    this.bindWs(ws, player.sessionId); // ADDED
     return { match, player };
   }
 
@@ -63,6 +78,10 @@ export class MatchManager {
     if (!match) return;
     this.matchesById.delete(matchId);
     this.matchesByCode.delete(match.inviteCode);
-    for (const p of match.players) this.matchesBySessionId.delete(p.sessionId); // ADDED
+    // This is now the ONLY cleanup needed — findMatchByWs routes through
+    // this same map, so deleting a player's sessionId here automatically
+    // makes their ws unable to reach this match again. No separate
+    // ws-side reference to remember to clear.
+    for (const p of match.players) this.matchesBySessionId.delete(p.sessionId);
   }
 }

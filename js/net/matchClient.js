@@ -98,6 +98,18 @@ export class MatchClient {
     return this.game && this.game.currentPlayerIndex === this.myPlayerIndex;
   }
 
+  // ADDED: builds a playerIndex-indexed array from the { index, nickname }
+  // list the server sends. Was previously just `.map(p => p.nickname)`,
+  // which drops the index entirely and relies on array order happening to
+  // already match playerIndex order — true today (players are always
+  // pushed in join order), but an implicit assumption for zero benefit
+  // when the field to do it properly is right there.
+  _namesByIndex(players) {
+    const names = [];
+    for (const p of players) names[p.index] = p.nickname;
+    return names;
+  }
+
   sendMove(pieceType, shape, anchorRow, anchorCol) {
     const ok = this.connection.send({ type: MSG.MOVE_ATTEMPT, pieceType, shape, anchorRow, anchorCol });
     if (!ok) this.onConnectionLost?.();
@@ -181,7 +193,7 @@ export class MatchClient {
   _handleMatchStart(msg) {
     this.myPlayerIndex = msg.yourPlayerIndex;
     this.game = new Game(msg.params);
-    this.playerNames = msg.players.map((p) => p.nickname);
+    this.playerNames = this._namesByIndex(msg.players); // FIXED: was .map(p => p.nickname), relying on array order silently matching playerIndex
     this.status = "active"; // ADDED
     this.onMatchStart?.(this.game);
   }
@@ -213,7 +225,7 @@ export class MatchClient {
   // there's one reconstruction code path, not a second bespoke one.
   _handleSyncState(msg) {
     this.myPlayerIndex = msg.yourPlayerIndex;
-    this.playerNames = msg.players.map((p) => p.nickname);
+    this.playerNames = this._namesByIndex(msg.players); // FIXED: see _handleMatchStart
     this.inviteCode = msg.inviteCode;
     this.params = msg.params; // ADDED: needed by populateWaitingRoom for the "waiting" case; harmless otherwise
     this.status = msg.status;
@@ -253,12 +265,15 @@ export class MatchClient {
 
   // ADDED: forfeit-by-abandonment — match is already gone server-side.
   _handleMatchEnded(msg) {
-    MatchClient.clearSession();
     // Mirrors Match's own transition: resign leaves the match alive
-    // (status "over", rematch still possible), abort-forfeit removes it
-    // immediately server-side ("aborted" — terminal). GameUI gates the
-    // rematch button on this, so it needs to match reality exactly.
+    // (status "over", still reconnectable/rematchable) — only clear the
+    // stored session once it's genuinely gone (abort-forfeit removes the
+    // match immediately server-side). FIXED: this used to clear the
+    // session unconditionally, which meant a refresh right after resigning
+    // (before doing anything else) would lose the ability to reconnect
+    // back into your own still-alive, still-rematchable "over" match.
     this.status = msg.reason === "resign" ? "over" : "aborted";
+    if (this.status === "aborted") MatchClient.clearSession();
     this.onMatchEnded?.(msg);
   }
 

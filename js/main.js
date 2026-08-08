@@ -17,6 +17,8 @@ let lastLocalParams = null; // set only for local hotseat games; drives rematch/
 let currentConnection = null; // so leaving (back to menu / cancel) can actually close the socket
 let currentMatchClient = null; // ADDED: so leaveCurrentMatch can send LEAVE_MATCH even before any GameUI exists (e.g. cancelling the waiting room)
 let opponentDisconnectTimer = null; // drives the live countdown text in the opponent-disconnected banner
+let bannerAutoHideTimer = null; // FIXED: was a bare setTimeout in handleOpponentReconnected — could fire late and clobber a newer, more urgent banner it knows nothing about
+let reconnectInProgress = false; // FIXED: guards handleConnectionLost against running twice at once (e.g. a move attempted mid-reconnect can independently trigger onConnectionLost again)
 
 function showScreen(screen) {
   [menuScreen, waitingRoomScreen, gameScreen].forEach((s) => (s.hidden = s !== screen));
@@ -35,6 +37,7 @@ function resetMatchState() {
   currentMatchClient = null;
   clearInterval(opponentDisconnectTimer);
   opponentDisconnectTimer = null;
+  clearTimeout(bannerAutoHideTimer); // FIXED
   hideBanner();
 }
 
@@ -69,18 +72,23 @@ function setupMatchClient(conn) {
   // either way, the correct move is just "rebuild the UI from what the
   // server says is true right now", same as a fresh match start.
   matchClient.onSynced = (game, syncMsg) => {
+    reconnectInProgress = false; // FIXED: resolved — a later drop should be able to start a fresh retry loop
     hideBanner();
     clearInterval(opponentDisconnectTimer);
+    clearTimeout(bannerAutoHideTimer); // FIXED
     routeSyncedState(matchClient, game, syncMsg);
   };
 
   return matchClient;
 }
 
-// ADDED: where a SYNC_STATE payload sends us, based on what the match is
+// where a SYNC_STATE payload sends us, based on what the match is
 // currently doing. "active" and "over" both just go through startGame() —
 // GameUI already renders the live board vs the endcard purely from
-// game.gameOver, so reconnecting into a finished match needs no special case.
+// game.gameOver, so reconnecting into a finished match needs no special case
+// for the natural "no-moves" ending: the actions log already ends on the
+// exact move that set game.gameOver, so replaying it reproduces that
+// correctly on its own.
 function routeSyncedState(matchClient, game, syncMsg) {
   if (syncMsg.status === "waiting") {
     populateWaitingRoom(matchClient.params ?? {}, matchClient.inviteCode);
@@ -88,6 +96,15 @@ function routeSyncedState(matchClient, game, syncMsg) {
     return;
   }
   startGame(game, matchClient);
+
+  // FIXED: a resign (or, defensively, an abort-forfeit) doesn't correspond
+  // to any action in the replay log — there's no move to replay that would
+  // ever set game.gameOver — so without this, reconnecting into a resigned
+  // match silently never showed the endcard at all. Force the same override
+  // a live resign already uses.
+  if (syncMsg.endInfo && syncMsg.endInfo.reason !== "no-moves") {
+    ui?.showForcedEnd(syncMsg.endInfo);
+  }
 }
 
 // ADDED: the other player's connection dropped. Just informational — the
@@ -96,6 +113,7 @@ function routeSyncedState(matchClient, game, syncMsg) {
 // the endcard already): nothing about the result is at risk at that point.
 function handleOpponentDisconnected(abortInMs) {
   clearInterval(opponentDisconnectTimer);
+  clearTimeout(bannerAutoHideTimer); // FIXED: don't let a stale "opponent reconnected" auto-hide clobber this
   const deadline = Date.now() + abortInMs;
   const gameAlreadyOver = ui?.game?.gameOver === true;
 
@@ -114,8 +132,9 @@ function handleOpponentDisconnected(abortInMs) {
 // ADDED
 function handleOpponentReconnected() {
   clearInterval(opponentDisconnectTimer);
+  clearTimeout(bannerAutoHideTimer); // FIXED
   showBanner("Opponent reconnected", { kind: "info" });
-  setTimeout(hideBanner, 2000);
+  bannerAutoHideTimer = setTimeout(hideBanner, 2000); // FIXED: tracked so a later banner can cancel it instead of being clobbered
 }
 
 // ADDED: genuine forfeit-by-abandonment, mid-game. The endcard needs the
@@ -123,6 +142,7 @@ function handleOpponentReconnected() {
 // reads — see showForcedEnd in gameUI.js for why those have to stay separate.
 function handleMatchEnded(info) {
   clearInterval(opponentDisconnectTimer);
+  clearTimeout(bannerAutoHideTimer); // FIXED
   hideBanner();
   ui?.showForcedEnd(info);
 }
@@ -131,8 +151,9 @@ function handleMatchEnded(info) {
 // back. The result already stands — nothing to change, just let them know.
 function handleOpponentLeft() {
   clearInterval(opponentDisconnectTimer);
+  clearTimeout(bannerAutoHideTimer); // FIXED
   showBanner("Opponent left the match.", { kind: "info" });
-  ui?.resetRematchPrompt(); // ADDED — in case we were the one waiting on a rematch they were never going to accept
+  ui?.resetRematchPrompt(); // in case we were the one waiting on a rematch they were never going to accept
 }
 
 // ADDED: our OWN connection dropped unexpectedly. Auto-retry opening a fresh
@@ -144,9 +165,13 @@ function handleOpponentLeft() {
 // just after everything fails — no reason to make someone wait on a spinner
 // they already want to leave.
 async function handleConnectionLost(matchClient) {
+  if (reconnectInProgress) return; // FIXED: don't start a second overlapping retry loop (e.g. a move attempted mid-reconnect can independently re-fire onConnectionLost)
+  reconnectInProgress = true;
+
   const deadline = Date.now() + Math.max(DISCONNECT_ABORT_MS - 1500, 2000);
 
   const abandon = () => {
+    reconnectInProgress = false; // FIXED
     leaveCurrentMatch();
     ui?.destroy();
     ui = null;
@@ -155,7 +180,8 @@ async function handleConnectionLost(matchClient) {
 
   const attempt = async () => {
     if (Date.now() >= deadline) {
-      resetMatchState(); // FIXED: was only clearing currentConnection, leaving currentMatchClient dangling
+      reconnectInProgress = false; // FIXED
+      resetMatchState(); // was only clearing currentConnection, leaving currentMatchClient dangling
       showBanner("Couldn't reconnect — the match may be gone.", {
         kind: "danger",
         actions: [
@@ -187,7 +213,8 @@ async function handleConnectionLost(matchClient) {
       matchClient.rebindConnection(conn);
       matchClient.attemptReconnect();
       // Outcome arrives via onSynced / onReconnectFailed (set once in
-      // setupMatchClient) — nothing further to do from this loop.
+      // setupMatchClient, which also clears reconnectInProgress) — nothing
+      // further to do from this loop.
     } catch {
       setTimeout(attempt, 1200);
     }
@@ -199,7 +226,8 @@ async function handleConnectionLost(matchClient) {
 // ADDED: shared terminal outcome for a reconnect attempt that the server
 // explicitly rejected (session invalid, or the match is genuinely gone).
 function handleReconnectFailed() {
-  resetMatchState(); // FIXED: was only clearing currentConnection
+  reconnectInProgress = false; // FIXED
+  resetMatchState();
   showBanner("Couldn't reconnect — that match is gone.", {
     kind: "danger",
     actions: [
@@ -266,13 +294,30 @@ function attemptPageLoadReconnect(storedSession) {
   conn
     .connect()
     .then(() => {
-      const matchClient = setupMatchClient(conn);
+      const matchClient = setupMatchClient(conn); // sets the general-purpose matchClient.onReconnectFailed = handleReconnectFailed
       matchClient.restoreSession(storedSession);
+      // FIXED: this override used to be permanent — if THIS attempt failed,
+      // fine, but the same stale handler would then incorrectly run for any
+      // *later*, unrelated disconnect mid-session too (e.g. one handled by
+      // handleConnectionLost long after this page-load reconnect had
+      // already succeeded), which only does a partial reset (never calls
+      // showScreen/destroys ui) and could leave menuScreen and gameScreen
+      // both visible at once. Restore the general handler immediately so
+      // this override only ever applies to this one attempt.
       matchClient.onReconnectFailed = () => {
-        resetMatchState(); // FIXED: was only clearing currentConnection
+        matchClient.onReconnectFailed = () => handleReconnectFailed();
+        resetMatchState();
         menuScreen.hidden = false;
       };
-      matchClient.attemptReconnect();
+      // FIXED: attemptReconnect() can return false (no stored matchId/sessionId
+      // to send — e.g. corrupted sessionStorage) without the server ever
+      // getting a chance to reply, which would otherwise leave the
+      // "Reconnecting…" banner stuck forever with no resolution.
+      if (!matchClient.attemptReconnect()) {
+        matchClient.onReconnectFailed = () => handleReconnectFailed();
+        resetMatchState();
+        menuScreen.hidden = false;
+      }
     })
     .catch(() => abandon());
 }
@@ -286,7 +331,18 @@ new Menu({
   onCreateMatch: async (nickname, params) => {
     const conn = new Connection(wsUrl());
     currentConnection = conn;
-    await conn.connect();
+    // FIXED: an unreachable server rejected this with zero user feedback —
+    // the button just did nothing, forever, with only a console warning.
+    try {
+      await conn.connect();
+    } catch {
+      currentConnection = null;
+      showBanner("Couldn't reach the server. Check your connection and try again.", {
+        kind: "danger",
+        actions: [{ label: "Dismiss", onClick: hideBanner }],
+      });
+      return;
+    }
 
     const matchClient = setupMatchClient(conn);
     matchClient.onCreated = (inviteCode) => {
@@ -299,7 +355,17 @@ new Menu({
   onJoinMatch: async (nickname, code) => {
     const conn = new Connection(wsUrl());
     currentConnection = conn;
-    await conn.connect();
+    // FIXED: same as onCreateMatch above
+    try {
+      await conn.connect();
+    } catch {
+      currentConnection = null;
+      showBanner("Couldn't reach the server. Check your connection and try again.", {
+        kind: "danger",
+        actions: [{ label: "Dismiss", onClick: hideBanner }],
+      });
+      return;
+    }
 
     const matchClient = setupMatchClient(conn);
     matchClient.joinMatch(code, nickname);

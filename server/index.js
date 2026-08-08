@@ -110,6 +110,7 @@ wss.on("connection", (ws) => {
           ws.send(JSON.stringify({ type: MSG.RECONNECT_FAILED, reason: "Session no longer valid" }));
           return;
         }
+        manager.bindWs(ws, msg.sessionId); // ADDED: Match.reconnect() operates on the Match directly, so the manager needs telling separately that this new ws now belongs to this session
         ws.send(JSON.stringify(syncState));
         return;
       }
