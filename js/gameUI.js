@@ -716,14 +716,20 @@ export class GameUI {
   // Piece-type buttons + skip button: depend on selectedType, dominoLeft,
   // turn/gameOver state — never on cursorCell. Only needs to run after
   // real game/selection events, not on every hover.
+  //
+  // Piece-type buttons reflect the VIEWER's own pieces, not whoever's turn
+  // it currently is — otherwise on the opponent's turn the domino button
+  // would incorrectly disable/enable based on the opponent's dominoLeft.
+  // In local hotseat, viewer === currentPlayer, so this is unchanged there.
   _syncPieceButtons() {
-    const player = this.game.currentPlayer;
+    const viewerIndex = this.matchClient ? this.matchClient.myPlayerIndex : this.game.currentPlayerIndex;
+    const viewerPlayer = this.game.players[viewerIndex];
     const canMove = this.game.canCurrentPlayerMove();
     const myTurn = this._isMyTurn(); // true always in local mode, real check online
 
     document.querySelectorAll(".piece-selector button[data-type]").forEach((btn) => {
       const type = btn.dataset.type;
-      const disabled = this.game.gameOver || (type === "domino" && player.dominoLeft <= 0);
+      const disabled = this.game.gameOver || (type === "domino" && viewerPlayer.dominoLeft <= 0);
       btn.disabled = disabled;
       btn.classList.toggle("piece-btn--selected", type === this.selectedType);
     });
@@ -731,7 +737,7 @@ export class GameUI {
     const skipBtn = document.querySelector(".piece-btn--skip");
     if (skipBtn) {
       skipBtn.disabled = this.game.gameOver || !myTurn || canMove;
-      const skipPenalty = player.score - Math.floor(player.score * PASS_PENALTY);
+      const skipPenalty = viewerPlayer.score - Math.floor(viewerPlayer.score * PASS_PENALTY);
       const countEl = skipBtn.querySelector(".piece-btn__count");
       if (countEl) countEl.textContent = `-${skipPenalty}`;
     }
