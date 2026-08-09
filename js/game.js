@@ -9,7 +9,7 @@ import { MoveHistory } from "./history.js";
 import { PASS_PENALTY } from "./config.js";
 
 export class Game {
-  // params: { mode, boardSize, zoneRadius, startingDominoes, seed? }
+  // params: { mode, boardSize, zoneRadius, startingDominoes, seed?, timeControl? }
   // Always pass a params object built via resolveParams() (js/params.js) —
   // that's what clamps values and fills in mode presets. Game itself trusts
   // whatever it's given, since resolveParams is the single validation point.
@@ -19,6 +19,12 @@ export class Game {
     this.zoneRadius = params.zoneRadius;
     this.startingDominoes = params.startingDominoes;
     this.seed = params.seed ?? Date.now();
+    // ADDED: pure passthrough, same treatment as this.mode above — Game
+    // itself has no clock logic (that stays with whoever owns wall-clock
+    // time: Match on the server, GameUI for hotseat — see js/clock.js).
+    // This field just carries the config to whichever of those constructs
+    // the actual Clock, without threading it through separate params.
+    this.timeControl = params.timeControl ?? null;
 
     const rng = createRng(this.seed);
 

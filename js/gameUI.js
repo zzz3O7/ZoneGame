@@ -5,7 +5,7 @@ import { ZoneTooltip } from "./zoneTooltip.js";
 import { Zone } from "./zone.js";
 import { Board } from "./board.js";
 import { HistoryPanel } from "./historyPanel.js";
-import { extrapolateRemaining, formatClockMs } from "./clock.js";
+import { extrapolateRemaining, formatClockMs, Clock } from "./clock.js";
 
 const KEY_TO_TYPE = { 1: "gesture", 2: "domino", 3: "tromino", 4: "tetromino" };
 
@@ -89,6 +89,8 @@ export class GameUI {
 
     this._endOverride = null; // ADDED: set via showForcedEnd() for a forfeit — see END_REASON_TEXT
     this._clockInterval = null; // ADDED: see _startClockTicker/destroy
+    this.clock = null; // ADDED: hotseat's OWN authoritative Clock (no server involved) — null for online (server owns it, see matchClient.clock) or when this.game.timeControl is unset
+    this._hotseatFlagTimer = null; // ADDED: hotseat's own flag-fall timer, mirrors Match._flagTimer exactly — see _armHotseatFlagTimer/_onHotseatFlagFall
 
     this.historyPanel = new HistoryPanel(
       document.querySelector(".move-history__body"),
@@ -141,7 +143,8 @@ export class GameUI {
       this.matchClient.sendMove(pieceType, shape, anchorRow, anchorCol);
       // no local mutation, no _render() here — wait for moveApplied broadcast
     } else {
-      this.game.attemptPlacement(pieceType, shape, anchorRow, anchorCol);
+      const applied = this.game.attemptPlacement(pieceType, shape, anchorRow, anchorCol);
+      if (applied) this._advanceHotseatClock(); // ADDED
       this._render();
     }
   }
@@ -154,6 +157,7 @@ export class GameUI {
       // same: wait for broadcast, don't mutate/render yet
     } else {
       if (!this.game.pass()) return;
+      this._advanceHotseatClock(); // ADDED
       this._render();
     }
   }
@@ -630,6 +634,7 @@ export class GameUI {
     this._abort.abort();
     this.historyPanel.destroy();
     clearInterval(this._clockInterval); // ADDED — setInterval isn't covered by the AbortController, has to be cleared explicitly
+    clearTimeout(this._hotseatFlagTimer); // ADDED
   }
 
   // ===================== render: fully re-derive the DOM from state =====================
@@ -806,26 +811,87 @@ export class GameUI {
   }
 
   // ADDED: clock display — see js/clock.js for the shared math. This is
-  // deliberately display-only: it never decides a flag-fall (that's
-  // server-authoritative, see Match._onFlagFall), it just paints whatever
-  // the latest snapshot implies "right now" looks like, re-extrapolated on
-  // every tick from snapshot.now so it stays smooth between the (much
-  // sparser) authoritative corrections that arrive on every MOVE_APPLIED/
-  // MATCH_START/sync.
+  // deliberately display-only for the online path: it never decides a
+  // flag-fall (that's server-authoritative, see Match._onFlagFall), it
+  // just paints whatever the latest snapshot implies "right now" looks
+  // like, re-extrapolated on every tick from snapshot.now so it stays
+  // smooth between the (much sparser) authoritative corrections that
+  // arrive on every MOVE_APPLIED/MATCH_START/sync.
   //
-  // Hotseat (no matchClient) intentionally has no snapshot yet — this just
-  // paints "--:--" placeholders for it for now; hotseat's own
-  // client-authoritative clock is a separate, later piece of work.
+  // Hotseat has no server at all, so GameUI itself is authoritative there
+  // — it owns a real Clock (this.clock) and runs the exact same
+  // startTurn/stopTurn/flag-fall shape Match does, just locally. See
+  // _advanceHotseatClock/_armHotseatFlagTimer/_onHotseatFlagFall below.
   _startClockTicker() {
     clearInterval(this._clockInterval);
-    if (!this.matchClient) return; // no server snapshots to poll — _render()'s one-shot _tickClocks() call still paints the placeholder
-    this._clockInterval = setInterval(() => this._tickClocks(), CLOCK_TICK_INTERVAL_MS);
+    clearTimeout(this._hotseatFlagTimer);
+
+    if (this.matchClient) {
+      this._clockInterval = setInterval(() => this._tickClocks(), CLOCK_TICK_INTERVAL_MS);
+      return;
+    }
+
+    if (this.game.timeControl) {
+      this.clock = Clock.fromConfig(this.game.timeControl);
+      const now = Date.now();
+      this.clock.startTurn(this.game.currentPlayerIndex, now);
+      this._armHotseatFlagTimer(now);
+      this._clockInterval = setInterval(() => this._tickClocks(), CLOCK_TICK_INTERVAL_MS);
+    }
+    // else: no time control at all — _render()'s one-shot _tickClocks()
+    // call still paints the "--:--" placeholder, no interval needed.
   }
 
   _tickClocks() {
-    const snapshot = this.matchClient?.clock ?? null;
     const now = Date.now();
+    // Online: read the server's latest broadcast snapshot. Hotseat: ask our
+    // own Clock to extrapolate one, in the exact same shape (see
+    // Clock#snapshot) — so _renderClockFor below can't tell the difference.
+    const snapshot = this.matchClient ? (this.matchClient.clock ?? null) : (this.clock?.snapshot(now) ?? null);
     this.game.players.forEach((player) => this._renderClockFor(player.id, snapshot, now));
+  }
+
+  // ADDED: mirrors Match._advanceClockAfterMove exactly (stop the mover,
+  // bank their increment, start the new current player if the game isn't
+  // over) — same reasoning, just local instead of over a websocket. Called
+  // right after a successful hotseat move/pass, once currentPlayerIndex has
+  // already advanced.
+  _advanceHotseatClock() {
+    if (!this.clock) return;
+    clearTimeout(this._hotseatFlagTimer); // was armed for the mover's own turn — stale now regardless of outcome
+    const now = Date.now();
+    this.clock.stopTurn(now);
+    if (!this.game.gameOver) {
+      this.clock.startTurn(this.game.currentPlayerIndex, now);
+      this._armHotseatFlagTimer(now);
+    }
+  }
+
+  // ADDED: mirrors Match._armFlagTimer exactly.
+  _armHotseatFlagTimer(now) {
+    clearTimeout(this._hotseatFlagTimer);
+    if (!this.clock || this.clock.currentPlayerIndex === null) return;
+    const remaining = this.clock.getRemaining(this.clock.currentPlayerIndex, now);
+    this._hotseatFlagTimer = setTimeout(() => this._onHotseatFlagFall(), remaining);
+  }
+
+  // ADDED: mirrors Match._onFlagFall exactly, including the same
+  // setTimeout-slop re-verification. Ends the game the same way an online
+  // forfeit does — via showForcedEnd, so the endcard's winner/reason don't
+  // go through Game.winnerIndex's score-comparison getter (see that
+  // method's own comment for why a forfeit winner is a different concept).
+  _onHotseatFlagFall() {
+    if (!this.clock || this.clock.currentPlayerIndex === null || this.game.gameOver) return;
+
+    const now = Date.now();
+    if (!this.clock.isFlagged(now)) {
+      this._armHotseatFlagTimer(now);
+      return;
+    }
+
+    const flaggedIndex = this.clock.currentPlayerIndex;
+    this.clock.freeze(now); // no increment — running out isn't a completed move
+    this.showForcedEnd({ reason: "timeout", winnerIndex: 1 - flaggedIndex });
   }
 
   _renderClockFor(playerId, snapshot, now) {
