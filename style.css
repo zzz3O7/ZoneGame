@@ -921,6 +921,16 @@ button {
   grid-template-columns: 1fr 1fr;
   gap: 10px;
 }
+/* ADDED — time control picker reuses .mode-card but has 6 options rather
+   than 2, so it gets its own column count instead of the default 1fr 1fr. */
+.mode-grid--time {
+  grid-template-columns: repeat(3, 1fr);
+}
+@media (max-width: 480px) {
+  .mode-grid--time {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
 .mode-card {
   background: var(--color-surface);
   border: 1px solid var(--color-border);

@@ -68,6 +68,54 @@
           <div class="param-hint">Leave seed blank for a random cave.</div>
         </div>
 
+        <!-- ADDED: time control — orthogonal to board mode above, so it's its
+             own section rather than folded into the mode cards or params panel. -->
+        <div>
+          <div class="section-label">Time control</div>
+          <div class="mode-grid mode-grid--time" id="timeGrid">
+            <div class="mode-card selected" data-time-mode="none">
+              <div class="mode-card__name">No clock</div>
+            </div>
+            <div class="mode-card" data-time-mode="bullet">
+              <div class="mode-card__name">Bullet</div>
+              <div class="mode-card__desc">1+0</div>
+            </div>
+            <div class="mode-card" data-time-mode="blitz">
+              <div class="mode-card__name">Blitz</div>
+              <div class="mode-card__desc">3+2</div>
+            </div>
+            <div class="mode-card" data-time-mode="rapid">
+              <div class="mode-card__name">Rapid</div>
+              <div class="mode-card__desc">10+5</div>
+            </div>
+            <div class="mode-card" data-time-mode="classical">
+              <div class="mode-card__name">Classical</div>
+              <div class="mode-card__desc">30+20</div>
+            </div>
+            <div class="mode-card" data-time-mode="custom">
+              <div class="mode-card__name">Custom</div>
+              <div class="mode-card__desc">Set your own</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="params collapsed" id="timeCustomPanel">
+          <div class="param-row">
+            <label for="paramTimeInitial">Starting time (minutes)</label>
+            <div class="param-slider">
+              <input type="range" id="paramTimeInitial" min="1" max="60" step="1" />
+              <span class="param-slider__value" id="paramTimeInitialValue"></span>
+            </div>
+          </div>
+          <div class="param-row">
+            <label for="paramTimeIncrement">Increment (seconds)</label>
+            <div class="param-slider">
+              <input type="range" id="paramTimeIncrement" min="0" max="60" step="1" />
+              <span class="param-slider__value" id="paramTimeIncrementValue"></span>
+            </div>
+          </div>
+        </div>
+
         <div>
           <div class="tabs">
             <div class="tab active" data-tab="tabLocal">Local</div>
@@ -333,10 +381,10 @@
               <span class="side-plate__swatch"></span>
               <div class="side-plate__name-block">
                 <span class="side-plate__name">player_2</span>
-                <span class="side-plate__rating">???</span>
+                <span class="side-plate__rating">1742</span>
               </div>
               <span class="side-plate__score">0</span>
-              <span class="side-plate__clock">--:--</span>
+              <span class="side-plate__clock">00:00</span>
             </div>
           </section>
 
@@ -350,10 +398,10 @@
               <span class="side-plate__swatch"></span>
               <div class="side-plate__name-block">
                 <span class="side-plate__name">player_1</span>
-                <span class="side-plate__rating">???</span>
+                <span class="side-plate__rating">1810</span>
               </div>
               <span class="side-plate__score">0</span>
-              <span class="side-plate__clock">--:--</span>
+              <span class="side-plate__clock">00:00</span>
             </div>
 
             <div class="side-plate__pieces">

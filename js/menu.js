@@ -1,4 +1,4 @@
-import { CUSTOM_DEFAULTS } from "./config.js";
+import { CUSTOM_DEFAULTS, TIME_CUSTOM_DEFAULTS } from "./config.js";
 import { resolveParams } from "./params.js";
 
 // Owns the menu screen only: mode selection, custom params, local/create/join
@@ -11,6 +11,7 @@ export class Menu {
     this.onJoinMatch = onJoinMatch;
 
     this.mode = "classic";
+    this.timeMode = "none"; // ADDED — matches the "No clock" card's default-selected state in index.html
 
     this._cacheDom();
     this._populateDefaults();
@@ -31,6 +32,14 @@ export class Menu {
       startingDominoesValue: document.getElementById("paramStartingDominoesValue"),
       seed: document.getElementById("paramSeed"),
 
+      // ADDED — time control picker
+      timeCards: [...document.querySelectorAll("#timeGrid .mode-card")],
+      timeCustomPanel: document.getElementById("timeCustomPanel"),
+      timeInitial: document.getElementById("paramTimeInitial"),
+      timeInitialValue: document.getElementById("paramTimeInitialValue"),
+      timeIncrement: document.getElementById("paramTimeIncrement"),
+      timeIncrementValue: document.getElementById("paramTimeIncrementValue"),
+
       tabs: [...document.querySelectorAll("#menuScreen .tab")],
       panels: [...document.querySelectorAll("#menuScreen .tab-panel")],
 
@@ -48,6 +57,13 @@ export class Menu {
     this._initSlider(this.els.boardSize, this.els.boardSizeValue, CUSTOM_DEFAULTS.boardSize);
     this._initSlider(this.els.zoneRadius, this.els.zoneRadiusValue, CUSTOM_DEFAULTS.zoneRadius);
     this._initSlider(this.els.startingDominoes, this.els.startingDominoesValue, CUSTOM_DEFAULTS.startingDominoes);
+
+    // ADDED — custom time control sliders work in whole minutes/seconds for
+    // a sane slider range; converted to ms in _readCustomInputs(). Note this
+    // means the minimum reachable via the Custom slider is 1 minute — sub-
+    // minute banks are only available via the Bullet preset (60s+0).
+    this._initSlider(this.els.timeInitial, this.els.timeInitialValue, TIME_CUSTOM_DEFAULTS.initialMs / 60_000);
+    this._initSlider(this.els.timeIncrement, this.els.timeIncrementValue, TIME_CUSTOM_DEFAULTS.incrementMs / 1000);
   }
 
   _initSlider(input, valueEl, defaultValue) {
@@ -65,6 +81,14 @@ export class Menu {
     this.els.paramsPanel.classList.toggle("collapsed", mode !== "custom");
   }
 
+  // ADDED — mirrors _selectMode above, but for the (orthogonal) time
+  // control picker: any board mode can be paired with any time control.
+  _selectTimeMode(timeMode) {
+    this.timeMode = timeMode;
+    this.els.timeCards.forEach((card) => card.classList.toggle("selected", card.dataset.timeMode === timeMode));
+    this.els.timeCustomPanel.classList.toggle("collapsed", timeMode !== "custom");
+  }
+
   _selectTab(tabId) {
     this.els.tabs.forEach((tab) => tab.classList.toggle("active", tab.dataset.tab === tabId));
     this.els.panels.forEach((panel) => panel.classList.toggle("active", panel.id === tabId));
@@ -76,6 +100,13 @@ export class Menu {
       zoneRadius: this.els.zoneRadius.value,
       startingDominoes: this.els.startingDominoes.value,
       seed: this.els.seed.value.trim(),
+
+      // ADDED — resolveParams() clamps/validates all of this against
+      // TIME_PRESETS/TIME_CUSTOM_LIMITS, same as the board params above; a
+      // tampered/stale DOM value here can't produce an out-of-range clock.
+      timeMode: this.timeMode,
+      timeInitialMs: Number(this.els.timeInitial.value) * 60_000,
+      timeIncrementMs: Number(this.els.timeIncrement.value) * 1000,
     };
   }
 
@@ -86,6 +117,11 @@ export class Menu {
   _bindEvents() {
     this.els.modeClassic.addEventListener("click", () => this._selectMode("classic"));
     this.els.modeCustom.addEventListener("click", () => this._selectMode("custom"));
+
+    // ADDED — time control cards
+    this.els.timeCards.forEach((card) => {
+      card.addEventListener("click", () => this._selectTimeMode(card.dataset.timeMode));
+    });
 
     this.els.tabs.forEach((tab) => {
       tab.addEventListener("click", () => this._selectTab(tab.dataset.tab));
