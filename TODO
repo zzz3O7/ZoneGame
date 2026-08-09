@@ -4,7 +4,7 @@ calc drawings (+ undo/redo for drawings)
 
 ??? skip move - 10% penalty on all points ( concecutive passess are not allowed)
 
-time control
+    time control
 
 sound
 undo/redo

@@ -66,3 +66,27 @@ export const CUSTOM_LIMITS = {
   zoneRadius: [3, 10],
   startingDominoes: [0, 10],
 };
+
+// Time control: orthogonal to board mode (classic/custom) — either can be
+// paired with any of these. "none" (or an unrecognized/missing timeMode)
+// means no clock at all; resolveParams() returns timeControl: null in that
+// case, and callers (Match, GameUI) should skip all clock logic rather than
+// construct a Clock with some placeholder value.
+export const TIME_PRESETS = {
+  none: { label: "No clock", initialMs: null, incrementMs: null },
+  bullet: { label: "Bullet · 1+0", initialMs: 60_000, incrementMs: 0 },
+  blitz: { label: "Blitz · 3+2", initialMs: 180_000, incrementMs: 2_000 },
+  rapid: { label: "Rapid · 10+5", initialMs: 600_000, incrementMs: 5_000 },
+  classical: { label: "Classical · 30+20", initialMs: 1_800_000, incrementMs: 20_000 },
+};
+
+// Defaults shown in the custom time-control panel before the player touches anything.
+export const TIME_CUSTOM_DEFAULTS = { initialMs: 180_000, incrementMs: 2_000 };
+
+// Inclusive [min, max] for a custom time control, in ms. 15s minimum bank,
+// 60min maximum; 0-60s increment. Enforced both client- and server-side,
+// same as CUSTOM_LIMITS above.
+export const TIME_CUSTOM_LIMITS = {
+  initialMs: [15_000, 3_600_000],
+  incrementMs: [0, 60_000],
+};

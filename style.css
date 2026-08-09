@@ -610,6 +610,12 @@ button {
   color: var(--color-accent);
   border-color: var(--color-accent-muted);
 }
+/* ADDED — running low on time control, layered on top of the existing
+   active/turn styling above rather than replacing it. */
+.side-plate__clock--low {
+  color: var(--color-danger);
+  border-color: var(--color-danger);
+}
 
 .side-plate__pieces {
   display: flex;

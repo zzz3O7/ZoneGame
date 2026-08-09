@@ -12,6 +12,7 @@ export class MatchClient {
     this.game = null;
     this.sessionId = null; // ADDED: durable identity, survives a ws reconnect
     this.status = null; // ADDED: mirrors Match.status once known — "waiting" | "active" | "over" | "aborted"
+    this.clock = null; // ADDED: latest clock snapshot from the server ({remainingMs, currentPlayerIndex, now}), or null for a no-time-control match — see js/clock.js for the shape and extrapolateRemaining/formatClockMs for turning it into a display value
 
     this.onCreated = null; // (inviteCode) => void
     this.onMatchStart = null; // (game) => void
@@ -195,6 +196,7 @@ export class MatchClient {
     this.game = new Game(msg.params);
     this.playerNames = this._namesByIndex(msg.players); // FIXED: was .map(p => p.nickname), relying on array order silently matching playerIndex
     this.status = "active"; // ADDED
+    this.clock = msg.clock ?? null; // ADDED
     this.onMatchStart?.(this.game);
   }
 
@@ -205,6 +207,8 @@ export class MatchClient {
     } else {
       this.game.attemptPlacement(action.pieceType, action.shape, action.anchorRow, action.anchorCol);
     }
+
+    this.clock = msg.clock ?? null; // ADDED — must land before onMoveApplied fires, GameUI reads it from there
 
     const localHash = this.game.getStateHash();
     if (localHash !== msg.hash) {
@@ -230,6 +234,7 @@ export class MatchClient {
     this.params = msg.params; // ADDED: needed by populateWaitingRoom for the "waiting" case; harmless otherwise
     this.status = msg.status;
     this.endInfo = msg.endInfo;
+    this.clock = msg.clock ?? null; // ADDED — a fresh, already-caught-up snapshot (see Match.buildSyncState)
     this._saveSession();
 
     if (msg.status === "waiting") {
@@ -273,6 +278,7 @@ export class MatchClient {
     // (before doing anything else) would lose the ability to reconnect
     // back into your own still-alive, still-rematchable "over" match.
     this.status = msg.reason === "resign" ? "over" : "aborted";
+    this.clock = msg.clock ?? this.clock; // ADDED — final frozen snapshot; falls back to whatever we last had rather than wiping it if this particular message somehow omits it
     if (this.status === "aborted") MatchClient.clearSession();
     this.onMatchEnded?.(msg);
   }

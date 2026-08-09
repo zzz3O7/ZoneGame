@@ -5,8 +5,19 @@ import { ZoneTooltip } from "./zoneTooltip.js";
 import { Zone } from "./zone.js";
 import { Board } from "./board.js";
 import { HistoryPanel } from "./historyPanel.js";
+import { extrapolateRemaining, formatClockMs } from "./clock.js";
 
 const KEY_TO_TYPE = { 1: "gesture", 2: "domino", 3: "tromino", 4: "tetromino" };
+
+// ADDED: below this, the ticking player's clock is shown as "low" (see
+// _renderClockFor) — purely a display threshold, doesn't affect flag-fall
+// itself, which is server-authoritative and exact regardless of this value.
+const LOW_TIME_THRESHOLD_MS = 10_000;
+
+// ADDED: how often the online clock display re-paints between authoritative
+// server snapshots. Display-only — see _tickClocks — never the thing that
+// decides a flag-fall, just how smooth the ticking looks.
+const CLOCK_TICK_INTERVAL_MS = 250;
 
 // ADDED: the "reason" a match ended, for the endcard's reason line.
 // "no-moves" is the only one reachable through the normal live-game path
@@ -19,6 +30,7 @@ const END_REASON_TEXT = {
   "no-moves": "No more moves available",
   abort: "Opponent disconnected and didn't return",
   resign: "Opponent resigned",
+  timeout: "Ran out of time", // ADDED
 };
 
 // Touch gesture-arbiter tuning. A single-finger touchstart can't tell
@@ -76,6 +88,7 @@ export class GameUI {
     this.historyPanelHovered = false;
 
     this._endOverride = null; // ADDED: set via showForcedEnd() for a forfeit — see END_REASON_TEXT
+    this._clockInterval = null; // ADDED: see _startClockTicker/destroy
 
     this.historyPanel = new HistoryPanel(
       document.querySelector(".move-history__body"),
@@ -92,6 +105,7 @@ export class GameUI {
     this._syncMatchInfo();
     this.resetView();
     this._render();
+    this._startClockTicker(); // ADDED
   }
 
   _syncMatchInfo() {
@@ -615,6 +629,7 @@ export class GameUI {
   destroy() {
     this._abort.abort();
     this.historyPanel.destroy();
+    clearInterval(this._clockInterval); // ADDED — setInterval isn't covered by the AbortController, has to be cleared explicitly
   }
 
   // ===================== render: fully re-derive the DOM from state =====================
@@ -639,6 +654,7 @@ export class GameUI {
     this._syncControls();
     this._syncSidePlates();
     this._syncGameOver();
+    this._tickClocks(); // ADDED — snap to the authoritative snapshot immediately, don't wait for the next poll
 
     const baseIndex = this.matchClient ? this.matchClient.myPlayerIndex : 0;
     this.historyPanel.render(this.game.history.all(), baseIndex);
@@ -787,6 +803,51 @@ export class GameUI {
   // Player already carries a default "Player 1"/"Player 2" name.
   _playerName(index) {
     return this.matchClient?.playerNames?.[index] ?? this.game.players[index].name;
+  }
+
+  // ADDED: clock display — see js/clock.js for the shared math. This is
+  // deliberately display-only: it never decides a flag-fall (that's
+  // server-authoritative, see Match._onFlagFall), it just paints whatever
+  // the latest snapshot implies "right now" looks like, re-extrapolated on
+  // every tick from snapshot.now so it stays smooth between the (much
+  // sparser) authoritative corrections that arrive on every MOVE_APPLIED/
+  // MATCH_START/sync.
+  //
+  // Hotseat (no matchClient) intentionally has no snapshot yet — this just
+  // paints "--:--" placeholders for it for now; hotseat's own
+  // client-authoritative clock is a separate, later piece of work.
+  _startClockTicker() {
+    clearInterval(this._clockInterval);
+    if (!this.matchClient) return; // no server snapshots to poll — _render()'s one-shot _tickClocks() call still paints the placeholder
+    this._clockInterval = setInterval(() => this._tickClocks(), CLOCK_TICK_INTERVAL_MS);
+  }
+
+  _tickClocks() {
+    const snapshot = this.matchClient?.clock ?? null;
+    const now = Date.now();
+    this.game.players.forEach((player) => this._renderClockFor(player.id, snapshot, now));
+  }
+
+  _renderClockFor(playerId, snapshot, now) {
+    const myIndex = this.matchClient ? this.matchClient.myPlayerIndex : 0;
+    const plate = document.querySelector(`.side-plate[data-position="${playerId === myIndex ? "self" : "opponent"}"]`);
+    const clockEl = plate?.querySelector(".side-plate__clock");
+    if (!clockEl) return;
+
+    if (!snapshot) {
+      clockEl.textContent = "--:--";
+      clockEl.classList.remove("side-plate__clock--low");
+      return;
+    }
+
+    const remaining = extrapolateRemaining(snapshot, playerId, now);
+    clockEl.textContent = formatClockMs(remaining);
+
+    // Turn-based styling (.side-plate--active) already exists and covers
+    // "is this the ticking player" via _syncSidePlate — --low only adds the
+    // extra "and they're running out" urgency state on top of that.
+    const isTicking = playerId === snapshot.currentPlayerIndex;
+    clockEl.classList.toggle("side-plate__clock--low", isTicking && remaining <= LOW_TIME_THRESHOLD_MS);
   }
 
   // ADDED: end the match from outside the normal move flow (currently: a
