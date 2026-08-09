@@ -1136,6 +1136,14 @@ button {
   display: flex;
   gap: 10px;
 }
+/* FIXED: without this, [hidden] loses to the class rule above (author CSS
+   always beats the UA stylesheet's [hidden]{display:none}, regardless of
+   selector order/specificity) — so toggling .hidden in JS silently did
+   nothing for these rows. Same pattern already used elsewhere in this file
+   for .panel__footer[hidden] etc. */
+.btn-row[hidden] {
+  display: none;
+}
 .btn-row .btn {
   flex: 1;
 }

@@ -19,18 +19,18 @@ const LOW_TIME_THRESHOLD_MS = 10_000;
 // decides a flag-fall, just how smooth the ticking looks.
 const CLOCK_TICK_INTERVAL_MS = 250;
 
-// ADDED: the "reason" a match ended, for the endcard's reason line.
-// "no-moves" is the only one reachable through the normal live-game path
-// (score-based winnerIndex is always correct there); "abort" covers a
-// forfeit-by-disconnect-timeout, where winnerIndex has to come from the
-// server's MATCH_ENDED message instead (see showForcedEnd) since the
-// forfeiting player may well have been ahead on score. "resign" isn't wired
-// up yet but costs nothing to have ready.
+// The "reason" a match ended, for the endcard's reason line. "no-moves" is
+// the only one reachable through the normal live-game path (score-based
+// winnerIndex is always correct there). "abort"/"timeout" cover forfeits,
+// where winnerIndex has to come from the server's MATCH_ENDED message
+// instead (see showForcedEnd), since the forfeiting player may well have
+// been ahead on score. "resign" isn't here — it's inherently viewer-relative
+// ("You resigned" vs "Opponent resigned"), so it's computed dynamically in
+// _endReasonText rather than living in this static table.
 const END_REASON_TEXT = {
   "no-moves": "No more moves available",
   abort: "Opponent disconnected and didn't return",
-  resign: "Opponent resigned",
-  timeout: "Ran out of time", // ADDED
+  timeout: "On time", // reads naturally after the winner name above it: "X wins" / "On time"
 };
 
 // Touch gesture-arbiter tuning. A single-finger touchstart can't tell
@@ -723,6 +723,7 @@ export class GameUI {
     this._syncPieceButtons();
     this._syncStagedButtons();
     this._syncOnlineActions(); // ADDED
+    this._syncLocalActions(); // ADDED
   }
 
   // ADDED: Resign is only meaningful for an online match that's still live —
@@ -732,6 +733,15 @@ export class GameUI {
   _syncOnlineActions() {
     const el = document.getElementById("onlineMatchActions");
     if (el) el.hidden = !this.matchClient || this.game.gameOver;
+  }
+
+  // ADDED: mirrors _syncOnlineActions above, but for local hotseat's
+  // mid-game "Back to menu" — hotseat has no forfeit concept, so this is
+  // always safe to show while a local game is live. Hidden once the game
+  // ends since the endcard's own "Back to menu" covers that case.
+  _syncLocalActions() {
+    const el = document.getElementById("localMatchActions");
+    if (el) el.hidden = !!this.matchClient || this.game.gameOver;
   }
 
   // Piece-type buttons + skip button: depend on selectedType, dominoLeft,
@@ -948,25 +958,50 @@ export class GameUI {
     const winner = this._endOverride ? this._endOverride.winnerIndex : this.game.winnerIndex;
     const winnerEl = document.getElementById("endcardWinner");
     const reasonEl = document.getElementById("endcardReason");
+    // FIXED: "name-a"/blue must track the VIEWER, not raw player 0 — same
+    // convention _syncSidePlates already uses for the live side plates
+    // (self always blue, opponent always red). This used to be hardcoded
+    // to player 0/1, so roughly half of online matches (whichever player
+    // ended up as index 1) saw their own win rendered in the opponent's color.
+    const myIndex = this.matchClient ? this.matchClient.myPlayerIndex : 0;
 
     if (winnerEl) {
       if (winner === null || winner === undefined) {
         winnerEl.textContent = "Draw";
       } else {
-        const cls = winner === 0 ? "name-a" : "name-b";
+        const cls = winner === myIndex ? "name-a" : "name-b";
         winnerEl.innerHTML = `<span class="${cls}">${this._playerName(winner)}</span> wins`;
       }
     }
     if (reasonEl) {
       reasonEl.textContent = this._endOverride
-        ? (END_REASON_TEXT[this._endOverride.reason] ?? "Match ended")
+        ? this._endReasonText(this._endOverride.reason, this._endOverride.winnerIndex, myIndex)
         : END_REASON_TEXT["no-moves"];
     }
   }
 
+  // ADDED: most forced-end reasons read fine as a static string next to "X
+  // wins" (see END_REASON_TEXT) — but "resign" is inherently about which
+  // SIDE did it. The server broadcasts the same MATCH_ENDED to both players
+  // (see Match.resign), so without this, the resigning player's own screen
+  // would confusingly say "Opponent resigned" about themselves.
+  _endReasonText(reason, winnerIndex, myIndex) {
+    if (reason === "resign") {
+      return winnerIndex === myIndex ? "Opponent resigned" : "You resigned";
+    }
+    return END_REASON_TEXT[reason] ?? "Match ended";
+  }
+
   _syncEndcardScores() {
-    const [p0, p1] = this.game.players;
-    const winner = this.game.winnerIndex;
+    // FIXED: same viewer-relative convention as the header above — was
+    // hardcoded to raw player 0/1 throughout this method.
+    const myIndex = this.matchClient ? this.matchClient.myPlayerIndex : 0;
+    const opponentIndex = 1 - myIndex;
+    // FIXED: must read the same winner _syncEndcardHeader uses (the forced-
+    // end override when there is one) — this used to read this.game.winnerIndex
+    // directly, a pure score comparison, so the "winner" glow silently used
+    // the wrong side for every forfeit (abort/resign/timeout).
+    const winner = this._endOverride ? this._endOverride.winnerIndex : this.game.winnerIndex;
 
     const nameA = document.getElementById("scoreNameA");
     const nameB = document.getElementById("scoreNameB");
@@ -975,18 +1010,24 @@ export class GameUI {
     const sideA = document.querySelector('.score-side[data-side="a"]');
     const sideB = document.querySelector('.score-side[data-side="b"]');
 
-    if (nameA) nameA.textContent = this._playerName(0);
-    if (nameB) nameB.textContent = this._playerName(1);
-    if (valueA) valueA.textContent = p0.score;
-    if (valueB) valueB.textContent = p1.score;
-    sideA?.classList.toggle("winner", winner === 0 || winner === null);
-    sideB?.classList.toggle("winner", winner === 1 || winner === null);
+    if (nameA) nameA.textContent = this._playerName(myIndex);
+    if (nameB) nameB.textContent = this._playerName(opponentIndex);
+    if (valueA) valueA.textContent = this.game.players[myIndex].score;
+    if (valueB) valueB.textContent = this.game.players[opponentIndex].score;
+    sideA?.classList.toggle("winner", winner === myIndex || winner === null);
+    sideB?.classList.toggle("winner", winner === opponentIndex || winner === null);
   }
 
   _syncEndcardBreakdown() {
     const columnA = document.getElementById("breakdownColumnA");
     const columnB = document.getElementById("breakdownColumnB");
     if (!columnA || !columnB) return;
+
+    // FIXED: same viewer-relative convention — was hardcoded to raw player
+    // 0/1, so an online viewer at index 1 saw their own scoring events
+    // listed under the opponent's (red) column and vice versa.
+    const myIndex = this.matchClient ? this.matchClient.myPlayerIndex : 0;
+    const opponentIndex = 1 - myIndex;
 
     const rowsByPlayer = [[], []];
     for (const entry of this.game.history.all()) {
@@ -1002,8 +1043,8 @@ export class GameUI {
       }
     }
 
-    this._renderBreakdownColumn(columnA, rowsByPlayer[0]);
-    this._renderBreakdownColumn(columnB, rowsByPlayer[1]);
+    this._renderBreakdownColumn(columnA, rowsByPlayer[myIndex]);
+    this._renderBreakdownColumn(columnB, rowsByPlayer[opponentIndex]);
   }
 
   _renderBreakdownColumn(container, rows) {

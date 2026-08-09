@@ -409,11 +409,28 @@ document.getElementById("btnSameBoard").addEventListener("click", () => {
   startGame(new Game({ ...lastLocalParams, seed: ui.game.seed })); // same cave, roles reset
 });
 
+// ADDED: shared by both the endcard's "Back to menu" and the mid-game local
+// "Back to menu" — leaves any live match (harmless no-op for local hotseat,
+// which has no matchClient/connection to close) and tears down the current
+// GameUI so its clock intervals/timers don't keep running invisibly behind
+// the menu screen.
+function goToMenu() {
+  leaveCurrentMatch();
+  ui?.destroy();
+  ui = null;
+  showScreen(menuScreen);
+}
+
 document.getElementById("btnBackToMenu").addEventListener("click", () => {
   // FIXED: same as cancel — close the socket and forget the session. Mid-game
   // this still just reads as an ordinary disconnect to the server (grace
   // period, then abort-forfeit) rather than an immediate forfeit — that
   // distinction goes away once resign/leave are wired through properly.
-  leaveCurrentMatch();
-  showScreen(menuScreen);
+  goToMenu();
+});
+
+// ADDED: local hotseat's mid-game exit — no forfeit concept, no server to
+// notify, so this is just "leave whenever."
+document.getElementById("btnLocalBackToMenu").addEventListener("click", () => {
+  goToMenu();
 });
