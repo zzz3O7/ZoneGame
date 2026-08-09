@@ -1,25 +1,27 @@
-save nickname input contents
+HINTS BUTTON DOES NOT WORK (AFTER RELOAD MAYBE)
+
+zone tooltip shows above the endscreen (need to hide)
 
     comments cleanup and file directory refactor
 
-strange board on different resolutions
-
-waiting screen time params + in game info
 reminder on pass
+waiting screen time params + in game info
 
-laggy connection
+strange layout on different resolutions (center vertucally)
 
 calc drawings (+ undo/redo for drawings)
 
-??? skip move - 10% penalty on all points ( concecutive passess are not allowed)
+    sound
+options + optional confirm on buttons
 
-sound
+rating
+
 undo/redo
 
 matchStart currently arrives before matchJoined
 
-??? on different grid sizes board is still a square not a rectangle and tiles are squished
+??? skip move - 10% penalty on all points ( concecutive passess are not allowed)
+??? fixed flat penalty
 
-options + optional confirm on buttons
-up the pass penalty
-reconnect window increase
+??? laggy connection
+??? on different grid sizes board is still a square not a rectangle and tiles are squished

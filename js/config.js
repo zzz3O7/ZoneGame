@@ -39,13 +39,13 @@ export const LAYOUT = {
   pieceInsetRatio: 3 / 36,
 };
 
-export const PASS_PENALTY = 0.9; // global, not mode-tunable (yet)
+export const PASS_PENALTY = 0.7; // global, not mode-tunable (yet)
 
 // How long a match stays alive after a player disconnects before the server
 // gives up and aborts it. Server-only concern, but lives here with the other
 // tunables rather than buried in match.js. 10s for testing — bump way up
 // (60-90s) before this goes live for real.
-export const DISCONNECT_ABORT_MS = 10_000;
+export const DISCONNECT_ABORT_MS = 60_000;
 
 // How long the server waits for the second player to also request a
 // rematch before giving up and telling the first requester it fizzled.
