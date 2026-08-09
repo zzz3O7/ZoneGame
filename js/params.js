@@ -18,7 +18,27 @@ function clampInt(value, [min, max], fallback) {
 // whichever params object resolveParams() below returns. Untrusted
 // timeMode/timeInitialMs/timeIncrementMs never reach a Clock unclamped, same
 // principle as the board params.
+//
+// Must be idempotent: resolveParams(resolveParams(x)) has to equal
+// resolveParams(x), because the server intentionally re-runs resolveParams
+// on whatever the client already sent (see resolveParams' own comment) —
+// and what the client sends IS resolveParams' own output. Board params get
+// this "for free" since their field names happen to match on both sides
+// (boardSize in, boardSize out); time control's don't (timeMode in,
+// timeControl out), so it needs an explicit branch for its own output shape.
 function resolveTimeControl(custom) {
+  if (custom.timeControl !== undefined) {
+    if (custom.timeControl === null) return null;
+    return {
+      initialMs: clampInt(custom.timeControl.initialMs, TIME_CUSTOM_LIMITS.initialMs, TIME_CUSTOM_DEFAULTS.initialMs),
+      incrementMs: clampInt(
+        custom.timeControl.incrementMs,
+        TIME_CUSTOM_LIMITS.incrementMs,
+        TIME_CUSTOM_DEFAULTS.incrementMs,
+      ),
+    };
+  }
+
   const timeMode = custom.timeMode;
   if (!timeMode || timeMode === "none") return null;
 
