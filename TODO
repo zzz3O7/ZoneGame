@@ -1,5 +1,15 @@
 save nickname input contents
 
+old move history on new online match
+strange board on different resolutions
+reconnect window up
+
+rematch button not alwoays showing
+
+waiting screen time patams + in game info
+
+reminder on pass
+
 laggy connection
 
 calc drawings (+ undo/redo for drawings)
@@ -14,3 +24,6 @@ undo/redo
 matchStart currently arrives before matchJoined
 
 ??? on different grid sizes board is still a square not a rectangle and tiles are squished
+
+options + optional confirm on buttons
+up the pass penalty
