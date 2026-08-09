@@ -21,6 +21,17 @@ export class HistoryPanel {
     this._renderedCount = 0;
 
     if (this.container) {
+      // ROOT CAUSE FIX: the container element is the same DOM node reused
+      // across every GameUI/HistoryPanel instance (see the class comment
+      // above) — only this JS object is fresh per match, the DOM it points
+      // at is not. _renderedCount starting at 0 only reflects what *this*
+      // instance has appended; without clearing the container here too, a
+      // new game's rows land right after whatever the previous game's
+      // instance already left behind in the DOM, so the panel looked like
+      // it never reset (fixed on reload only because a full page load
+      // rebuilds the DOM from scratch, wiping the old rows along with it).
+      this.container.innerHTML = "";
+
       const signal = this._abort.signal;
       this.container.addEventListener("mouseenter", () => this.onPanelHover(true), { signal });
       this.container.addEventListener("mouseleave", () => this.onPanelHover(false), { signal });

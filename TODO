@@ -1,9 +1,8 @@
 save nickname input contents
 
-strange board on different resolutions
+    comments cleanup and file directory refactor
 
-    rematch button not always showing
-    old move history on new online match
+strange board on different resolutions
 
 waiting screen time params + in game info
 reminder on pass

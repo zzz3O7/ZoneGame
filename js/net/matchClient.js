@@ -208,6 +208,20 @@ export class MatchClient {
       this.game.attemptPlacement(action.pieceType, action.shape, action.anchorRow, action.anchorCol);
     }
 
+    // FIXED (root cause): a game ending naturally (no legal moves left for
+    // either player, i.e. a score-decided finish) is signaled purely by
+    // `msg.gameOver` on this message — the server never sends a separate
+    // MATCH_ENDED for it (see Match.attemptMove/attemptPass, which set
+    // Match.status = "over" in place without broadcasting). MATCH_ENDED is
+    // only broadcast for timeout/resign/abort, and _handleMatchEnded was
+    // the only place this.status ever got set to "over". So a game that
+    // ended by score left this.status stuck on "active" forever, which is
+    // exactly what GameUI's online-rematch visibility checks against —
+    // the rematch button silently never showed. Mirror the server's own
+    // status transition here so "over" means the same thing on both sides
+    // regardless of which of the three natural-end paths produced it.
+    if (msg.gameOver) this.status = "over";
+
     this.clock = msg.clock ?? null; // ADDED — must land before onMoveApplied fires, GameUI reads it from there
 
     const localHash = this.game.getStateHash();
@@ -270,14 +284,23 @@ export class MatchClient {
 
   // ADDED: forfeit-by-abandonment — match is already gone server-side.
   _handleMatchEnded(msg) {
-    // Mirrors Match's own transition: resign leaves the match alive
-    // (status "over", still reconnectable/rematchable) — only clear the
-    // stored session once it's genuinely gone (abort-forfeit removes the
-    // match immediately server-side). FIXED: this used to clear the
-    // session unconditionally, which meant a refresh right after resigning
-    // (before doing anything else) would lose the ability to reconnect
-    // back into your own still-alive, still-rematchable "over" match.
-    this.status = msg.reason === "resign" ? "over" : "aborted";
+    // Mirrors Match's own transition. FIXED (root cause): this used to key
+    // off `reason === "resign"` specifically, treating every other reason
+    // — including "timeout" — as "aborted". But Match only ever sets its
+    // own status to "aborted" for a genuine disconnect-forfeit
+    // (_onAbortTimeout); both "resign" and "timeout" leave it "over" on the
+    // server (see Match.resign / Match._onFlagFall — both comment that the
+    // match stays alive, rematch still possible). "abort" is the only
+    // terminal reason; everything else is a natural, rematchable end —
+    // match this instead of enumerating the natural-end reasons one by one,
+    // so a new natural-end reason added later doesn't silently repeat the
+    // same bug that timeout endings had. Also mirrors why the session is
+    // only cleared for "abort" below: only that reason actually removes the
+    // match server-side. FIXED: this used to clear the session
+    // unconditionally, which meant a refresh right after resigning (before
+    // doing anything else) would lose the ability to reconnect back into
+    // your own still-alive, still-rematchable "over" match.
+    this.status = msg.reason === "abort" ? "aborted" : "over";
     this.clock = msg.clock ?? this.clock; // ADDED — final frozen snapshot; falls back to whatever we last had rather than wiping it if this particular message somehow omits it
     if (this.status === "aborted") MatchClient.clearSession();
     this.onMatchEnded?.(msg);
