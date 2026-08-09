@@ -257,7 +257,6 @@ function startGame(game, matchClient = null) {
 
   ui = new GameUI(game, renderer, canvas, matchClient);
   ui.init();
-  initHintsPanel();
 }
 
 // params here are always already resolved/clamped (see js/params.js) —
@@ -434,3 +433,16 @@ document.getElementById("btnBackToMenu").addEventListener("click", () => {
 document.getElementById("btnLocalBackToMenu").addEventListener("click", () => {
   goToMenu();
 });
+
+// FIXED (root cause): this used to run once per startGame() call, but
+// .hints__toggle lives in the static gameScreen markup — the same button
+// element persists across every game/rematch/reconnect, it's never rebuilt.
+// initHintsPanel() has no teardown, so calling it from startGame() bound a
+// brand new click listener on top of every previous one, every game. With
+// several stacked listeners on one button, a single click fires all of them
+// synchronously; since each one independently reads body.hidden, flips it,
+// and writes it back, an even number of stacked listeners cancels itself
+// out to a net no-op — which is exactly the intermittent "does nothing"
+// behavior. The hints content is static and match-independent, so — like
+// every other button here — it only ever needs to be bound once, at load.
+initHintsPanel();

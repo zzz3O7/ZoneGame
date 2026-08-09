@@ -716,7 +716,28 @@ export class GameUI {
       zonePreview,
     );
 
-    this.zoneTooltip.update(this.cursorCell, this.game.board, this.game.zones, cursorInPreview ? zonePreview : null);
+    // FIXED (root cause): every other piece of UI state in this render
+    // cycle is re-derived from game.gameOver (controls disable, overlay
+    // shows, etc — see _syncControls/_syncGameOver), but the tooltip was
+    // driven purely off cursorCell/hover and never revisited here. If the
+    // game ended while the cursor happened to be resting over a completed
+    // zone — the player's own winning move, or a remote move landing under
+    // an online opponent's still-hovering cursor — nothing ever told the
+    // tooltip to hide. It's a DOM element positioned absolutely inside
+    // .board-wrap with its own z-index (see style.css), so it kept
+    // rendering on top of the endcard overlay that appeared under it,
+    // rather than disappearing. Suppressing it once gameOver is true keeps
+    // the tooltip's visibility a pure function of state, consistent with
+    // the rest of _render(), instead of a one-off hide() bolted on
+    // elsewhere for this one case (compare the pinch-start hide(), which is
+    // a deliberate exception for a genuinely event-driven, not state-driven,
+    // situation).
+    this.zoneTooltip.update(
+      this.game.gameOver ? null : this.cursorCell,
+      this.game.board,
+      this.game.zones,
+      !this.game.gameOver && cursorInPreview ? zonePreview : null,
+    );
   }
 
   _syncControls() {
