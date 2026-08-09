@@ -1,13 +1,11 @@
 save nickname input contents
 
-old move history on new online match
 strange board on different resolutions
-reconnect window up
 
-rematch button not alwoays showing
+    rematch button not always showing
+    old move history on new online match
 
-waiting screen time patams + in game info
-
+waiting screen time params + in game info
 reminder on pass
 
 laggy connection
@@ -15,8 +13,6 @@ laggy connection
 calc drawings (+ undo/redo for drawings)
 
 ??? skip move - 10% penalty on all points ( concecutive passess are not allowed)
-
-    time control
 
 sound
 undo/redo
@@ -27,3 +23,4 @@ matchStart currently arrives before matchJoined
 
 options + optional confirm on buttons
 up the pass penalty
+reconnect window increase

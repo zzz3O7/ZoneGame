@@ -1,6 +1,12 @@
 import { CUSTOM_DEFAULTS, TIME_CUSTOM_DEFAULTS } from "./config.js";
 import { resolveParams } from "./params.js";
 
+// ADDED — same "zonegame.<thing>" key convention as matchClient.js's
+// session storage. localStorage (not sessionStorage): unlike match
+// reconnect state, there's no reason to scope a remembered nickname to one
+// tab/session — it should just be there next time, in any tab.
+const NICKNAME_KEY = "zonegame.nickname";
+
 // Owns the menu screen only: mode selection, custom params, local/create/join
 // tabs. Emits fully-resolved params objects via callbacks — never hands raw
 // input values to the caller.
@@ -15,6 +21,7 @@ export class Menu {
 
     this._cacheDom();
     this._populateDefaults();
+    this._restoreNickname(); // ADDED
     this._bindEvents();
   }
 
@@ -94,6 +101,30 @@ export class Menu {
     this.els.panels.forEach((panel) => panel.classList.toggle("active", panel.id === tabId));
   }
 
+  // ADDED: pre-fill both nickname fields from whatever was last saved.
+  // Create and Join are really one identity, not two separate fields, so
+  // both get the same restored value.
+  _restoreNickname() {
+    let saved = "";
+    try {
+      saved = localStorage.getItem(NICKNAME_KEY) || "";
+    } catch {
+      // storage unavailable (private browsing, etc.) — inputs just start empty, not fatal
+    }
+    if (saved) {
+      this.els.nicknameCreate.value = saved;
+      this.els.nicknameJoin.value = saved;
+    }
+  }
+
+  _saveNickname(value) {
+    try {
+      if (value) localStorage.setItem(NICKNAME_KEY, value);
+    } catch {
+      // storage unavailable — just won't persist this time, not fatal
+    }
+  }
+
   _readCustomInputs() {
     return {
       boardSize: this.els.boardSize.value,
@@ -131,13 +162,26 @@ export class Menu {
       this.onStartLocal(this._buildParams());
     });
 
+    // ADDED: keep the Create/Join nickname fields in sync (one identity,
+    // two tabs) and persist as the person types — see _restoreNickname.
+    this.els.nicknameCreate.addEventListener("input", () => {
+      this.els.nicknameJoin.value = this.els.nicknameCreate.value;
+      this._saveNickname(this.els.nicknameCreate.value.trim());
+    });
+    this.els.nicknameJoin.addEventListener("input", () => {
+      this.els.nicknameCreate.value = this.els.nicknameJoin.value;
+      this._saveNickname(this.els.nicknameJoin.value.trim());
+    });
+
     this.els.btnCreate.addEventListener("click", () => {
       const nickname = this.els.nicknameCreate.value.trim() || "Player";
+      this._saveNickname(nickname); // ADDED — belt-and-suspenders alongside the input listener (e.g. an autofilled value that never fired "input")
       this.onCreateMatch(nickname, this._buildParams());
     });
 
     this.els.btnJoin.addEventListener("click", () => {
       const nickname = this.els.nicknameJoin.value.trim() || "Player";
+      this._saveNickname(nickname); // ADDED
       const code = this.els.joinCode.value.trim().toUpperCase();
       if (!code) return;
       this.onJoinMatch(nickname, code);
