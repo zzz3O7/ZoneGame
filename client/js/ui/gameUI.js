@@ -1,6 +1,7 @@
 import { Shape, SHAPES_BASE } from "../../../shared/engine/shape.js";
 import { PASS_PENALTY, LAYOUT } from "../../../shared/config.js";
 import { GestureInput } from "../input/gestureInput.js";
+import { CalcDrawing } from "../input/calcDrawing.js";
 import { ZoneTooltip } from "./zoneTooltip.js";
 import { Zone } from "../../../shared/engine/zone.js";
 import { Board } from "../../../shared/engine/board.js";
@@ -13,7 +14,7 @@ import {
   formatTimeControlLabel,
 } from "../../../shared/clock.js";
 
-const KEY_TO_TYPE = { 1: "gesture", 2: "domino", 3: "tromino", 4: "tetromino" };
+const KEY_TO_TYPE = { 1: "gesture", 2: "domino", 3: "tromino", 4: "tetromino", 5: "calc" };
 
 // How often the online clock display re-paints between authoritative
 // server snapshots. Display-only — how smooth the ticking looks.
@@ -72,6 +73,7 @@ export class GameUI {
     this._lastTap = null; // { time, x, y } of the previous qualifying tap, for double-tap
 
     this.gesture = new GestureInput();
+    this.calcDrawing = new CalcDrawing(); // desktop-only planning overlay — see selectType("calc")
     this.zoneTooltip = new ZoneTooltip(canvas);
 
     this.hoveredMoveIndex = null;
@@ -120,7 +122,21 @@ export class GameUI {
 
   refresh() {
     // public alias, so main.js can trigger re-render on remote moves
+    this._clearCalcIfOwnMove();
     this._render();
+  }
+
+  // Auto-clears calc marks once the viewer's own move actually lands —
+  // they've kept thinking, but a plan shouldn't outlive the move it was
+  // drawn for. No-op for the opponent's moves online, so marks survive
+  // across their turn while the viewer keeps calculating.
+  _clearCalcIfOwnMove() {
+    const last = this.game.history.last();
+    if (!last) return;
+    const viewerIndex = this.matchClient ? this.matchClient.myPlayerIndex : null;
+    if (viewerIndex == null || last.playerIndex === viewerIndex) {
+      this.calcDrawing.clear();
+    }
   }
 
   // ===================== network gating =====================
@@ -137,7 +153,10 @@ export class GameUI {
       // no local mutation, no _render() here — wait for moveApplied broadcast
     } else {
       const applied = this.game.attemptPlacement(pieceType, shape, anchorRow, anchorCol);
-      if (applied) this._advanceHotseatClock();
+      if (applied) {
+        this._advanceHotseatClock();
+        this._clearCalcIfOwnMove();
+      }
       this._render();
     }
   }
@@ -151,6 +170,7 @@ export class GameUI {
     } else {
       if (!this.game.pass()) return;
       this._advanceHotseatClock();
+      this._clearCalcIfOwnMove();
       this._render();
     }
   }
@@ -184,7 +204,7 @@ export class GameUI {
   }
 
   currentShape() {
-    if (this.selectedType === "gesture") return null;
+    if (this.selectedType === "gesture" || this.selectedType === "calc") return null;
     let cells = SHAPES_BASE[this.selectedType];
     if (this.flipped) cells = Shape.reflect(cells);
     for (let i = 0; i < this.rotationStep; i++) cells = Shape.rotate(cells);
@@ -249,9 +269,51 @@ export class GameUI {
   secondaryAction() {
     if (this.selectedType === "gesture") {
       this.cancelGesture();
+    } else if (this.selectedType === "calc") {
+      // no-op: flip doesn't apply to calc marks, and right-click already
+      // clears them via the contextmenu listener directly.
     } else {
       this.flip();
     }
+  }
+
+  // ===================== intents: calc-mode drawing =====================
+  // Desktop/pointer-only planning overlay: paints cells for the viewer to
+  // think out loud on the board without it ever becoming a move. Persists
+  // across mode switches and hover — only cleared by undo/redo/clear or
+  // the viewer's own next real move (_clearCalcIfOwnMove).
+
+  startCalc(cell, color) {
+    if (this.selectedType !== "calc") return;
+    this.calcDrawing.start(cell, color);
+    this._syncCanvas();
+  }
+
+  finishCalc() {
+    if (!this.calcDrawing.finish()) return;
+    this._syncCanvas();
+    this._syncCalcControls();
+  }
+
+  clearCalc() {
+    if (this.selectedType !== "calc") return;
+    if (!this.calcDrawing.clear()) return;
+    this._syncCanvas();
+    this._syncCalcControls();
+  }
+
+  undoCalc() {
+    if (this.selectedType !== "calc") return;
+    if (!this.calcDrawing.undo()) return;
+    this._syncCanvas();
+    this._syncCalcControls();
+  }
+
+  redoCalc() {
+    if (this.selectedType !== "calc") return;
+    if (!this.calcDrawing.redo()) return;
+    this._syncCanvas();
+    this._syncCalcControls();
   }
 
   // ===================== intents: board interaction =====================
@@ -266,6 +328,7 @@ export class GameUI {
     if (this.cursorCell && cell[0] === this.cursorCell[0] && cell[1] === this.cursorCell[1]) return;
     this.cursorCell = cell;
     this.gesture.extend(cell);
+    this.calcDrawing.extend(cell);
     this._renderHover();
   }
 
@@ -407,12 +470,24 @@ export class GameUI {
       "mousedown",
       (e) => {
         if (e.button !== 0) return;
-        this.startGesture(this._cellFromEvent(e));
+        const cell = this._cellFromEvent(e);
+        if (this.selectedType === "calc") {
+          this.startCalc(cell, e.shiftKey ? "opponent" : "self");
+          return;
+        }
+        this.startGesture(cell);
       },
       { signal },
     );
 
-    document.addEventListener("mouseup", () => this.finishGesture(), { signal });
+    document.addEventListener(
+      "mouseup",
+      () => {
+        this.finishGesture();
+        this.finishCalc();
+      },
+      { signal },
+    );
 
     this.canvas.addEventListener("mousemove", (e) => this.hover(this._cellFromEvent(e)), { signal });
     this.canvas.addEventListener("mouseleave", () => this.clearHover(), { signal });
@@ -425,7 +500,7 @@ export class GameUI {
           this.confirmGesture();
           return;
         }
-        if (this.selectedType === "gesture") return; // nothing drawn/confirmed yet
+        if (this.selectedType === "gesture" || this.selectedType === "calc") return; // drawn via drag, not click
         this.placeAt(this._cellFromEvent(e));
       },
       { signal },
@@ -435,6 +510,10 @@ export class GameUI {
       "contextmenu",
       (e) => {
         e.preventDefault();
+        if (this.selectedType === "calc") {
+          this.clearCalc();
+          return;
+        }
         this.secondaryAction();
       },
       { signal },
@@ -597,10 +676,19 @@ export class GameUI {
     document.getElementById("btnDiscard")?.addEventListener("click", () => this.discardStaged(), { signal });
     document.getElementById("btnResign")?.addEventListener("click", () => this.resign(), { signal });
     document.getElementById("btnOnlineRematch")?.addEventListener("click", () => this.requestRematch(), { signal });
+    document.getElementById("btnCalcUndo")?.addEventListener("click", () => this.undoCalc(), { signal });
+    document.getElementById("btnCalcRedo")?.addEventListener("click", () => this.redoCalc(), { signal });
+    document.getElementById("btnCalcClear")?.addEventListener("click", () => this.clearCalc(), { signal });
 
     document.addEventListener(
       "keydown",
       (event) => {
+        if ((event.key === "z" || event.key === "Z") && (event.ctrlKey || event.metaKey)) {
+          event.preventDefault();
+          if (event.shiftKey) this.redoCalc();
+          else this.undoCalc();
+          return;
+        }
         const type = KEY_TO_TYPE[event.key];
         if (type) {
           this.selectType(type);
@@ -635,7 +723,7 @@ export class GameUI {
     if (this.gesture.pending) {
       return [[this.gesture.pending.anchorRow, this.gesture.pending.anchorCol], this.gesture.pending.shape];
     }
-    if (this.selectedType === "gesture") return [null, null];
+    if (this.selectedType === "gesture" || this.selectedType === "calc") return [null, null];
     if (!this.cursorCell) return [null, null];
     return [this.cursorCell, this.currentShape()];
   }
@@ -705,6 +793,7 @@ export class GameUI {
       highlightEntry,
       this.hoveredZoneIds,
       zonePreview,
+      this.selectedType === "calc" ? this.calcDrawing.cells : null,
     );
 
     this.zoneTooltip.update(
@@ -720,6 +809,20 @@ export class GameUI {
     this._syncStagedButtons();
     this._syncOnlineActions();
     this._syncLocalActions();
+    this._syncCalcControls();
+  }
+
+  // Undo/redo/clear row: visible only while calc mode is the active
+  // selection, enablement follows CalcDrawing's own undo/redo stacks.
+  _syncCalcControls() {
+    const row = document.getElementById("calcControls");
+    if (row) row.hidden = this.selectedType !== "calc";
+    const undoBtn = document.getElementById("btnCalcUndo");
+    const redoBtn = document.getElementById("btnCalcRedo");
+    const clearBtn = document.getElementById("btnCalcClear");
+    if (undoBtn) undoBtn.disabled = !this.calcDrawing.canUndo;
+    if (redoBtn) redoBtn.disabled = !this.calcDrawing.canRedo;
+    if (clearBtn) clearBtn.disabled = this.calcDrawing.cells.size === 0;
   }
 
   // Resign is only meaningful for an online match that's still live —
@@ -776,7 +879,8 @@ export class GameUI {
   // so hover doesn't pay for the querySelectorAll piece-button loop too.
   _syncStagedButtons() {
     const myTurn = this._isMyTurn();
-    const hasStaged = !!this.gesture.pending || (this.selectedType !== "gesture" && !!this.cursorCell);
+    const hasStaged =
+      !!this.gesture.pending || (this.selectedType !== "gesture" && this.selectedType !== "calc" && !!this.cursorCell);
     const confirmBtn = document.getElementById("btnConfirm");
     const discardBtn = document.getElementById("btnDiscard");
     if (confirmBtn) confirmBtn.disabled = this.game.gameOver || !myTurn || !hasStaged;

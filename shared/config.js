@@ -18,6 +18,8 @@ export const THEME = {
   zoneBorders: "#7d8896", // bright on purpose: must hold up over any zone fill
   zoneBordersHighlight: "#dee0e2", // hover state, distinct from the border above
   moveHighlight: "#3fbfc9",
+  calcMarkSelf: "rgba(155,110,220,0.5)",
+  calcMarkOpponent: "rgba(224,110,180,0.5)",
 };
 
 export const LAYOUT = {

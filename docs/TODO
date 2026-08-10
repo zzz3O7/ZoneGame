@@ -1,13 +1,9 @@
-strange layout on different resolutions (center vertucally)
-
-calc drawings (+ undo/redo for drawings)
-
     sound
 options + optional confirm on buttons
 
 rating
 
-undo/redo
+undo/redo history panel
 
 matchStart currently arrives before matchJoined
 

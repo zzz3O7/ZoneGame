@@ -249,7 +249,9 @@ button {
   .hints__item.touch-only {
     display: flex;
   }
-  .hints__item.pointer-only {
+  .hints__item.pointer-only,
+  .piece-btn.pointer-only,
+  .piece-selector.pointer-only {
     display: none;
   }
 }
@@ -291,6 +293,12 @@ button {
   align-items: center;
   gap: 6px;
   justify-content: center;
+}
+/* same gotcha as .btn-row[hidden] elsewhere in this file: the class rule
+   above beats the UA [hidden]{display:none}, so calcControls.hidden = true
+   silently did nothing without this. */
+.piece-selector[hidden] {
+  display: none;
 }
 
 .piece-selector--controls {

@@ -85,6 +85,7 @@ export class Renderer {
     highlightEntry,
     hoveredZoneIds,
     zonePreview,
+    calcCells,
   ) {
     const ctx = this.ctx;
     ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
@@ -94,6 +95,7 @@ export class Renderer {
     this._drawMoveHighlight(ctx, highlightEntry);
     this._drawGesturePath(ctx, gesturePath);
     this._drawGhost(ctx, board, zones, currentPlayerIndex, viewer, pieceType, anchorShape, anchorCell);
+    this._drawCalcMarks(ctx, calcCells);
   }
 
   _drawBoard(ctx, board) {
@@ -267,6 +269,15 @@ export class Renderer {
     ctx.fillStyle = THEME.gesturePath;
     for (const cell of path) {
       const [r, c] = cell;
+      ctx.fillRect(c * this.cellSize, r * this.cellSize, this.cellSize, this.cellSize);
+    }
+  }
+
+  _drawCalcMarks(ctx, cells) {
+    if (!cells || cells.size === 0) return;
+    for (const [key, color] of cells) {
+      const [r, c] = Board.parse(key);
+      ctx.fillStyle = color === "opponent" ? THEME.calcMarkOpponent : THEME.calcMarkSelf;
       ctx.fillRect(c * this.cellSize, r * this.cellSize, this.cellSize, this.cellSize);
     }
   }

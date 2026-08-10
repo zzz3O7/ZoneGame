@@ -237,9 +237,32 @@
                       ><span></span><span></span><span></span><span></span></span
                   ></span>
                 </button>
+                <button
+                  class="piece-btn pointer-only"
+                  data-type="calc"
+                  title="Calc mode: sketch plans on the board — never a real move"
+                >
+                  <span class="piece-btn__icon">▦</span>
+                </button>
                 <button class="piece-btn piece-btn--skip" title="Skip turn">
                   <span class="piece-btn__icon">⏭</span>
                   <span class="piece-btn__count">0</span>
+                </button>
+              </div>
+
+              <div
+                class="piece-selector piece-selector--controls piece-selector--calc pointer-only"
+                id="calcControls"
+                hidden
+              >
+                <button class="piece-btn" id="btnCalcUndo" title="Undo (Ctrl+Z)" disabled>
+                  <span class="piece-btn__icon">↶</span>
+                </button>
+                <button class="piece-btn" id="btnCalcRedo" title="Redo (Ctrl+Shift+Z)" disabled>
+                  <span class="piece-btn__icon">↷</span>
+                </button>
+                <button class="piece-btn" id="btnCalcClear" title="Clear all (right-click)" disabled>
+                  <span class="piece-btn__icon">🗑</span>
                 </button>
               </div>
 
@@ -281,7 +304,7 @@
               </div>
               <div class="hints__item pointer-only">
                 <span class="hints__key">RMB / F</span>
-                <span>Flip the shape, or cancel a gesture</span>
+                <span>Flip the shape, cancel a gesture, or clear calc marks in calc mode</span>
               </div>
               <div class="hints__item pointer-only">
                 <span class="hints__key">Drag</span>
@@ -290,6 +313,18 @@
               <div class="hints__item pointer-only">
                 <span class="hints__key">LMB</span>
                 <span>Place the shape, or confirm a drawn gesture</span>
+              </div>
+              <div class="hints__item pointer-only">
+                <span class="hints__key">5</span>
+                <span>Calc mode: sketch plans on the board</span>
+              </div>
+              <div class="hints__item pointer-only">
+                <span class="hints__key">Shift+LMB</span>
+                <span>Calc mode: draw in the opponent color</span>
+              </div>
+              <div class="hints__item pointer-only">
+                <span class="hints__key">Ctrl+Z / Ctrl+Shift+Z</span>
+                <span>Calc mode: undo / redo a mark</span>
               </div>
               <div class="hints__item touch-only">
                 <span class="hints__key">Drag</span>
