@@ -101,6 +101,23 @@ export function extrapolateRemaining(snapshot, playerIndex, now) {
   return Math.max(0, base - elapsed);
 }
 
+// Human-readable time-control label, same chess-notation style ("5+0",
+// "10+5") already used for the TIME_PRESETS labels in shared/config.js —
+// reused wherever a resolved timeControl needs displaying outside the menu
+// (waiting room, in-game match-info panel). Falls back to "M:SS" for the
+// starting time if it isn't a whole number of minutes (custom time
+// controls can go as low as 15s — see TIME_CUSTOM_LIMITS).
+export function formatTimeControlLabel(timeControl) {
+  if (!timeControl) return "No clock";
+  const { initialMs, incrementMs } = timeControl;
+  const totalSeconds = Math.round(initialMs / 1000);
+  const m = Math.floor(totalSeconds / 60);
+  const s = totalSeconds % 60;
+  const initialLabel = s === 0 ? `${m}` : `${m}:${String(s).padStart(2, "0")}`;
+  const incrementSeconds = Math.round(incrementMs / 1000);
+  return `${initialLabel}+${incrementSeconds}`;
+}
+
 // m:ss, or h:mm:ss once an hour is on the bank. Ceil (not floor/round).
 // Below LOW_TIME_THRESHOLD_MS, switches to tenths-of-a-second precision
 // (m:ss.d) — whole seconds is too coarse to read a flag-fall coming.

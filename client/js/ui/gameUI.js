@@ -5,7 +5,13 @@ import { ZoneTooltip } from "./zoneTooltip.js";
 import { Zone } from "../../../shared/engine/zone.js";
 import { Board } from "../../../shared/engine/board.js";
 import { HistoryPanel } from "./historyPanel.js";
-import { extrapolateRemaining, formatClockMs, Clock, LOW_TIME_THRESHOLD_MS } from "../../../shared/clock.js";
+import {
+  extrapolateRemaining,
+  formatClockMs,
+  Clock,
+  LOW_TIME_THRESHOLD_MS,
+  formatTimeControlLabel,
+} from "../../../shared/clock.js";
 
 const KEY_TO_TYPE = { 1: "gesture", 2: "domino", 3: "tromino", 4: "tetromino" };
 
@@ -102,12 +108,14 @@ export class GameUI {
     const boardSizeEl = document.getElementById("boardSizeValue");
     const zoneRadiusEl = document.getElementById("zoneRadiusValue");
     const startingDominoesEl = document.getElementById("startingDominoesValue");
+    const timeControlEl = document.getElementById("timeControlValue");
 
     if (modeEl) modeEl.textContent = game.mode === "classic" ? "Classic" : "Custom";
     if (seedEl) seedEl.textContent = game.seed;
     if (boardSizeEl) boardSizeEl.textContent = `${game.board.cols} x ${game.board.rows}`;
     if (zoneRadiusEl) zoneRadiusEl.textContent = game.zoneRadius;
     if (startingDominoesEl) startingDominoesEl.textContent = game.startingDominoes;
+    if (timeControlEl) timeControlEl.textContent = formatTimeControlLabel(game.timeControl);
   }
 
   refresh() {
@@ -753,6 +761,8 @@ export class GameUI {
     if (skipBtn) {
       const forcedSkip = this.game.gameOver ? false : myTurn && !canMove;
       skipBtn.disabled = this.game.gameOver || !myTurn || canMove;
+      // Only the viewer's own forced-pass state should flash — reusing
+      // the same condition the disabled check above already computes.
       skipBtn.classList.toggle("piece-btn--skip-reminder", forcedSkip);
       const skipPenalty = viewerPlayer.score - Math.floor(viewerPlayer.score * PASS_PENALTY);
       const countEl = skipBtn.querySelector(".piece-btn__count");

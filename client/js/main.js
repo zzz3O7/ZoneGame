@@ -7,6 +7,7 @@ import { MatchClient } from "./net/matchClient.js";
 import { Menu } from "./ui/menu.js";
 import { showBanner, hideBanner } from "./ui/banner.js";
 import { DISCONNECT_ABORT_MS } from "../../shared/config.js";
+import { formatTimeControlLabel } from "../../shared/clock.js";
 
 const menuScreen = document.getElementById("menuScreen");
 const waitingRoomScreen = document.getElementById("waitingRoomScreen");
@@ -281,6 +282,7 @@ function populateWaitingRoom(params, inviteCode) {
   document.getElementById("waitBoardValue").textContent = `${params.boardSize} x ${params.boardSize}`;
   document.getElementById("waitZoneRadiusValue").textContent = params.zoneRadius;
   document.getElementById("waitDominoValue").textContent = params.startingDominoes;
+  document.getElementById("waitTimeValue").textContent = formatTimeControlLabel(params.timeControl);
 }
 
 // Page-load reconnect. Checked once, before Menu even shows the
