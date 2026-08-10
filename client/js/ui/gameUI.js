@@ -1,11 +1,11 @@
-import { Shape, SHAPES_BASE } from "./shape.js";
-import { PASS_PENALTY, LAYOUT } from "./config.js";
-import { GestureInput } from "./gestureInput.js";
+import { Shape, SHAPES_BASE } from "../../../shared/engine/shape.js";
+import { PASS_PENALTY, LAYOUT } from "../../../shared/config.js";
+import { GestureInput } from "../input/gestureInput.js";
 import { ZoneTooltip } from "./zoneTooltip.js";
-import { Zone } from "./zone.js";
-import { Board } from "./board.js";
+import { Zone } from "../../../shared/engine/zone.js";
+import { Board } from "../../../shared/engine/board.js";
 import { HistoryPanel } from "./historyPanel.js";
-import { extrapolateRemaining, formatClockMs, Clock } from "./clock.js";
+import { extrapolateRemaining, formatClockMs, Clock } from "../../../shared/clock.js";
 
 const KEY_TO_TYPE = { 1: "gesture", 2: "domino", 3: "tromino", 4: "tetromino" };
 

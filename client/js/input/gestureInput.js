@@ -1,4 +1,4 @@
-import { Board } from "./board.js";
+import { Board } from "../../../shared/engine/board.js";
 import { GestureRecognizer } from "./gestureRecognizer.js";
 
 // Owns the freehand gesture-drawing state machine: tracks the path while the

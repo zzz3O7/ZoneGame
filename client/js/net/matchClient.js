@@ -1,5 +1,5 @@
-import { Game } from "../game.js";
-import { MSG } from "./protocol.js";
+import { Game } from "../../../shared/engine/game.js";
+import { MSG } from "../../../shared/net/protocol.js";
 
 const SESSION_KEY = "zonegame.session";
 

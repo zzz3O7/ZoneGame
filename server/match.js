@@ -1,9 +1,9 @@
 import { randomUUID } from "crypto";
-import { Game } from "../js/game.js";
-import { Clock } from "../js/clock.js";
-import { resolveParams } from "../js/params.js";
-import { MSG } from "../js/net/protocol.js";
-import { DISCONNECT_ABORT_MS, REMATCH_TIMEOUT_MS } from "../js/config.js";
+import { Game } from "../shared/engine/game.js";
+import { Clock } from "../shared/clock.js";
+import { resolveParams } from "../shared/params.js";
+import { MSG } from "../shared/net/protocol.js";
+import { DISCONNECT_ABORT_MS, REMATCH_TIMEOUT_MS } from "../shared/config.js";
 
 export class Match {
   constructor(matchId, inviteCode, rawParams, onClose) {

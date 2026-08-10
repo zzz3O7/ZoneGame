@@ -1,4 +1,4 @@
-import { Shape, SHAPE_VARIANTS } from "./shape.js";
+import { Shape, SHAPE_VARIANTS } from "../../../shared/engine/shape.js";
 
 const CELL_COUNT_TO_TYPE = { 2: "domino", 3: "tromino", 4: "tetromino" };
 

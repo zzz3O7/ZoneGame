@@ -1,6 +1,6 @@
 import { WebSocketServer } from "ws";
 import { MatchManager } from "./matchManager.js";
-import { MSG } from "../js/net/protocol.js";
+import { MSG } from "../shared/net/protocol.js";
 
 const wss = new WebSocketServer({ port: 8080, host: "127.0.0.1" });
 const manager = new MatchManager();

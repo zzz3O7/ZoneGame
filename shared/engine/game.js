@@ -6,7 +6,7 @@ import { Rules } from "./rules.js";
 import { Shape } from "./shape.js";
 import { CaveGenerator } from "./caveGenerator.js";
 import { MoveHistory } from "./history.js";
-import { PASS_PENALTY } from "./config.js";
+import { PASS_PENALTY } from "../config.js";
 
 export class Game {
   // params: { mode, boardSize, zoneRadius, startingDominoes, seed?, timeControl? }
