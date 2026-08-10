@@ -53,6 +53,21 @@ function leaveCurrentMatch() {
   MatchClient.clearSession();
 }
 
+// A JOIN_MATCH the server rejected (bad code, or the match already
+// filled up) — the only thing that currently sends MSG.ERROR. The socket
+// never got attached to a match, so there's nothing to leave; just close
+// it (intentional, so it doesn't also trigger onConnectionLost) and let
+// the person retry from the menu.
+function handleJoinError(message) {
+  currentConnection?.close();
+  resetMatchState();
+  menu.clearJoinCode();
+  showBanner(message || "Couldn't join that match.", {
+    kind: "danger",
+    actions: [{ label: "Dismiss", onClick: hideBanner }],
+  });
+}
+
 function setupMatchClient(conn) {
   const matchClient = new MatchClient(conn);
   currentMatchClient = matchClient;
@@ -68,6 +83,7 @@ function setupMatchClient(conn) {
   matchClient.onReconnectFailed = () => handleReconnectFailed();
   matchClient.onOpponentWantsRematch = () => ui?.showOpponentWantsRematch();
   matchClient.onRematchCancelled = () => ui?.resetRematchPrompt();
+  matchClient.onError = (message) => handleJoinError(message);
   // Shared by reconnect success AND hash-mismatch resync (see matchClient.js) —
   // either way, the correct move is just "rebuild the UI from what the
   // server says is true right now", same as a fresh match start.
