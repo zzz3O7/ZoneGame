@@ -1,5 +1,5 @@
-import { CUSTOM_DEFAULTS, TIME_CUSTOM_DEFAULTS } from "./config.js";
-import { resolveParams } from "./params.js";
+import { CUSTOM_DEFAULTS, TIME_CUSTOM_DEFAULTS } from "../../../shared/config.js";
+import { resolveParams } from "../../../shared/params.js";
 
 // Same "zonegame.<thing>" key convention as matchClient.js's session storage.
 // localStorage (not sessionStorage): unlike match reconnect state.

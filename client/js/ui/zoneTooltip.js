@@ -1,4 +1,4 @@
-import { Board } from "./board.js";
+import { Board } from "../../../shared/engine/board.js";
 
 export class ZoneTooltip {
   constructor(canvas) {

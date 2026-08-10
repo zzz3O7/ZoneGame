@@ -1,12 +1,12 @@
-import { Game } from "./game.js";
-import { Renderer } from "./renderer.js";
-import { GameUI } from "./gameUI.js";
-import { initHintsPanel } from "./hintsPanel.js";
+import { Game } from "../../shared/engine/game.js";
+import { Renderer } from "./ui/renderer.js";
+import { GameUI } from "./ui/gameUI.js";
+import { initHintsPanel } from "./ui/hintsPanel.js";
 import { Connection } from "./net/connection.js";
 import { MatchClient } from "./net/matchClient.js";
-import { Menu } from "./menu.js";
-import { showBanner, hideBanner } from "./banner.js";
-import { DISCONNECT_ABORT_MS } from "./config.js";
+import { Menu } from "./ui/menu.js";
+import { showBanner, hideBanner } from "./ui/banner.js";
+import { DISCONNECT_ABORT_MS } from "../../shared/config.js";
 
 const menuScreen = document.getElementById("menuScreen");
 const waitingRoomScreen = document.getElementById("waitingRoomScreen");

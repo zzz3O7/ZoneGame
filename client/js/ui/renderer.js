@@ -1,8 +1,8 @@
-import { LAYOUT, THEME } from "./config.js";
-import { Board } from "./board.js";
-import { Shape } from "./shape.js";
-import { Rules } from "./rules.js";
-import { ORTHOGONAL_EDGES } from "./directions.js";
+import { LAYOUT, THEME } from "../../../shared/config.js";
+import { Board } from "../../../shared/engine/board.js";
+import { Shape } from "../../../shared/engine/shape.js";
+import { Rules } from "../../../shared/engine/rules.js";
+import { ORTHOGONAL_EDGES } from "../../../shared/engine/directions.js";
 
 // Two stacked, same-size canvases instead of one:
 //  - staticCanvas: board grid, zone fills/borders, placed pieces. Only

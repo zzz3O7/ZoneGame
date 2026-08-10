@@ -1,0 +1,29 @@
+    comments cleanup and file directory refactor
+
+clock format: decimals on low time
+
+cannot set clock to 15 seconds by sliders
+
+    on rematch expire yellow text still sais the rematch offer is live
+
+reminder on pass
+waiting screen time params + in game info
+
+strange layout on different resolutions (center vertucally)
+
+calc drawings (+ undo/redo for drawings)
+
+    sound
+options + optional confirm on buttons
+
+rating
+
+undo/redo
+
+matchStart currently arrives before matchJoined
+
+??? skip move - 10% penalty on all points ( concecutive passess are not allowed)
+??? fixed flat penalty
+
+??? laggy connection
+??? on different grid sizes board is still a square not a rectangle and tiles are squished
