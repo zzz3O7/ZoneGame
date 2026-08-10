@@ -1,4 +1,4 @@
-    comments cleanup and file directory refactor
+server side logging (remove current board generated garbage and add useful logging)
 
 clock format: decimals on low time
 
