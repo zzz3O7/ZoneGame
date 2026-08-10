@@ -1,6 +1,7 @@
 import { WebSocketServer } from "ws";
 import { MatchManager } from "./matchManager.js";
 import { MSG } from "../shared/net/protocol.js";
+import { log, shortId } from "./logger.js";
 
 const wss = new WebSocketServer({ port: 8080, host: "127.0.0.1" });
 const manager = new MatchManager();
@@ -23,6 +24,7 @@ wss.on("connection", (ws) => {
     try {
       msg = JSON.parse(raw);
     } catch {
+      log("Malformed message received (JSON parse failed)");
       return;
     }
 
@@ -101,11 +103,13 @@ wss.on("connection", (ws) => {
       if (msg.type === MSG.RECONNECT_ATTEMPT) {
         const match = manager.findMatchBySessionId(msg.sessionId);
         if (!match || match.matchId !== msg.matchId) {
+          log(`Reconnect failed: match not found (matchId=${shortId(msg.matchId)})`);
           ws.send(JSON.stringify({ type: MSG.RECONNECT_FAILED, reason: "Match not found" }));
           return;
         }
         const syncState = match.reconnect(msg.sessionId, ws);
         if (!syncState) {
+          log(`Reconnect failed: session no longer valid (matchId=${shortId(msg.matchId)})`);
           ws.send(JSON.stringify({ type: MSG.RECONNECT_FAILED, reason: "Session no longer valid" }));
           return;
         }
@@ -121,6 +125,7 @@ wss.on("connection", (ws) => {
         if (!match) return;
         const player = match.players.find((p) => p.ws === ws);
         if (!player) return;
+        log(`Match ${shortId(match.matchId)}: ${player.nickname} requested resync (hash mismatch)`);
         ws.send(JSON.stringify(match.buildSyncState(player)));
         return;
       }
@@ -146,4 +151,4 @@ const interval = setInterval(() => {
 
 wss.on("close", () => clearInterval(interval));
 
-console.log("Server listening on :8080");
+log("Server listening on :8080");

@@ -4,6 +4,7 @@ import { Clock } from "../shared/clock.js";
 import { resolveParams } from "../shared/params.js";
 import { MSG } from "../shared/net/protocol.js";
 import { DISCONNECT_ABORT_MS, REMATCH_TIMEOUT_MS } from "../shared/config.js";
+import { log, shortId, formatDuration } from "./logger.js";
 
 export class Match {
   constructor(matchId, inviteCode, rawParams, onClose) {
@@ -25,6 +26,8 @@ export class Match {
     this._flagTimer = null;
     this.rematchRequestedBy = new Set(); // playerIndex values that have asked for a rematch
     this.lastStartingPlayerIndex = null; // who moved first in the most recent game — null until the first game starts
+    this._gameCount = 0; // incremented in _start() — first game vs rematch, for logging
+    this._gameStartedAt = null; // Date.now() at last _start() — for logging match duration
 
     // Re-resolve on the server: the creator's client already clamped these,
     // but the server never trusts client-sent values directly. This is the
@@ -91,6 +94,32 @@ export class Match {
       players: this.players.map((pp) => ({ index: pp.playerIndex, nickname: pp.nickname })),
       clock: this.clock ? this.clock.snapshot(now) : null,
     }));
+
+    this._gameCount++;
+    this._gameStartedAt = now;
+    const starter = this.players.find((p) => p.playerIndex === startingPlayerIndex);
+    const label = this._gameCount === 1 ? "started" : `rematch #${this._gameCount} started`;
+    log(
+      `Match ${shortId(this.matchId)} ${label}: ${this.players[0].nickname} vs ${this.players[1].nickname} (${starter?.nickname} first)`,
+    );
+  }
+
+  // Shared by every game-ending path (no-moves, resign, timeout, abort).
+  // Called after this.status/this.endInfo are already set.
+  _logMatchEnd(reason) {
+    if (!this.game) {
+      // waiting-room abandonment — no game ever started, nothing to score
+      log(`Match ${shortId(this.matchId)} closed: reason=${reason} (never started)`);
+      return;
+    }
+    const duration = this._gameStartedAt ? formatDuration(Date.now() - this._gameStartedAt) : "?";
+    const scores = this.game.players.map((p) => p.score).join("-");
+    const winnerIndex = this.endInfo?.winnerIndex;
+    const winnerName =
+      winnerIndex != null ? (this.players.find((p) => p.playerIndex === winnerIndex)?.nickname ?? "?") : "draw";
+    log(
+      `Match ${shortId(this.matchId)} ended: reason=${reason} winner=${winnerName} score=${scores} duration=${duration}`,
+    );
   }
 
   // (re)arms the flag-fall timer for whoever the clock says is
@@ -123,6 +152,7 @@ export class Match {
 
     this.status = "over"; // a decided result, same standing as any other natural end — rematch still possible
     this.endInfo = { reason: "timeout", winnerIndex: winner?.playerIndex ?? null };
+    this._logMatchEnd("timeout");
     this.broadcast({
       type: MSG.MATCH_ENDED,
       reason: "timeout",
@@ -161,6 +191,7 @@ export class Match {
     if (this.game.gameOver) {
       this.status = "over"; // game ended normally — not terminal, rematch still possible
       this.endInfo = { reason: "no-moves", winnerIndex: this.game.winnerIndex };
+      this._logMatchEnd("no-moves");
     }
 
     this._advanceClockAfterMove(now);
@@ -204,6 +235,7 @@ export class Match {
     if (this.game.gameOver) {
       this.status = "over"; // game ended normally — not terminal, rematch still possible
       this.endInfo = { reason: "no-moves", winnerIndex: this.game.winnerIndex };
+      this._logMatchEnd("no-moves");
     }
 
     this._advanceClockAfterMove(now);
@@ -243,6 +275,7 @@ export class Match {
 
     player.connected = false;
     player.ws = null;
+    player.disconnectedAt = Date.now();
 
     if (this.status === "aborted") return; // already terminal, nothing left to do
 
@@ -254,6 +287,9 @@ export class Match {
         playerIndex: player.playerIndex,
         abortInMs: DISCONNECT_ABORT_MS,
       });
+      log(
+        `Match ${shortId(this.matchId)}: ${player.nickname} disconnected, aborting in ${Math.round(DISCONNECT_ABORT_MS / 1000)}s if not back`,
+      );
     }
 
     this._armAbortTimer();
@@ -275,12 +311,17 @@ export class Match {
     if (!player) return null;
 
     clearTimeout(this._abortTimer);
+    const goneMs = player.disconnectedAt ? Date.now() - player.disconnectedAt : null;
     player.ws = ws;
     player.connected = true;
+    player.disconnectedAt = null;
 
     const opponent = this.players.find((p) => p !== player);
     if (opponent?.connected) {
       this._sendTo(opponent.ws, { type: MSG.OPPONENT_RECONNECTED, playerIndex: player.playerIndex });
+    }
+    if (goneMs != null) {
+      log(`Match ${shortId(this.matchId)}: ${player.nickname} reconnected after ${formatDuration(goneMs)}`);
     }
 
     return this.buildSyncState(player);
@@ -343,6 +384,7 @@ export class Match {
     // authoritative and shows the endcard from it directly.
     this.status = "aborted";
     this.endInfo = { reason: "abort", winnerIndex: remaining?.playerIndex ?? null };
+    this._logMatchEnd("abort");
 
     // Same reasoning as resign() — an abandonment isn't a completed
     // move, freeze rather than stopTurn, and clear the flag timer so it
@@ -374,6 +416,7 @@ export class Match {
 
     this.status = "over";
     this.endInfo = { reason: "resign", winnerIndex: opponent.playerIndex };
+    this._logMatchEnd("resign");
 
     // resigning isn't a completed move — freeze (not stopTurn), and
     // clear the flag timer so a stale timeout can't fire after the match

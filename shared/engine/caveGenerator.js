@@ -126,7 +126,6 @@ export class CaveGenerator {
 
       const ratio = CaveGenerator.floorRatio(g);
       if (ratio >= minRatio && ratio <= maxRatio) {
-        console.log(`Generated a board in ${attempt + 1} attempts`);
         return g;
       }
     }
