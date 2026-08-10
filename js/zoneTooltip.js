@@ -10,9 +10,7 @@ export class ZoneTooltip {
     // cell-space, that answer is good for the rest of the match — cache it
     // instead of re-running the box search (and re-measuring the DOM
     // element) on every hover of a zone we've already solved.
-    // Not used for zone *previews* (unclaimed cells): those regenerate a
-    // fresh ad-hoc cellSet on nearly every hover, so there's nothing stable
-    // to key a cache on — see update() below, zoneId stays null for them.
+    // Not used for zone previews (unclaimed cells).
     this._placementCache = new Map(); // zoneId -> { chosen, cost }
 
     // The cache is keyed purely on cell-space geometry (which board cells
@@ -21,7 +19,7 @@ export class ZoneTooltip {
     // changes with pinch-zoom (CSS transform scale) or a window resize.
     // We already read cssCellW/cssCellH every call (needed for live pixel
     // positioning regardless of caching), so comparing against the last
-    // seen values costs nothing extra and catches zoom *and* resize.
+    // seen values costs nothing extra and catches zoom and resize.
     this._geometryKey = null;
   }
 
@@ -47,8 +45,7 @@ export class ZoneTooltip {
     this._show(zoneId, zone.cellSet, zone.cost, board);
   }
 
-  // zoneId is null for zone previews — see the cache comment in the
-  // constructor for why those always fall through to a fresh computation.
+  // zoneId is null for zone previews.
   _show(zoneId, cellSet, cost, board) {
     if (cellSet.size === 0) {
       this.hide();
@@ -163,8 +160,7 @@ export class ZoneTooltip {
     if (candidates.length === 0) return null;
 
     const score = (p) => 4 * p.hDist * p.hDist + p.vDist * p.vDist;
-    // Single min-pass instead of a full sort — we only ever need the best
-    // candidate, not the whole ordering.
+
     let best = candidates[0];
     let bestScore = score(best);
     for (let i = 1; i < candidates.length; i++) {

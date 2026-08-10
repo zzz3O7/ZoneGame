@@ -158,7 +158,6 @@ button {
   padding: 14px;
 }
 
-/* ADDED: optional action row under a panel body (currently just Resign) */
 .panel__footer {
   padding: 10px 14px 14px;
   border-top: 1px solid var(--color-border-soft);
@@ -610,8 +609,6 @@ button {
   color: var(--color-accent);
   border-color: var(--color-accent-muted);
 }
-/* ADDED — running low on time control, layered on top of the existing
-   active/turn styling above rather than replacing it. */
 .side-plate__clock--low {
   color: var(--color-danger);
   border-color: var(--color-danger);
@@ -921,8 +918,6 @@ button {
   grid-template-columns: 1fr 1fr;
   gap: 10px;
 }
-/* ADDED — time control picker reuses .mode-card but has 6 options rather
-   than 2, so it gets its own column count instead of the default 1fr 1fr. */
 .mode-grid--time {
   grid-template-columns: repeat(3, 1fr);
 }
@@ -1136,7 +1131,7 @@ button {
   display: flex;
   gap: 10px;
 }
-/* FIXED: without this, [hidden] loses to the class rule above (author CSS
+/* without this, [hidden] loses to the class rule above (author CSS
    always beats the UA stylesheet's [hidden]{display:none}, regardless of
    selector order/specificity) — so toggling .hidden in JS silently did
    nothing for these rows. Same pattern already used elsewhere in this file
@@ -1396,8 +1391,6 @@ button {
   border-top: 1px solid var(--color-border-soft);
 }
 
-/* ADDED: small status line under the online rematch button ("Waiting for
-   opponent…", "Opponent wants a rematch!") */
 .endcard__rematch-status {
   font-size: 12px;
   color: var(--color-text-muted);
@@ -1411,9 +1404,6 @@ button {
 }
 
 /* ---------- net status banner ---------- */
-/* ADDED: connection/match status banner (disconnect countdowns, reconnect
-   state, opponent left, etc). Fixed at the top so it can show over any of
-   the three screens, including the pre-menu reconnect check on load. */
 .net-banner {
   position: fixed;
   top: 14px;

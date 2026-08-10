@@ -1,5 +1,11 @@
     comments cleanup and file directory refactor
 
+clock format: decimals on low time
+
+cannot set clock to 15 seconds by sliders
+
+    on rematch expire yellow text still sais the rematch offer is live
+
 reminder on pass
 waiting screen time params + in game info
 

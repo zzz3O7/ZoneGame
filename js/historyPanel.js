@@ -9,8 +9,7 @@ export class HistoryPanel {
 
     // Same reused-DOM situation as GameUI (see its constructor comment):
     // a new HistoryPanel is created per match against the same container
-    // element, so these need to be revocable — otherwise a rematch's old
-    // instance keeps firing onPanelHover with its stale game reference.
+    // element, so these need to be revocable.
     this._abort = new AbortController();
 
     // Entries are append-only (see history.js — record() only ever
@@ -21,15 +20,6 @@ export class HistoryPanel {
     this._renderedCount = 0;
 
     if (this.container) {
-      // ROOT CAUSE FIX: the container element is the same DOM node reused
-      // across every GameUI/HistoryPanel instance (see the class comment
-      // above) — only this JS object is fresh per match, the DOM it points
-      // at is not. _renderedCount starting at 0 only reflects what *this*
-      // instance has appended; without clearing the container here too, a
-      // new game's rows land right after whatever the previous game's
-      // instance already left behind in the DOM, so the panel looked like
-      // it never reset (fixed on reload only because a full page load
-      // rebuilds the DOM from scratch, wiping the old rows along with it).
       this.container.innerHTML = "";
 
       const signal = this._abort.signal;
@@ -48,11 +38,7 @@ export class HistoryPanel {
   render(entries, baseIndex) {
     if (!this.container) return;
 
-    // Defensive fallback: nothing today removes or truncates history, so
-    // this shouldn't trigger — but a future reconnect/resync could replace
-    // the log wholesale, and silently rendering an incremental diff
-    // against a shrunk list would produce a wrong panel instead of an
-    // obviously-broken one.
+    // Defensive fallback
     if (entries.length < this._renderedCount) {
       this.container.innerHTML = "";
       this._renderedCount = 0;
@@ -107,9 +93,7 @@ export class HistoryPanel {
 
   // combines every score-changing side effect of this entry (zone
   // completions, pass penalty) into one chip-slot per column, plus
-  // which zoneIds fed it (for hover highlight) -- this is what lets
-  // the panel always show two fixed chip slots instead of a variable
-  // list, per row
+  // which zoneIds fed it (for hover highlight).
   _totals(entry, baseIndex) {
     const totals = {
       a: { value: 0, zoneIds: null, visible: false, isPenalty: false },

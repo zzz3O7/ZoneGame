@@ -19,11 +19,6 @@ export class Game {
     this.zoneRadius = params.zoneRadius;
     this.startingDominoes = params.startingDominoes;
     this.seed = params.seed ?? Date.now();
-    // ADDED: pure passthrough, same treatment as this.mode above — Game
-    // itself has no clock logic (that stays with whoever owns wall-clock
-    // time: Match on the server, GameUI for hotseat — see js/clock.js).
-    // This field just carries the config to whichever of those constructs
-    // the actual Clock, without threading it through separate params.
     this.timeControl = params.timeControl ?? null;
 
     const rng = createRng(this.seed);
@@ -37,21 +32,13 @@ export class Game {
       new Player(0, "Player 1", params.startingDominoes),
       new Player(1, "Player 2", params.startingDominoes),
     ];
-    // ADDED: defaults to 0 — local hotseat never sets this, so its behavior
-    // is unchanged. Online matches pass it explicitly (server decides who
-    // goes first — see Match._start), since a client-picked default would
-    // be trivially gameable.
     this.currentPlayerIndex = params.startingPlayerIndex ?? 0;
     this.gameOver = false;
     this.history = new MoveHistory();
 
     // Cache of "can this player move at all" per player, refreshed once
     // whenever board/zone/domino state actually changes (see
-    // _refreshMoveAvailability). Rules.canPlayerMove is a full-board scan
-    // (rows x cols x piece types x shape variants) — reading a cached
-    // value instead of rescanning is what canCurrentPlayerMove(),
-    // _checkGameEnd(), and pass()'s gate check all do now, instead of each
-    // independently rescanning the same unchanged state.
+    // _refreshMoveAvailability).
     this._canMove = [true, true];
     this._refreshMoveAvailability();
   }
@@ -107,12 +94,6 @@ export class Game {
       completions,
     });
 
-    /*
-    console.log(`type: ${entry.type}, ${entry.pieceType}\n
-      zone ${entry.zoneEvent.zoneId} ${entry.zoneEvent.kind}\n
-      completions: ${JSON.stringify(entry.completions)}`); // DEBUG
-    */
-
     this._checkGameEnd();
     this._advanceTurn();
     return entry;
@@ -128,7 +109,6 @@ export class Game {
     const penalty = preScore - this.currentPlayer.score;
 
     const entry = this.history.record({ playerIndex, type: "pass", penalty });
-    //console.log(`type: ${entry.type}, penalty: ${entry.penalty}`); // DEBUG
 
     this._advanceTurn();
     this._checkGameEnd();

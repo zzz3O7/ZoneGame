@@ -13,9 +13,6 @@
     <link rel="stylesheet" href="style.css" />
   </head>
   <body>
-    <!-- ADDED: connection/match status banner — sits above all three screens
-         so it can show during the pre-menu reconnect check too, not just
-         inside an active game. -->
     <div id="netBanner" class="net-banner" hidden>
       <span id="netBannerText" class="net-banner__text"></span>
       <div id="netBannerActions" class="net-banner__actions"></div>
@@ -68,8 +65,6 @@
           <div class="param-hint">Leave seed blank for a random cave.</div>
         </div>
 
-        <!-- ADDED: time control — orthogonal to board mode above, so it's its
-             own section rather than folded into the mode cards or params panel. -->
         <div>
           <div class="section-label">Time control</div>
           <div class="mode-grid mode-grid--time" id="timeGrid">
@@ -203,11 +198,9 @@
                 <span class="game-info__value" id="startingDominoesValue">2</span>
               </div>
             </div>
-            <!-- ADDED: online-only — resigning forfeits the match immediately, shown to both players -->
             <div class="panel__footer" id="onlineMatchActions" hidden>
               <button class="btn btn--ghost" id="btnResign" style="width: 100%">Resign</button>
             </div>
-            <!-- ADDED: local-only — hotseat has no forfeit concept, so leaving mid-game is always free -->
             <div class="panel__footer" id="localMatchActions" hidden>
               <button class="btn btn--ghost" id="btnLocalBackToMenu" style="width: 100%">Back to menu</button>
             </div>
@@ -347,7 +340,6 @@
                     <button class="btn btn--primary" id="btnRematch">Rematch (new board)</button>
                     <button class="btn btn--secondary" id="btnSameBoard">Same board</button>
                   </div>
-                  <!-- ADDED: online-only equivalent — new board only, both players must ask -->
                   <div class="btn-row" id="endcardOnlineActions" hidden>
                     <button class="btn btn--primary" id="btnOnlineRematch">Rematch</button>
                   </div>

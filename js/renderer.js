@@ -40,9 +40,7 @@ export class Renderer {
     canvas.width = staticCanvas.width = board.cols * this.cellSize;
     canvas.height = staticCanvas.height = board.rows * this.cellSize;
 
-    // Precomputed once per Renderer instance (cellSize is fixed for its
-    // lifetime) — see LAYOUT.*Ratio comment in config.js for why these are
-    // ratios instead of fixed px.
+    // Precomputed once per Renderer instance (cellSize is fixed for its lifetime)
     this.gridLineWidth = this.cellSize * LAYOUT.gridLineRatio;
     this.zoneBorderWidth = this.cellSize * LAYOUT.zoneBorderRatio;
     this.zoneBorderHighlightWidth = this.cellSize * LAYOUT.zoneBorderHighlightRatio;

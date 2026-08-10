@@ -3,7 +3,7 @@ export class Connection {
     this.url = url;
     this.ws = null;
     this.handlers = new Map();
-    this.intentionalClose = false; // ADDED: set by close(); lets a later reconnect flow (step 3) tell "user left on purpose" apart from "connection dropped"
+    this.intentionalClose = false;
   }
 
   connect() {
@@ -21,7 +21,7 @@ export class Connection {
         const list = this.handlers.get(msg.type);
         if (list) list.forEach((cb) => cb(msg));
       });
-      // ADDED: surface close to app instead of silent dead socket
+
       this.ws.addEventListener("close", (event) => {
         const list = this.handlers.get("__close");
         if (list) list.forEach((cb) => cb(event));
@@ -35,7 +35,6 @@ export class Connection {
   }
 
   send(msg) {
-    // FIXED: guard against sending on dead socket
     if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
       console.warn("send skipped, socket not open:", msg.type);
       return false;
@@ -44,11 +43,9 @@ export class Connection {
     return true;
   }
 
-  // ADDED: explicit teardown for "the user walked away" (back to menu,
+  // Explicit teardown for "the user walked away" (back to menu,
   // cancel waiting room, starting a different match). Without this the old
-  // socket just sits open in the background forever — the server's
-  // disconnect/abort handling only ever runs off a real 'close' event, so
-  // if we never close it, the server has no idea the player left.
+  // socket just sits open in the background forever.
   close() {
     this.intentionalClose = true;
     this.ws?.close();

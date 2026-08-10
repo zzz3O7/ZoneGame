@@ -1,10 +1,9 @@
-// ADDED: tiny status-banner helper — connection/match state notices
+// Tiny status-banner helper — connection/match state notices
 // (disconnect countdowns, reconnect progress, opponent left, forfeit, etc).
 // One shared DOM element (see index.html #netBanner), content swapped in
 // and out rather than creating new elements each call. Deliberately dumb —
 // callers that need a live countdown (main.js) just call showBanner again
-// on their own interval with updated text, rather than this module owning
-// timer state too.
+// on their own interval with updated text.
 
 export function showBanner(text, { kind = "info", actions = [] } = {}) {
   const el = document.getElementById("netBanner");

@@ -13,7 +13,7 @@ wss.on("connection", (ws) => {
   ws.isAlive = true;
   ws.on("pong", heartbeat);
 
-  // ADDED: prevent unhandled 'error' crashing whole process
+  // prevent unhandled 'error' crashing whole process
   ws.on("error", (err) => {
     console.error("ws error:", err.message);
   });
@@ -35,7 +35,7 @@ wss.on("connection", (ws) => {
             matchId: match.matchId,
             inviteCode: match.inviteCode,
             yourPlayerIndex: player.playerIndex,
-            sessionId: player.sessionId, // ADDED
+            sessionId: player.sessionId,
           }),
         );
         return;
@@ -53,7 +53,7 @@ wss.on("connection", (ws) => {
             type: MSG.MATCH_JOINED,
             matchId: match.matchId,
             yourPlayerIndex: player.playerIndex,
-            sessionId: player.sessionId, // ADDED
+            sessionId: player.sessionId,
           }),
         );
         return;
@@ -73,7 +73,7 @@ wss.on("connection", (ws) => {
         return;
       }
 
-      // ADDED: deliberate forfeit / leave — see Match.resign / Match.leave
+      // Deliberate forfeit / leave — see Match.resign / Match.leave
       // for why these are handled differently from a mere disconnect.
       if (msg.type === MSG.RESIGN) {
         const match = manager.findMatchByWs(ws);
@@ -89,7 +89,6 @@ wss.on("connection", (ws) => {
         return;
       }
 
-      // ADDED
       if (msg.type === MSG.REMATCH_REQUEST) {
         const match = manager.findMatchByWs(ws);
         if (!match) return;
@@ -97,7 +96,7 @@ wss.on("connection", (ws) => {
         return;
       }
 
-      // ADDED: reconnect — this ws is brand new and not yet linked to any
+      // Reconnect — this ws is brand new and not yet linked to any
       // match, so we look it up by the durable sessionId instead.
       if (msg.type === MSG.RECONNECT_ATTEMPT) {
         const match = manager.findMatchBySessionId(msg.sessionId);
@@ -110,12 +109,12 @@ wss.on("connection", (ws) => {
           ws.send(JSON.stringify({ type: MSG.RECONNECT_FAILED, reason: "Session no longer valid" }));
           return;
         }
-        manager.bindWs(ws, msg.sessionId); // ADDED: Match.reconnect() operates on the Match directly, so the manager needs telling separately that this new ws now belongs to this session
+        manager.bindWs(ws, msg.sessionId); // Match.reconnect() operates on the Match directly, so the manager needs telling separately that this new ws now belongs to this session
         ws.send(JSON.stringify(syncState));
         return;
       }
 
-      // ADDED: hash-mismatch resync — same payload shape as reconnect, but
+      // hash-mismatch resync — same payload shape as reconnect, but
       // this ws is already live and attached to the match.
       if (msg.type === MSG.REQUEST_RESYNC) {
         const match = manager.findMatchByWs(ws);
@@ -126,21 +125,17 @@ wss.on("connection", (ws) => {
         return;
       }
     } catch (err) {
-      // ADDED: guard against throw inside handler (e.g. send to dead opponent socket)
       console.error("handler error:", err.message);
     }
   });
 
   ws.on("close", () => {
-    // FIXED: disconnect no longer force-removes the match — handleDisconnect
-    // starts a grace-period timer and only the match itself decides when
-    // it's truly done (see Match._onAbortTimeout / the onClose callback).
     const match = manager.findMatchByWs(ws);
     if (match) match.handleDisconnect(ws);
   });
 });
 
-// ADDED: heartbeat sweep, kill dead sockets, keep proxies from idle-timeout-dropping live ones
+// heartbeat sweep, kill dead sockets, keep proxies from idle-timeout-dropping live ones
 const interval = setInterval(() => {
   wss.clients.forEach((ws) => {
     if (ws.isAlive === false) return ws.terminate();

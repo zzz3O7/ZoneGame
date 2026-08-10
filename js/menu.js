@@ -1,10 +1,8 @@
 import { CUSTOM_DEFAULTS, TIME_CUSTOM_DEFAULTS } from "./config.js";
 import { resolveParams } from "./params.js";
 
-// ADDED — same "zonegame.<thing>" key convention as matchClient.js's
-// session storage. localStorage (not sessionStorage): unlike match
-// reconnect state, there's no reason to scope a remembered nickname to one
-// tab/session — it should just be there next time, in any tab.
+// Same "zonegame.<thing>" key convention as matchClient.js's session storage.
+// localStorage (not sessionStorage): unlike match reconnect state.
 const NICKNAME_KEY = "zonegame.nickname";
 
 // Owns the menu screen only: mode selection, custom params, local/create/join
@@ -17,11 +15,11 @@ export class Menu {
     this.onJoinMatch = onJoinMatch;
 
     this.mode = "classic";
-    this.timeMode = "none"; // ADDED — matches the "No clock" card's default-selected state in index.html
+    this.timeMode = "none";
 
     this._cacheDom();
     this._populateDefaults();
-    this._restoreNickname(); // ADDED
+    this._restoreNickname();
     this._bindEvents();
   }
 
@@ -39,7 +37,6 @@ export class Menu {
       startingDominoesValue: document.getElementById("paramStartingDominoesValue"),
       seed: document.getElementById("paramSeed"),
 
-      // ADDED — time control picker
       timeCards: [...document.querySelectorAll("#timeGrid .mode-card")],
       timeCustomPanel: document.getElementById("timeCustomPanel"),
       timeInitial: document.getElementById("paramTimeInitial"),
@@ -65,10 +62,6 @@ export class Menu {
     this._initSlider(this.els.zoneRadius, this.els.zoneRadiusValue, CUSTOM_DEFAULTS.zoneRadius);
     this._initSlider(this.els.startingDominoes, this.els.startingDominoesValue, CUSTOM_DEFAULTS.startingDominoes);
 
-    // ADDED — custom time control sliders work in whole minutes/seconds for
-    // a sane slider range; converted to ms in _readCustomInputs(). Note this
-    // means the minimum reachable via the Custom slider is 1 minute — sub-
-    // minute banks are only available via the Bullet preset (60s+0).
     this._initSlider(this.els.timeInitial, this.els.timeInitialValue, TIME_CUSTOM_DEFAULTS.initialMs / 60_000);
     this._initSlider(this.els.timeIncrement, this.els.timeIncrementValue, TIME_CUSTOM_DEFAULTS.incrementMs / 1000);
   }
@@ -88,8 +81,6 @@ export class Menu {
     this.els.paramsPanel.classList.toggle("collapsed", mode !== "custom");
   }
 
-  // ADDED — mirrors _selectMode above, but for the (orthogonal) time
-  // control picker: any board mode can be paired with any time control.
   _selectTimeMode(timeMode) {
     this.timeMode = timeMode;
     this.els.timeCards.forEach((card) => card.classList.toggle("selected", card.dataset.timeMode === timeMode));
@@ -101,7 +92,7 @@ export class Menu {
     this.els.panels.forEach((panel) => panel.classList.toggle("active", panel.id === tabId));
   }
 
-  // ADDED: pre-fill both nickname fields from whatever was last saved.
+  // Pre-fill both nickname fields from whatever was last saved.
   // Create and Join are really one identity, not two separate fields, so
   // both get the same restored value.
   _restoreNickname() {
@@ -132,9 +123,9 @@ export class Menu {
       startingDominoes: this.els.startingDominoes.value,
       seed: this.els.seed.value.trim(),
 
-      // ADDED — resolveParams() clamps/validates all of this against
-      // TIME_PRESETS/TIME_CUSTOM_LIMITS, same as the board params above; a
-      // tampered/stale DOM value here can't produce an out-of-range clock.
+      // resolveParams() clamps/validates all of this against
+      // TIME_PRESETS/TIME_CUSTOM_LIMITS, same as the board params above;
+      // a tampered/stale DOM value here can't produce an out-of-range clock.
       timeMode: this.timeMode,
       timeInitialMs: Number(this.els.timeInitial.value) * 60_000,
       timeIncrementMs: Number(this.els.timeIncrement.value) * 1000,
@@ -149,7 +140,6 @@ export class Menu {
     this.els.modeClassic.addEventListener("click", () => this._selectMode("classic"));
     this.els.modeCustom.addEventListener("click", () => this._selectMode("custom"));
 
-    // ADDED — time control cards
     this.els.timeCards.forEach((card) => {
       card.addEventListener("click", () => this._selectTimeMode(card.dataset.timeMode));
     });
@@ -162,8 +152,8 @@ export class Menu {
       this.onStartLocal(this._buildParams());
     });
 
-    // ADDED: keep the Create/Join nickname fields in sync (one identity,
-    // two tabs) and persist as the person types — see _restoreNickname.
+    // Keep the Create/Join nickname fields in sync (one identity,
+    // two tabs) and persist as the person types.
     this.els.nicknameCreate.addEventListener("input", () => {
       this.els.nicknameJoin.value = this.els.nicknameCreate.value;
       this._saveNickname(this.els.nicknameCreate.value.trim());
@@ -175,19 +165,19 @@ export class Menu {
 
     this.els.btnCreate.addEventListener("click", () => {
       const nickname = this.els.nicknameCreate.value.trim() || "Player";
-      this._saveNickname(nickname); // ADDED — belt-and-suspenders alongside the input listener (e.g. an autofilled value that never fired "input")
+      this._saveNickname(nickname); // belt-and-suspenders alongside the input listener (e.g. an autofilled value that never fired "input")
       this.onCreateMatch(nickname, this._buildParams());
     });
 
     this.els.btnJoin.addEventListener("click", () => {
       const nickname = this.els.nicknameJoin.value.trim() || "Player";
-      this._saveNickname(nickname); // ADDED
+      this._saveNickname(nickname);
       const code = this.els.joinCode.value.trim().toUpperCase();
       if (!code) return;
       this.onJoinMatch(nickname, code);
     });
 
-    // ADDED: force uppercase live as the user types, preserving cursor position
+    // Force uppercase live as the user types, preserving cursor position
     this.els.joinCode.addEventListener("input", () => {
       const input = this.els.joinCode;
       const { selectionStart, selectionEnd } = input;

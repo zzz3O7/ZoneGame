@@ -8,9 +8,7 @@ export const ORTHOGONAL_OFFSETS = [
 ];
 
 // Same four directions, each tagged with which edge of the cell it points
-// across. Used when rendering cell borders (e.g. zone outlines): a border
-// is drawn on an edge whenever the neighbor across it doesn't belong to
-// the same zone.
+// across. Used when rendering cell borders (e.g. zone outlines).
 export const ORTHOGONAL_EDGES = [
   [-1, 0, "top"],
   [1, 0, "bottom"],

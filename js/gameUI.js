@@ -9,28 +9,21 @@ import { extrapolateRemaining, formatClockMs, Clock } from "./clock.js";
 
 const KEY_TO_TYPE = { 1: "gesture", 2: "domino", 3: "tromino", 4: "tetromino" };
 
-// ADDED: below this, the ticking player's clock is shown as "low" (see
-// _renderClockFor) — purely a display threshold, doesn't affect flag-fall
-// itself, which is server-authoritative and exact regardless of this value.
+// Below this, the ticking player's clock is shown as "low" (see
+// _renderClockFor) — purely a display threshold.
 const LOW_TIME_THRESHOLD_MS = 10_000;
 
-// ADDED: how often the online clock display re-paints between authoritative
-// server snapshots. Display-only — see _tickClocks — never the thing that
-// decides a flag-fall, just how smooth the ticking looks.
+// How often the online clock display re-paints between authoritative
+// server snapshots. Display-only — how smooth the ticking looks.
 const CLOCK_TICK_INTERVAL_MS = 250;
 
-// The "reason" a match ended, for the endcard's reason line. "no-moves" is
-// the only one reachable through the normal live-game path (score-based
-// winnerIndex is always correct there). "abort"/"timeout" cover forfeits,
-// where winnerIndex has to come from the server's MATCH_ENDED message
-// instead (see showForcedEnd), since the forfeiting player may well have
-// been ahead on score. "resign" isn't here — it's inherently viewer-relative
-// ("You resigned" vs "Opponent resigned"), so it's computed dynamically in
-// _endReasonText rather than living in this static table.
+// The "reason" a match ended, for the endcard's reason line.
+// "resign" isn't here — it's inherently viewer-relative
+// ("You resigned" vs "Opponent resigned"), so it's computed dynamically in _endReasonText.
 const END_REASON_TEXT = {
   "no-moves": "No more moves available",
   abort: "Opponent disconnected and didn't return",
-  timeout: "On time", // reads naturally after the winner name above it: "X wins" / "On time"
+  timeout: "On time",
 };
 
 // Touch gesture-arbiter tuning. A single-finger touchstart can't tell
@@ -38,8 +31,8 @@ const END_REASON_TEXT = {
 // of a two-finger pinch — both look identical for the first ~tens of ms.
 // PINCH_DISAMBIGUATE_MS is how long we hold off committing to "placement"
 // before a second finger would prove it wrong.
-const PINCH_DISAMBIGUATE_MS = 60;
-// Tap/double-tap detection (for the zoom-reset gesture) — a touch counts
+const PINCH_DISAMBIGUATE_MS = 50;
+// Tap/double-tap detection — a touch counts
 // as a tap if it didn't move far and didn't linger.
 const TAP_MAX_DIST = 10;
 const TAP_MAX_DURATION_MS = 250;
@@ -55,11 +48,7 @@ export class GameUI {
 
     // main.js reuses the same #board-canvas / document / control buttons
     // across matches instead of recreating them, so every listener this
-    // instance registers must be revocable in one shot via destroy() —
-    // otherwise a rematch stacks a second full set of listeners on top of
-    // the first, and the old (finished) game's stale state keeps firing
-    // alongside the new one (e.g. the old game-over overlay flashing back
-    // on the very next touch).
+    // instance registers must be revocable in one shot via destroy()
     this._abort = new AbortController();
 
     this.selectedType = "gesture";
@@ -87,10 +76,10 @@ export class GameUI {
     this.hoveredZoneIds = null;
     this.historyPanelHovered = false;
 
-    this._endOverride = null; // ADDED: set via showForcedEnd() for a forfeit — see END_REASON_TEXT
-    this._clockInterval = null; // ADDED: see _startClockTicker/destroy
-    this.clock = null; // ADDED: hotseat's OWN authoritative Clock (no server involved) — null for online (server owns it, see matchClient.clock) or when this.game.timeControl is unset
-    this._hotseatFlagTimer = null; // ADDED: hotseat's own flag-fall timer, mirrors Match._flagTimer exactly — see _armHotseatFlagTimer/_onHotseatFlagFall
+    this._endOverride = null; // set via showForcedEnd() for a forfeit — see END_REASON_TEXT
+    this._clockInterval = null; // see _startClockTicker/destroy
+    this.clock = null; // hotseat's OWN authoritative Clock — null for online (server owns it) or when this.game.timeControl is unset
+    this._hotseatFlagTimer = null; // hotseat's own flag-fall timer, mirrors Match._flagTimer exactly — see _armHotseatFlagTimer/_onHotseatFlagFall
 
     this.historyPanel = new HistoryPanel(
       document.querySelector(".move-history__body"),
@@ -107,7 +96,7 @@ export class GameUI {
     this._syncMatchInfo();
     this.resetView();
     this._render();
-    this._startClockTicker(); // ADDED
+    this._startClockTicker();
   }
 
   _syncMatchInfo() {
@@ -144,7 +133,7 @@ export class GameUI {
       // no local mutation, no _render() here — wait for moveApplied broadcast
     } else {
       const applied = this.game.attemptPlacement(pieceType, shape, anchorRow, anchorCol);
-      if (applied) this._advanceHotseatClock(); // ADDED
+      if (applied) this._advanceHotseatClock();
       this._render();
     }
   }
@@ -157,7 +146,7 @@ export class GameUI {
       // same: wait for broadcast, don't mutate/render yet
     } else {
       if (!this.game.pass()) return;
-      this._advanceHotseatClock(); // ADDED
+      this._advanceHotseatClock();
       this._render();
     }
   }
@@ -168,7 +157,7 @@ export class GameUI {
     this.selectedType = type;
     this.rotationStep = 0;
     this.flipped = false;
-    this.cursorCell = null; // otherwise the old anchor's ghost reappears for the new type out of nowhere
+    this.cursorCell = null;
     this.gesture.reset();
     // Changes the ghost (canvas), which piece button is marked selected,
     // and hasStaged (cursorCell/gesture just got reset) — but never the
@@ -290,14 +279,14 @@ export class GameUI {
     this._submitPass();
   }
 
-  // ADDED: online only, guarded so a stray click can't fire it in local
+  // Online only, guarded so a stray click can't fire it in local
   // hotseat or after the game's already over — the button is hidden in
-  // both cases (see _syncOnlineActions), this is just defense in depth.
+  // both cases (see _syncOnlineActions).
   // No optimistic local effect: the actual end comes back through
   // MATCH_ENDED -> showForcedEnd, same as if the opponent had resigned.
   resign() {
     if (!this.matchClient || this.game.gameOver) return;
-    const confirmed = window.confirm("Resign this match? Your opponent will win.");
+    const confirmed = window.confirm("Resign this match?");
     if (!confirmed) return;
     this.matchClient.resign();
   }
@@ -603,7 +592,7 @@ export class GameUI {
     document.getElementById("btnConfirm")?.addEventListener("click", () => this.confirmStaged(), { signal });
     document.getElementById("btnDiscard")?.addEventListener("click", () => this.discardStaged(), { signal });
     document.getElementById("btnResign")?.addEventListener("click", () => this.resign(), { signal });
-    document.getElementById("btnOnlineRematch")?.addEventListener("click", () => this.requestRematch(), { signal }); // ADDED // ADDED
+    document.getElementById("btnOnlineRematch")?.addEventListener("click", () => this.requestRematch(), { signal });
 
     document.addEventListener(
       "keydown",
@@ -628,13 +617,12 @@ export class GameUI {
 
   // Revoke every listener this instance registered (canvas, document,
   // and the shared control buttons) in one shot. main.js must call this
-  // before creating a new GameUI for a rematch — see the constructor
-  // comment for why: those DOM nodes are reused, not recreated, per match.
+  // before creating a new GameUI for a rematch.
   destroy() {
     this._abort.abort();
     this.historyPanel.destroy();
-    clearInterval(this._clockInterval); // ADDED — setInterval isn't covered by the AbortController, has to be cleared explicitly
-    clearTimeout(this._hotseatFlagTimer); // ADDED
+    clearInterval(this._clockInterval);
+    clearTimeout(this._hotseatFlagTimer);
   }
 
   // ===================== render: fully re-derive the DOM from state =====================
@@ -659,7 +647,7 @@ export class GameUI {
     this._syncControls();
     this._syncSidePlates();
     this._syncGameOver();
-    this._tickClocks(); // ADDED — snap to the authoritative snapshot immediately, don't wait for the next poll
+    this._tickClocks();
 
     const baseIndex = this.matchClient ? this.matchClient.myPlayerIndex : 0;
     this.historyPanel.render(this.game.history.all(), baseIndex);
@@ -667,8 +655,7 @@ export class GameUI {
 
   // Board grid, zone fills/borders, placed pieces — the static layer.
   // Redrawn only here, i.e. only on a genuine game-state event, never on
-  // hover/rotate/flip/selection. See renderer.js for the compositing
-  // rationale.
+  // hover/rotate/flip/selection.
   _syncStaticCanvas() {
     const viewerIndex = this.matchClient ? this.matchClient.myPlayerIndex : this.game.currentPlayerIndex;
     this.renderer.renderStatic(this.game.board, this.game.zones, viewerIndex, this.game.history.all());
@@ -716,22 +703,6 @@ export class GameUI {
       zonePreview,
     );
 
-    // FIXED (root cause): every other piece of UI state in this render
-    // cycle is re-derived from game.gameOver (controls disable, overlay
-    // shows, etc — see _syncControls/_syncGameOver), but the tooltip was
-    // driven purely off cursorCell/hover and never revisited here. If the
-    // game ended while the cursor happened to be resting over a completed
-    // zone — the player's own winning move, or a remote move landing under
-    // an online opponent's still-hovering cursor — nothing ever told the
-    // tooltip to hide. It's a DOM element positioned absolutely inside
-    // .board-wrap with its own z-index (see style.css), so it kept
-    // rendering on top of the endcard overlay that appeared under it,
-    // rather than disappearing. Suppressing it once gameOver is true keeps
-    // the tooltip's visibility a pure function of state, consistent with
-    // the rest of _render(), instead of a one-off hide() bolted on
-    // elsewhere for this one case (compare the pinch-start hide(), which is
-    // a deliberate exception for a genuinely event-driven, not state-driven,
-    // situation).
     this.zoneTooltip.update(
       this.game.gameOver ? null : this.cursorCell,
       this.game.board,
@@ -743,20 +714,18 @@ export class GameUI {
   _syncControls() {
     this._syncPieceButtons();
     this._syncStagedButtons();
-    this._syncOnlineActions(); // ADDED
-    this._syncLocalActions(); // ADDED
+    this._syncOnlineActions();
+    this._syncLocalActions();
   }
 
-  // ADDED: Resign is only meaningful for an online match that's still live —
+  // Resign is only meaningful for an online match that's still live —
   // hidden entirely in local hotseat, and hidden again once the game ends
-  // (from any cause: a live move, a forced end via MATCH_ENDED, or
-  // reconnecting straight into an already-finished match).
   _syncOnlineActions() {
     const el = document.getElementById("onlineMatchActions");
     if (el) el.hidden = !this.matchClient || this.game.gameOver;
   }
 
-  // ADDED: mirrors _syncOnlineActions above, but for local hotseat's
+  // Mirrors _syncOnlineActions above, but for local hotseat's
   // mid-game "Back to menu" — hotseat has no forfeit concept, so this is
   // always safe to show while a local game is live. Hidden once the game
   // ends since the endcard's own "Back to menu" covers that case.
@@ -769,9 +738,7 @@ export class GameUI {
   // turn/gameOver state — never on cursorCell. Only needs to run after
   // real game/selection events, not on every hover.
   //
-  // Piece-type buttons reflect the VIEWER's own pieces, not whoever's turn
-  // it currently is — otherwise on the opponent's turn the domino button
-  // would incorrectly disable/enable based on the opponent's dominoLeft.
+  // Piece-type buttons reflect the VIEWER's own pieces, not whoever's turn it currently is
   // In local hotseat, viewer === currentPlayer, so this is unchanged there.
   _syncPieceButtons() {
     const viewerIndex = this.matchClient ? this.matchClient.myPlayerIndex : this.game.currentPlayerIndex;
@@ -841,8 +808,7 @@ export class GameUI {
     return this.matchClient?.playerNames?.[index] ?? this.game.players[index].name;
   }
 
-  // ADDED: clock display — see js/clock.js for the shared math. This is
-  // deliberately display-only for the online path: it never decides a
+  // This is deliberately display-only for the online path: it never decides a
   // flag-fall (that's server-authoritative, see Match._onFlagFall), it
   // just paints whatever the latest snapshot implies "right now" looks
   // like, re-extrapolated on every tick from snapshot.now so it stays
@@ -882,11 +848,8 @@ export class GameUI {
     this.game.players.forEach((player) => this._renderClockFor(player.id, snapshot, now));
   }
 
-  // ADDED: mirrors Match._advanceClockAfterMove exactly (stop the mover,
-  // bank their increment, start the new current player if the game isn't
-  // over) — same reasoning, just local instead of over a websocket. Called
-  // right after a successful hotseat move/pass, once currentPlayerIndex has
-  // already advanced.
+  // Mirrors Match._advanceClockAfterMove exactly, just local instead of over a websocket. Called
+  // right after a successful hotseat move/pass, once currentPlayerIndex has already advanced.
   _advanceHotseatClock() {
     if (!this.clock) return;
     clearTimeout(this._hotseatFlagTimer); // was armed for the mover's own turn — stale now regardless of outcome
@@ -898,7 +861,7 @@ export class GameUI {
     }
   }
 
-  // ADDED: mirrors Match._armFlagTimer exactly.
+  // Mirrors Match._armFlagTimer exactly.
   _armHotseatFlagTimer(now) {
     clearTimeout(this._hotseatFlagTimer);
     if (!this.clock || this.clock.currentPlayerIndex === null) return;
@@ -906,11 +869,10 @@ export class GameUI {
     this._hotseatFlagTimer = setTimeout(() => this._onHotseatFlagFall(), remaining);
   }
 
-  // ADDED: mirrors Match._onFlagFall exactly, including the same
+  // Mirrors Match._onFlagFall exactly, including the same
   // setTimeout-slop re-verification. Ends the game the same way an online
   // forfeit does — via showForcedEnd, so the endcard's winner/reason don't
-  // go through Game.winnerIndex's score-comparison getter (see that
-  // method's own comment for why a forfeit winner is a different concept).
+  // go through Game.winnerIndex's score-comparison getter.
   _onHotseatFlagFall() {
     if (!this.clock || this.clock.currentPlayerIndex === null || this.game.gameOver) return;
 
@@ -947,11 +909,9 @@ export class GameUI {
     clockEl.classList.toggle("side-plate__clock--low", isTicking && remaining <= LOW_TIME_THRESHOLD_MS);
   }
 
-  // ADDED: end the match from outside the normal move flow (currently: a
-  // forfeit-by-disconnect-timeout via server MATCH_ENDED). Deliberately not
+  // End the match from outside the normal move flow. Deliberately not
   // touching this.game.winnerIndex — that getter is a score comparison and
-  // a forfeit winner is a different concept (the disconnected player may
-  // well have been ahead on points). The override lives alongside the game,
+  // a forfeit winner is a different concept. The override lives alongside the game,
   // not inside it, and only affects the endcard header.
   showForcedEnd({ reason, winnerIndex }) {
     this._endOverride = { reason, winnerIndex };
@@ -979,11 +939,6 @@ export class GameUI {
     const winner = this._endOverride ? this._endOverride.winnerIndex : this.game.winnerIndex;
     const winnerEl = document.getElementById("endcardWinner");
     const reasonEl = document.getElementById("endcardReason");
-    // FIXED: "name-a"/blue must track the VIEWER, not raw player 0 — same
-    // convention _syncSidePlates already uses for the live side plates
-    // (self always blue, opponent always red). This used to be hardcoded
-    // to player 0/1, so roughly half of online matches (whichever player
-    // ended up as index 1) saw their own win rendered in the opponent's color.
     const myIndex = this.matchClient ? this.matchClient.myPlayerIndex : 0;
 
     if (winnerEl) {
@@ -1001,11 +956,6 @@ export class GameUI {
     }
   }
 
-  // ADDED: most forced-end reasons read fine as a static string next to "X
-  // wins" (see END_REASON_TEXT) — but "resign" is inherently about which
-  // SIDE did it. The server broadcasts the same MATCH_ENDED to both players
-  // (see Match.resign), so without this, the resigning player's own screen
-  // would confusingly say "Opponent resigned" about themselves.
   _endReasonText(reason, winnerIndex, myIndex) {
     if (reason === "resign") {
       return winnerIndex === myIndex ? "Opponent resigned" : "You resigned";
@@ -1014,14 +964,8 @@ export class GameUI {
   }
 
   _syncEndcardScores() {
-    // FIXED: same viewer-relative convention as the header above — was
-    // hardcoded to raw player 0/1 throughout this method.
     const myIndex = this.matchClient ? this.matchClient.myPlayerIndex : 0;
     const opponentIndex = 1 - myIndex;
-    // FIXED: must read the same winner _syncEndcardHeader uses (the forced-
-    // end override when there is one) — this used to read this.game.winnerIndex
-    // directly, a pure score comparison, so the "winner" glow silently used
-    // the wrong side for every forfeit (abort/resign/timeout).
     const winner = this._endOverride ? this._endOverride.winnerIndex : this.game.winnerIndex;
 
     const nameA = document.getElementById("scoreNameA");
@@ -1044,9 +988,6 @@ export class GameUI {
     const columnB = document.getElementById("breakdownColumnB");
     if (!columnA || !columnB) return;
 
-    // FIXED: same viewer-relative convention — was hardcoded to raw player
-    // 0/1, so an online viewer at index 1 saw their own scoring events
-    // listed under the opponent's (red) column and vice versa.
     const myIndex = this.matchClient ? this.matchClient.myPlayerIndex : 0;
     const opponentIndex = 1 - myIndex;
 
@@ -1097,7 +1038,7 @@ export class GameUI {
     const localActions = document.getElementById("endcardLocalActions");
     if (localActions) localActions.hidden = !!this.matchClient;
 
-    // ADDED: online rematch — only offered while the match is still alive
+    // Online rematch — only offered while the match is still alive
     // server-side for it (status "over": a naturally-completed or resigned
     // game). Once it's "aborted" (forfeit-by-disconnect, or the opponent
     // explicitly left), the match is already gone server-side — nothing to
@@ -1110,7 +1051,7 @@ export class GameUI {
     this.resetRematchPrompt();
   }
 
-  // ADDED: bound to btnOnlineRematch. Symmetric with the opponent's own
+  // Bound to btnOnlineRematch. Symmetric with the opponent's own
   // click — server just waits for both (see Match.requestRematch) and
   // fires a normal MATCH_START once it has them, which the existing
   // onMatchStart -> startGame() path already handles with no further
@@ -1123,13 +1064,13 @@ export class GameUI {
     if (btn) btn.disabled = true;
   }
 
-  // ADDED: opponent clicked rematch before we did — nudge, doesn't disable
+  // Opponent clicked rematch before we did — nudge, doesn't disable
   // our own button, since clicking it now is exactly how we accept.
   showOpponentWantsRematch() {
     this.setRematchStatus("Opponent wants a rematch — click Rematch to accept!", { active: true });
   }
 
-  // ADDED: small imperative status-line helper for the online rematch
+  // Small imperative status-line helper for the online rematch
   // prompt. Event-driven (who clicked/asked what) rather than derived from
   // persistent state like the rest of _render(), so it lives outside the
   // normal _syncX() cycle and is called directly from main.js's
@@ -1146,7 +1087,7 @@ export class GameUI {
     el.classList.toggle("endcard__rematch-status--active", active);
   }
 
-  // ADDED: rematch fizzled (timeout) or is otherwise moot — clear the
+  // Rematch fizzled (timeout) or is otherwise moot — clear the
   // prompt and re-enable the button so they can try again.
   resetRematchPrompt() {
     this.setRematchStatus(null);

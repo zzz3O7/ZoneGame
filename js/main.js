@@ -5,8 +5,8 @@ import { initHintsPanel } from "./hintsPanel.js";
 import { Connection } from "./net/connection.js";
 import { MatchClient } from "./net/matchClient.js";
 import { Menu } from "./menu.js";
-import { showBanner, hideBanner } from "./banner.js"; // ADDED
-import { DISCONNECT_ABORT_MS } from "./config.js"; // ADDED
+import { showBanner, hideBanner } from "./banner.js";
+import { DISCONNECT_ABORT_MS } from "./config.js";
 
 const menuScreen = document.getElementById("menuScreen");
 const waitingRoomScreen = document.getElementById("waitingRoomScreen");
@@ -15,10 +15,10 @@ const gameScreen = document.getElementById("gameScreen");
 let ui = null;
 let lastLocalParams = null; // set only for local hotseat games; drives rematch/same-board
 let currentConnection = null; // so leaving (back to menu / cancel) can actually close the socket
-let currentMatchClient = null; // ADDED: so leaveCurrentMatch can send LEAVE_MATCH even before any GameUI exists (e.g. cancelling the waiting room)
+let currentMatchClient = null; // so leaveCurrentMatch can send LEAVE_MATCH even before any GameUI exists (e.g. cancelling the waiting room)
 let opponentDisconnectTimer = null; // drives the live countdown text in the opponent-disconnected banner
-let bannerAutoHideTimer = null; // FIXED: was a bare setTimeout in handleOpponentReconnected — could fire late and clobber a newer, more urgent banner it knows nothing about
-let reconnectInProgress = false; // FIXED: guards handleConnectionLost against running twice at once (e.g. a move attempted mid-reconnect can independently trigger onConnectionLost again)
+let bannerAutoHideTimer = null; // was a bare setTimeout in handleOpponentReconnected — could fire late and clobber a newer, more urgent banner it knows nothing about
+let reconnectInProgress = false; // guards handleConnectionLost against running twice at once (e.g. a move attempted mid-reconnect can independently trigger onConnectionLost again)
 
 function showScreen(screen) {
   [menuScreen, waitingRoomScreen, gameScreen].forEach((s) => (s.hidden = s !== screen));
@@ -28,7 +28,7 @@ function wsUrl() {
   return `wss://${location.host}/ws`;
 }
 
-// ADDED: shared teardown for "this match is done, one way or another" —
+// Shared teardown for "this match is done, one way or another" —
 // used both when we deliberately leave (leaveCurrentMatch, below) and when
 // the server/reconnect flow tells us the match is already gone and there's
 // nothing left to notify.
@@ -37,7 +37,7 @@ function resetMatchState() {
   currentMatchClient = null;
   clearInterval(opponentDisconnectTimer);
   opponentDisconnectTimer = null;
-  clearTimeout(bannerAutoHideTimer); // FIXED
+  clearTimeout(bannerAutoHideTimer);
   hideBanner();
 }
 
@@ -55,34 +55,34 @@ function leaveCurrentMatch() {
 
 function setupMatchClient(conn) {
   const matchClient = new MatchClient(conn);
-  currentMatchClient = matchClient; // ADDED
+  currentMatchClient = matchClient;
   matchClient.onMatchStart = (game) => startGame(game, matchClient);
   matchClient.onMoveApplied = () => ui?.refresh(); // ui set once startGame runs
 
-  // ADDED: disconnect / reconnect / end-of-match wiring
+  // disconnect / reconnect / end-of-match wiring
   matchClient.onOpponentDisconnected = (playerIndex, abortInMs) => handleOpponentDisconnected(abortInMs);
   matchClient.onOpponentReconnected = () => handleOpponentReconnected();
   matchClient.onMatchEnded = (info) => handleMatchEnded(info);
   matchClient.onOpponentLeft = () => handleOpponentLeft();
   matchClient.onConnectionLost = () => handleConnectionLost(matchClient);
   matchClient.onReconnectFailed = () => handleReconnectFailed();
-  matchClient.onOpponentWantsRematch = () => ui?.showOpponentWantsRematch(); // ADDED
-  matchClient.onRematchCancelled = () => ui?.resetRematchPrompt(); // ADDED — timed out; let them try again if they want
+  matchClient.onOpponentWantsRematch = () => ui?.showOpponentWantsRematch();
+  matchClient.onRematchCancelled = () => ui?.resetRematchPrompt();
   // Shared by reconnect success AND hash-mismatch resync (see matchClient.js) —
   // either way, the correct move is just "rebuild the UI from what the
   // server says is true right now", same as a fresh match start.
   matchClient.onSynced = (game, syncMsg) => {
-    reconnectInProgress = false; // FIXED: resolved — a later drop should be able to start a fresh retry loop
+    reconnectInProgress = false;
     hideBanner();
     clearInterval(opponentDisconnectTimer);
-    clearTimeout(bannerAutoHideTimer); // FIXED
+    clearTimeout(bannerAutoHideTimer);
     routeSyncedState(matchClient, game, syncMsg);
   };
 
   return matchClient;
 }
 
-// where a SYNC_STATE payload sends us, based on what the match is
+// Where a SYNC_STATE payload sends us, based on what the match is
 // currently doing. "active" and "over" both just go through startGame() —
 // GameUI already renders the live board vs the endcard purely from
 // game.gameOver, so reconnecting into a finished match needs no special case
@@ -97,7 +97,7 @@ function routeSyncedState(matchClient, game, syncMsg) {
   }
   startGame(game, matchClient);
 
-  // FIXED: a resign (or, defensively, an abort-forfeit) doesn't correspond
+  // A resign (or, defensively, an abort-forfeit) doesn't correspond
   // to any action in the replay log — there's no move to replay that would
   // ever set game.gameOver — so without this, reconnecting into a resigned
   // match silently never showed the endcard at all. Force the same override
@@ -107,13 +107,10 @@ function routeSyncedState(matchClient, game, syncMsg) {
   }
 }
 
-// ADDED: the other player's connection dropped. Just informational — the
-// server is the one keeping score, we're only reflecting its abortInMs
-// countdown. Wording differs if the game had already concluded (sitting on
-// the endcard already): nothing about the result is at risk at that point.
+// The other player's connection dropped. Just informational.
 function handleOpponentDisconnected(abortInMs) {
   clearInterval(opponentDisconnectTimer);
-  clearTimeout(bannerAutoHideTimer); // FIXED: don't let a stale "opponent reconnected" auto-hide clobber this
+  clearTimeout(bannerAutoHideTimer);
   const deadline = Date.now() + abortInMs;
   const gameAlreadyOver = ui?.game?.gameOver === true;
 
@@ -129,34 +126,32 @@ function handleOpponentDisconnected(abortInMs) {
   opponentDisconnectTimer = setInterval(tick, 500);
 }
 
-// ADDED
 function handleOpponentReconnected() {
   clearInterval(opponentDisconnectTimer);
-  clearTimeout(bannerAutoHideTimer); // FIXED
+  clearTimeout(bannerAutoHideTimer);
   showBanner("Opponent reconnected", { kind: "info" });
-  bannerAutoHideTimer = setTimeout(hideBanner, 2000); // FIXED: tracked so a later banner can cancel it instead of being clobbered
+  bannerAutoHideTimer = setTimeout(hideBanner, 2000); // tracked so a later banner can cancel it instead of being clobbered
 }
 
-// ADDED: genuine forfeit-by-abandonment, mid-game. The endcard needs the
-// forfeit winner from the server, not the score-based one GameUI normally
-// reads — see showForcedEnd in gameUI.js for why those have to stay separate.
+// Genuine forfeit-by-abandonment, mid-game. The endcard needs the
+// forfeit winner from the server, not the score-based one GameUI normally reads.
 function handleMatchEnded(info) {
   clearInterval(opponentDisconnectTimer);
-  clearTimeout(bannerAutoHideTimer); // FIXED
+  clearTimeout(bannerAutoHideTimer);
   hideBanner();
   ui?.showForcedEnd(info);
 }
 
-// ADDED: match had already ended normally; the opponent just isn't coming
+// Match had already ended normally; the opponent just isn't coming
 // back. The result already stands — nothing to change, just let them know.
 function handleOpponentLeft() {
   clearInterval(opponentDisconnectTimer);
-  clearTimeout(bannerAutoHideTimer); // FIXED
+  clearTimeout(bannerAutoHideTimer);
   showBanner("Opponent left the match.", { kind: "info" });
   ui?.resetRematchPrompt(); // in case we were the one waiting on a rematch they were never going to accept
 }
 
-// ADDED: our OWN connection dropped unexpectedly. Auto-retry opening a fresh
+// Our OWN connection dropped unexpectedly. Auto-retry opening a fresh
 // socket (the old one is dead) for up to roughly the server's own abort
 // window, minus a safety margin — once a fresh socket is up, a single
 // RECONNECT_ATTEMPT is enough; the server answers with syncState or
@@ -165,13 +160,13 @@ function handleOpponentLeft() {
 // just after everything fails — no reason to make someone wait on a spinner
 // they already want to leave.
 async function handleConnectionLost(matchClient) {
-  if (reconnectInProgress) return; // FIXED: don't start a second overlapping retry loop (e.g. a move attempted mid-reconnect can independently re-fire onConnectionLost)
+  if (reconnectInProgress) return; // don't start a second overlapping retry loop
   reconnectInProgress = true;
 
   const deadline = Date.now() + Math.max(DISCONNECT_ABORT_MS - 1500, 2000);
 
   const abandon = () => {
-    reconnectInProgress = false; // FIXED
+    reconnectInProgress = false;
     leaveCurrentMatch();
     ui?.destroy();
     ui = null;
@@ -180,8 +175,8 @@ async function handleConnectionLost(matchClient) {
 
   const attempt = async () => {
     if (Date.now() >= deadline) {
-      reconnectInProgress = false; // FIXED
-      resetMatchState(); // was only clearing currentConnection, leaving currentMatchClient dangling
+      reconnectInProgress = false;
+      resetMatchState(); // don't leave currentMatchClient dangling
       showBanner("Couldn't reconnect — the match may be gone.", {
         kind: "danger",
         actions: [
@@ -223,10 +218,10 @@ async function handleConnectionLost(matchClient) {
   attempt();
 }
 
-// ADDED: shared terminal outcome for a reconnect attempt that the server
+// Shared terminal outcome for a reconnect attempt that the server
 // explicitly rejected (session invalid, or the match is genuinely gone).
 function handleReconnectFailed() {
-  reconnectInProgress = false; // FIXED
+  reconnectInProgress = false;
   resetMatchState();
   showBanner("Couldn't reconnect — that match is gone.", {
     kind: "danger",
@@ -269,11 +264,10 @@ function populateWaitingRoom(params, inviteCode) {
   document.getElementById("waitDominoValue").textContent = params.startingDominoes;
 }
 
-// ADDED: page-load reconnect. Checked once, before Menu even shows the
+// Page-load reconnect. Checked once, before Menu even shows the
 // default screen — a stored session means this tab was mid-match when it
 // went away (refresh, or the tab was closed and reopened within the same
-// session). Skips the menu entirely rather than making the person choose
-// first; "Abandon" is right there from the first frame if they'd rather not.
+// session). Skips the menu entirely, "Abandon" is right there if they'd rather not.
 function attemptPageLoadReconnect(storedSession) {
   menuScreen.hidden = true;
 
@@ -295,23 +289,14 @@ function attemptPageLoadReconnect(storedSession) {
     .then(() => {
       const matchClient = setupMatchClient(conn); // sets the general-purpose matchClient.onReconnectFailed = handleReconnectFailed
       matchClient.restoreSession(storedSession);
-      // FIXED: this override used to be permanent — if THIS attempt failed,
-      // fine, but the same stale handler would then incorrectly run for any
-      // *later*, unrelated disconnect mid-session too (e.g. one handled by
-      // handleConnectionLost long after this page-load reconnect had
-      // already succeeded), which only does a partial reset (never calls
-      // showScreen/destroys ui) and could leave menuScreen and gameScreen
-      // both visible at once. Restore the general handler immediately so
+      // Restore the general handler immediately so
       // this override only ever applies to this one attempt.
       matchClient.onReconnectFailed = () => {
         matchClient.onReconnectFailed = () => handleReconnectFailed();
         resetMatchState();
         menuScreen.hidden = false;
       };
-      // FIXED: attemptReconnect() can return false (no stored matchId/sessionId
-      // to send — e.g. corrupted sessionStorage) without the server ever
-      // getting a chance to reply, which would otherwise leave the
-      // "Reconnecting…" banner stuck forever with no resolution.
+
       if (!matchClient.attemptReconnect()) {
         matchClient.onReconnectFailed = () => handleReconnectFailed();
         resetMatchState();
@@ -330,8 +315,6 @@ new Menu({
   onCreateMatch: async (nickname, params) => {
     const conn = new Connection(wsUrl());
     currentConnection = conn;
-    // FIXED: an unreachable server rejected this with zero user feedback —
-    // the button just did nothing, forever, with only a console warning.
     try {
       await conn.connect();
     } catch {
@@ -354,7 +337,6 @@ new Menu({
   onJoinMatch: async (nickname, code) => {
     const conn = new Connection(wsUrl());
     currentConnection = conn;
-    // FIXED: same as onCreateMatch above
     try {
       await conn.connect();
     } catch {
@@ -371,7 +353,7 @@ new Menu({
   },
 });
 
-// ADDED: run the reconnect check once, at startup, before anything else.
+// Run the reconnect check once, at startup, before anything else.
 {
   const stored = MatchClient.loadSession();
   if (stored) attemptPageLoadReconnect(stored);
@@ -391,9 +373,6 @@ document.getElementById("btnCopyCode").addEventListener("click", (event) => {
 });
 
 document.getElementById("btnCancelWait").addEventListener("click", () => {
-  // FIXED: actually tear down the socket (and forget the session) so the
-  // server's disconnect/abort handling runs instead of leaving a ghost
-  // connection open. Still just a raw close, not a clean LEAVE_MATCH.
   leaveCurrentMatch();
   showScreen(menuScreen);
 });
@@ -408,7 +387,7 @@ document.getElementById("btnSameBoard").addEventListener("click", () => {
   startGame(new Game({ ...lastLocalParams, seed: ui.game.seed })); // same cave, roles reset
 });
 
-// ADDED: shared by both the endcard's "Back to menu" and the mid-game local
+// Shared by both the endcard's "Back to menu" and the mid-game local
 // "Back to menu" — leaves any live match (harmless no-op for local hotseat,
 // which has no matchClient/connection to close) and tears down the current
 // GameUI so its clock intervals/timers don't keep running invisibly behind
@@ -421,28 +400,12 @@ function goToMenu() {
 }
 
 document.getElementById("btnBackToMenu").addEventListener("click", () => {
-  // FIXED: same as cancel — close the socket and forget the session. Mid-game
-  // this still just reads as an ordinary disconnect to the server (grace
-  // period, then abort-forfeit) rather than an immediate forfeit — that
-  // distinction goes away once resign/leave are wired through properly.
   goToMenu();
 });
 
-// ADDED: local hotseat's mid-game exit — no forfeit concept, no server to
-// notify, so this is just "leave whenever."
 document.getElementById("btnLocalBackToMenu").addEventListener("click", () => {
   goToMenu();
 });
 
-// FIXED (root cause): this used to run once per startGame() call, but
-// .hints__toggle lives in the static gameScreen markup — the same button
-// element persists across every game/rematch/reconnect, it's never rebuilt.
-// initHintsPanel() has no teardown, so calling it from startGame() bound a
-// brand new click listener on top of every previous one, every game. With
-// several stacked listeners on one button, a single click fires all of them
-// synchronously; since each one independently reads body.hidden, flips it,
-// and writes it back, an even number of stacked listeners cancels itself
-// out to a net no-op — which is exactly the intermittent "does nothing"
-// behavior. The hints content is static and match-independent, so — like
-// every other button here — it only ever needs to be bound once, at load.
+// Run once to avoid stacking listeners on new games
 initHintsPanel();

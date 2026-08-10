@@ -26,12 +26,7 @@ export const LAYOUT = {
   maxZoom: 4, // pinch-zoom ceiling on the board (mobile), 1 = fit-to-view
   maxCanvasDimension: 4096, // conservative cap: some mobile GPUs clip/blank canvases above ~4096-8192px/side
 
-  // Line widths / insets as a fraction of cellSize instead of fixed px, so
-  // a 60x60 custom board doesn't get relatively-huge borders and a 10x10
-  // board doesn't get relatively-invisible ones. Ratios derived from the
-  // original fixed values (1px/2px/3px/3px/3px) at the classic-mode
-  // baseline cellSize (720 canvasResolution / 20 board = 36px), so the
-  // classic-mode look is unchanged and everything else now scales with it.
+  // Line widths / insets as a fraction of cellSize instead of fixed px.
   gridLineRatio: 1 / 36,
   zoneBorderRatio: 2 / 36,
   zoneBorderHighlightRatio: 3 / 36,
@@ -42,9 +37,7 @@ export const LAYOUT = {
 export const PASS_PENALTY = 0.7; // global, not mode-tunable (yet)
 
 // How long a match stays alive after a player disconnects before the server
-// gives up and aborts it. Server-only concern, but lives here with the other
-// tunables rather than buried in match.js. 10s for testing — bump way up
-// (60-90s) before this goes live for real.
+// gives up and aborts it. Server-only concern.
 export const DISCONNECT_ABORT_MS = 60_000;
 
 // How long the server waits for the second player to also request a
@@ -68,20 +61,17 @@ export const CUSTOM_LIMITS = {
 };
 
 // Time control: orthogonal to board mode (classic/custom) — either can be
-// paired with any of these. "none" (or an unrecognized/missing timeMode)
-// means no clock at all; resolveParams() returns timeControl: null in that
-// case, and callers (Match, GameUI) should skip all clock logic rather than
-// construct a Clock with some placeholder value.
+// paired with any of these.
 export const TIME_PRESETS = {
   none: { label: "No clock", initialMs: null, incrementMs: null },
-  bullet: { label: "Bullet · 1+0", initialMs: 60_000, incrementMs: 0 },
-  blitz: { label: "Blitz · 3+2", initialMs: 180_000, incrementMs: 2_000 },
+  bullet: { label: "Bullet · 2+0", initialMs: 120_000, incrementMs: 0 },
+  blitz: { label: "Blitz · 5+0", initialMs: 300_000, incrementMs: 0 },
   rapid: { label: "Rapid · 10+5", initialMs: 600_000, incrementMs: 5_000 },
   classical: { label: "Classical · 30+20", initialMs: 1_800_000, incrementMs: 20_000 },
 };
 
 // Defaults shown in the custom time-control panel before the player touches anything.
-export const TIME_CUSTOM_DEFAULTS = { initialMs: 180_000, incrementMs: 2_000 };
+export const TIME_CUSTOM_DEFAULTS = { initialMs: 300_000, incrementMs: 0 };
 
 // Inclusive [min, max] for a custom time control, in ms. 15s minimum bank,
 // 60min maximum; 0-60s increment. Enforced both client- and server-side,

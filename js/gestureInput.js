@@ -25,10 +25,7 @@ export class GestureInput {
     if (!this.isDrawing) return false;
     const last = this.path[this.path.length - 1];
     // Consecutive touchmove/mousemove events can be more than one cell
-    // apart on a slow frame (fast finger swipe, low framerate, or just a
-    // sparse browser event rate) — walk the grid line between the last
-    // recorded point and this one so the path has no gaps, instead of
-    // just recording the endpoints.
+    // apart on a slow frame.
     const cells = last ? GestureInput._lineCells(last, cell) : [cell];
     let grew = false;
     for (const c of cells) {

@@ -21,7 +21,7 @@ function clampInt(value, [min, max], fallback) {
 //
 // Must be idempotent: resolveParams(resolveParams(x)) has to equal
 // resolveParams(x), because the server intentionally re-runs resolveParams
-// on whatever the client already sent (see resolveParams' own comment) —
+// on whatever the client already sent
 // and what the client sends IS resolveParams' own output. Board params get
 // this "for free" since their field names happen to match on both sides
 // (boardSize in, boardSize out); time control's don't (timeMode in,
