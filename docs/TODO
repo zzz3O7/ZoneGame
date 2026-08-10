@@ -1,8 +1,3 @@
-matchClient.onError is never wired up in main.js — a failed join (bad code, full match) currently fails silently with no banner at all.
-
-cannot set clock to 15 seconds by sliders
-
-reminder on pass
 waiting screen time params + in game info
 
 strange layout on different resolutions (center vertucally)
@@ -17,6 +12,8 @@ rating
 undo/redo
 
 matchStart currently arrives before matchJoined
+
+cannot set clock to 15 seconds by sliders
 
 ??? skip move - 10% penalty on all points ( concecutive passess are not allowed)
 ??? fixed flat penalty

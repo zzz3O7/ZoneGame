@@ -446,6 +446,26 @@ button {
   border-color: var(--color-border);
 }
 
+/* Forced-pass reminder: no legal move exists, skip is the only action
+   left. Pulses a few times to catch the eye, then settles on the same
+   highlighted border the hover state already uses — animation-fill-mode
+   keeps the last keyframe applied with no JS timer needed. */
+.piece-btn--skip-reminder {
+  animation: skip-reminder-pulse 0.6s ease-in-out 3;
+  animation-fill-mode: forwards;
+}
+@keyframes skip-reminder-pulse {
+  0%,
+  100% {
+    border-color: var(--color-danger);
+    box-shadow: 0 0 0 0 rgba(184, 89, 63, 0.55);
+  }
+  50% {
+    border-color: var(--color-border);
+    box-shadow: 0 0 0 6px rgba(184, 89, 63, 0);
+  }
+}
+
 /* ===================== BOARD ===================== */
 /* Board is square and adapts to whatever vertical space the viewport gives it,
    capped at --board-size so it never gets absurdly large on tall screens, and

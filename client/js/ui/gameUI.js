@@ -751,7 +751,9 @@ export class GameUI {
 
     const skipBtn = document.querySelector(".piece-btn--skip");
     if (skipBtn) {
+      const forcedSkip = this.game.gameOver ? false : myTurn && !canMove;
       skipBtn.disabled = this.game.gameOver || !myTurn || canMove;
+      skipBtn.classList.toggle("piece-btn--skip-reminder", forcedSkip);
       const skipPenalty = viewerPlayer.score - Math.floor(viewerPlayer.score * PASS_PENALTY);
       const countEl = skipBtn.querySelector(".piece-btn__count");
       if (countEl) countEl.textContent = `-${skipPenalty}`;
