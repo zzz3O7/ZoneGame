@@ -3,25 +3,34 @@ import { GestureInput } from "./gestureInput.js";
 
 // Owns calc-mode's annotation state: freehand cell painting for planning
 // ahead. Purely a scratchpad — never touches Game or the network, and
-// never produces a move. Two colors ("self"/"opponent") let a player
-// sketch an exchange: their own planned move and the response they're
-// expecting. Same contract as GestureInput — GameUI drives it and reacts
-// to its state, this class knows nothing about rendering or DOM.
+// never produces a move.
 //
-// Undo/redo is a stack of whole-board snapshots taken *before* each
-// mutating action (a finished stroke, or a clear).
+// Marks are stored as individual strokes (like Game.history stores placed
+// pieces), not a flat cell set, so the renderer can draw each stroke the
+// same way it draws a placed piece: inset squares bridged within the
+// stroke, distinct shapes instead of one undifferentiated fill. Two colors
+// ("self"/"opponent") let a player sketch an exchange: their own planned
+// move and the response they're expecting.
+//
+// Undo/redo is a stack of whole-stroke-list snapshots taken *before* each
+// mutating action (a finished stroke, or a clear) — same contract as
+// GestureInput otherwise: GameUI drives it and reacts to its state, this
+// class knows nothing about rendering or DOM.
 export class CalcDrawing {
   constructor() {
-    this.cells = new Map(); // key -> "self" | "opponent"
-    this._history = []; // Snapshots, most recent last
+    this.strokes = []; // { color, cells: Set<key> }[], oldest first
+    this._history = []; // strokes-array snapshots, most recent last
     this._redo = [];
-    this._strokeColor = null; // set while a stroke is in progress
-    this._strokeBefore = null; // snapshot taken at stroke start
+    this._current = null; // { color, cells } while a stroke is in progress
     this._lastCell = null;
   }
 
   get isDrawing() {
-    return this._strokeColor !== null;
+    return this._current !== null;
+  }
+
+  get isEmpty() {
+    return this.strokes.length === 0;
   }
 
   get canUndo() {
@@ -32,10 +41,15 @@ export class CalcDrawing {
     return this._redo.length > 0;
   }
 
+  // Finished strokes plus the in-progress one (if any), for the renderer —
+  // GameUI doesn't need to know the in-progress stroke is tracked separately.
+  get displayStrokes() {
+    return this._current ? [...this.strokes, this._current] : this.strokes;
+  }
+
   start(cell, color = "self") {
     if (this.isDrawing) return;
-    this._strokeColor = color;
-    this._strokeBefore = new Map(this.cells);
+    this._current = { color, cells: new Set() };
     this._paint(cell);
   }
 
@@ -54,8 +68,8 @@ export class CalcDrawing {
   _paint(cell) {
     const key = Board.key(...cell);
     this._lastCell = cell;
-    if (this.cells.get(key) === this._strokeColor) return false;
-    this.cells.set(key, this._strokeColor);
+    if (this._current.cells.has(key)) return false;
+    this._current.cells.add(key);
     return true;
   }
 
@@ -63,44 +77,36 @@ export class CalcDrawing {
   // whether a render is needed / an undo entry was pushed).
   finish() {
     if (!this.isDrawing) return false;
-    const changed = !this._sameAs(this._strokeBefore);
-    if (changed) {
-      this._history.push(this._strokeBefore);
-      this._redo = [];
-    }
-    this._strokeColor = null;
-    this._strokeBefore = null;
+    const stroke = this._current;
+    this._current = null;
     this._lastCell = null;
-    return changed;
+    if (stroke.cells.size === 0) return false;
+
+    this._history.push(this.strokes);
+    this._redo = [];
+    this.strokes = [...this.strokes, stroke];
+    return true;
   }
 
   clear() {
-    if (this.cells.size === 0) return false;
-    this._history.push(new Map(this.cells));
+    if (this.isEmpty) return false;
+    this._history.push(this.strokes);
     this._redo = [];
-    this.cells = new Map();
+    this.strokes = [];
     return true;
   }
 
   undo() {
-    if (this._history.length === 0) return false;
-    this._redo.push(new Map(this.cells));
-    this.cells = this._history.pop();
+    if (!this.canUndo) return false;
+    this._redo.push(this.strokes);
+    this.strokes = this._history.pop();
     return true;
   }
 
   redo() {
-    if (this._redo.length === 0) return false;
-    this._history.push(new Map(this.cells));
-    this.cells = this._redo.pop();
-    return true;
-  }
-
-  _sameAs(map) {
-    if (map.size !== this.cells.size) return false;
-    for (const [key, color] of map) {
-      if (this.cells.get(key) !== color) return false;
-    }
+    if (!this.canRedo) return false;
+    this._history.push(this.strokes);
+    this.strokes = this._redo.pop();
     return true;
   }
 }

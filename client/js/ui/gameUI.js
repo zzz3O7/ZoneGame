@@ -793,7 +793,7 @@ export class GameUI {
       highlightEntry,
       this.hoveredZoneIds,
       zonePreview,
-      this.selectedType === "calc" ? this.calcDrawing.cells : null,
+      this.selectedType === "calc" ? this.calcDrawing.displayStrokes : null,
     );
 
     this.zoneTooltip.update(
@@ -822,7 +822,7 @@ export class GameUI {
     const clearBtn = document.getElementById("btnCalcClear");
     if (undoBtn) undoBtn.disabled = !this.calcDrawing.canUndo;
     if (redoBtn) redoBtn.disabled = !this.calcDrawing.canRedo;
-    if (clearBtn) clearBtn.disabled = this.calcDrawing.cells.size === 0;
+    if (clearBtn) clearBtn.disabled = this.calcDrawing.isEmpty;
   }
 
   // Resign is only meaningful for an online match that's still live —

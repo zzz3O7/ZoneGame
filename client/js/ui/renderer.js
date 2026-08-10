@@ -85,7 +85,7 @@ export class Renderer {
     highlightEntry,
     hoveredZoneIds,
     zonePreview,
-    calcCells,
+    calcStrokes,
   ) {
     const ctx = this.ctx;
     ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
@@ -95,7 +95,10 @@ export class Renderer {
     this._drawMoveHighlight(ctx, highlightEntry);
     this._drawGesturePath(ctx, gesturePath);
     this._drawGhost(ctx, board, zones, currentPlayerIndex, viewer, pieceType, anchorShape, anchorCell);
-    this._drawCalcMarks(ctx, calcCells);
+    // Drawn last (topmost). GameUI only passes calcStrokes while calc mode
+    // is the active selection — marks stay in memory (undo/redo intact)
+    // but are hidden the moment you switch to placing a real piece.
+    this._drawCalcMarks(ctx, calcStrokes);
   }
 
   _drawBoard(ctx, board) {
@@ -216,31 +219,39 @@ export class Renderer {
 
   _drawPieces(ctx, entries) {
     ctx.fillStyle = THEME.piece;
-    const inset = this.pieceInset;
 
     for (const entry of entries) {
       if (entry.type === "pass") continue;
       const cells = Shape.cellsAt(entry.shape, entry.anchorRow, entry.anchorCol);
       const cellSet = new Set(cells.map(([r, c]) => Board.key(r, c)));
+      this._fillInsetCellSet(ctx, cellSet);
+    }
+  }
 
-      for (const [r, c] of cells) {
-        const x = c * this.cellSize,
-          y = r * this.cellSize;
-        ctx.fillRect(x + inset, y + inset, this.cellSize - inset * 2, this.cellSize - inset * 2);
+  // Fills each cell in cellSet with an inset square, then bridges the gap
+  // between orthogonally-adjacent cells in the SAME set so it reads as one
+  // united shape instead of separate squares — used for both placed pieces
+  // and calc strokes. Only checks right/bottom per cell, each adjacency
+  // only needs filling once.
+  _fillInsetCellSet(ctx, cellSet) {
+    const inset = this.pieceInset;
+
+    for (const key of cellSet) {
+      const [r, c] = Board.parse(key);
+      const x = c * this.cellSize,
+        y = r * this.cellSize;
+      ctx.fillRect(x + inset, y + inset, this.cellSize - inset * 2, this.cellSize - inset * 2);
+    }
+
+    for (const key of cellSet) {
+      const [r, c] = Board.parse(key);
+      const x = c * this.cellSize,
+        y = r * this.cellSize;
+      if (cellSet.has(Board.key(r, c + 1))) {
+        ctx.fillRect(x + this.cellSize - inset, y + inset, inset * 2, this.cellSize - inset * 2);
       }
-
-      // bridge the gap between two cells of the *same* piece so it reads
-      // as one united shape instead of separate squares -- only check
-      // right/bottom per cell, each adjacency only needs filling once
-      for (const [r, c] of cells) {
-        const x = c * this.cellSize,
-          y = r * this.cellSize;
-        if (cellSet.has(Board.key(r, c + 1))) {
-          ctx.fillRect(x + this.cellSize - inset, y + inset, inset * 2, this.cellSize - inset * 2);
-        }
-        if (cellSet.has(Board.key(r + 1, c))) {
-          ctx.fillRect(x + inset, y + this.cellSize - inset, this.cellSize - inset * 2, inset * 2);
-        }
+      if (cellSet.has(Board.key(r + 1, c))) {
+        ctx.fillRect(x + inset, y + this.cellSize - inset, this.cellSize - inset * 2, inset * 2);
       }
     }
   }
@@ -273,12 +284,11 @@ export class Renderer {
     }
   }
 
-  _drawCalcMarks(ctx, cells) {
-    if (!cells || cells.size === 0) return;
-    for (const [key, color] of cells) {
-      const [r, c] = Board.parse(key);
-      ctx.fillStyle = color === "opponent" ? THEME.calcMarkOpponent : THEME.calcMarkSelf;
-      ctx.fillRect(c * this.cellSize, r * this.cellSize, this.cellSize, this.cellSize);
+  _drawCalcMarks(ctx, strokes) {
+    if (!strokes || strokes.length === 0) return;
+    for (const stroke of strokes) {
+      ctx.fillStyle = stroke.color === "opponent" ? THEME.calcMarkOpponent : THEME.calcMarkSelf;
+      this._fillInsetCellSet(ctx, stroke.cells);
     }
   }
 
