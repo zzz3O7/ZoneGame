@@ -170,6 +170,7 @@ async function handleConnectionLost(matchClient) {
     leaveCurrentMatch();
     ui?.destroy();
     ui = null;
+    menu.clearJoinCode();
     showScreen(menuScreen);
   };
 
@@ -187,6 +188,7 @@ async function handleConnectionLost(matchClient) {
               hideBanner();
               ui?.destroy();
               ui = null;
+              menu.clearJoinCode();
               showScreen(menuScreen);
             },
           },
@@ -233,6 +235,7 @@ function handleReconnectFailed() {
           hideBanner();
           ui?.destroy();
           ui = null;
+          menu.clearJoinCode();
           menuScreen.hidden = false;
           showScreen(menuScreen);
         },
@@ -276,6 +279,7 @@ function attemptPageLoadReconnect(storedSession) {
 
   const abandon = () => {
     leaveCurrentMatch();
+    menu.clearJoinCode();
     menuScreen.hidden = false;
   };
 
@@ -294,19 +298,21 @@ function attemptPageLoadReconnect(storedSession) {
       matchClient.onReconnectFailed = () => {
         matchClient.onReconnectFailed = () => handleReconnectFailed();
         resetMatchState();
+        menu.clearJoinCode();
         menuScreen.hidden = false;
       };
 
       if (!matchClient.attemptReconnect()) {
         matchClient.onReconnectFailed = () => handleReconnectFailed();
         resetMatchState();
+        menu.clearJoinCode();
         menuScreen.hidden = false;
       }
     })
     .catch(() => abandon());
 }
 
-new Menu({
+const menu = new Menu({
   onStartLocal: (params) => {
     lastLocalParams = params;
     startGame(new Game(params));
@@ -374,6 +380,7 @@ document.getElementById("btnCopyCode").addEventListener("click", (event) => {
 
 document.getElementById("btnCancelWait").addEventListener("click", () => {
   leaveCurrentMatch();
+  menu.clearJoinCode();
   showScreen(menuScreen);
 });
 
@@ -396,6 +403,7 @@ function goToMenu() {
   leaveCurrentMatch();
   ui?.destroy();
   ui = null;
+  menu.clearJoinCode();
   showScreen(menuScreen);
 }
 

@@ -90,6 +90,7 @@ export class Menu {
   _selectTab(tabId) {
     this.els.tabs.forEach((tab) => tab.classList.toggle("active", tab.dataset.tab === tabId));
     this.els.panels.forEach((panel) => panel.classList.toggle("active", panel.id === tabId));
+    this.clearJoinCode(); // stale code from a previous attempt shouldn't linger once you've navigated away
   }
 
   // Pre-fill both nickname fields from whatever was last saved.
@@ -114,6 +115,13 @@ export class Menu {
     } catch {
       // storage unavailable — just won't persist this time, not fatal
     }
+  }
+
+  // Called on tab/mode navigation and whenever the caller returns to the
+  // menu screen (e.g. leaving a match) — a stale invite code from a
+  // previous attempt shouldn't survive either.
+  clearJoinCode() {
+    this.els.joinCode.value = "";
   }
 
   _readCustomInputs() {

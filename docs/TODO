@@ -1,10 +1,6 @@
-clear invite code on menu change
-
-clock format: decimals on low time
+matchClient.onError is never wired up in main.js — a failed join (bad code, full match) currently fails silently with no banner at all.
 
 cannot set clock to 15 seconds by sliders
-
-    on rematch expire yellow text still sais the rematch offer is live
 
 reminder on pass
 waiting screen time params + in game info

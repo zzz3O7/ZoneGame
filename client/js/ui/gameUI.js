@@ -5,13 +5,9 @@ import { ZoneTooltip } from "./zoneTooltip.js";
 import { Zone } from "../../../shared/engine/zone.js";
 import { Board } from "../../../shared/engine/board.js";
 import { HistoryPanel } from "./historyPanel.js";
-import { extrapolateRemaining, formatClockMs, Clock } from "../../../shared/clock.js";
+import { extrapolateRemaining, formatClockMs, Clock, LOW_TIME_THRESHOLD_MS } from "../../../shared/clock.js";
 
 const KEY_TO_TYPE = { 1: "gesture", 2: "domino", 3: "tromino", 4: "tetromino" };
-
-// Below this, the ticking player's clock is shown as "low" (see
-// _renderClockFor) — purely a display threshold.
-const LOW_TIME_THRESHOLD_MS = 10_000;
 
 // How often the online clock display re-paints between authoritative
 // server snapshots. Display-only — how smooth the ticking looks.

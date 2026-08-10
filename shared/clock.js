@@ -101,12 +101,27 @@ export function extrapolateRemaining(snapshot, playerIndex, now) {
   return Math.max(0, base - elapsed);
 }
 
-// m:ss, or h:mm:ss once an hour is on the bank. Ceil (not floor/round)
+// m:ss, or h:mm:ss once an hour is on the bank. Ceil (not floor/round).
+// Below LOW_TIME_THRESHOLD_MS, switches to tenths-of-a-second precision
+// (m:ss.d) — whole seconds is too coarse to read a flag-fall coming.
+export const LOW_TIME_THRESHOLD_MS = 10_000;
+
 export function formatClockMs(ms) {
-  const totalSeconds = Math.ceil(Math.max(0, ms) / 1000);
+  const clamped = Math.max(0, ms);
+  const pad = (n) => String(n).padStart(2, "0");
+
+  if (clamped <= LOW_TIME_THRESHOLD_MS) {
+    const totalTenths = Math.ceil(clamped / 100);
+    const totalSeconds = Math.floor(totalTenths / 10);
+    const tenths = totalTenths % 10;
+    const m = Math.floor(totalSeconds / 60);
+    const s = totalSeconds % 60;
+    return `${m}:${pad(s)}.${tenths}`;
+  }
+
+  const totalSeconds = Math.ceil(clamped / 1000);
   const h = Math.floor(totalSeconds / 3600);
   const m = Math.floor((totalSeconds % 3600) / 60);
   const s = totalSeconds % 60;
-  const pad = (n) => String(n).padStart(2, "0");
   return h > 0 ? `${h}:${pad(m)}:${pad(s)}` : `${m}:${pad(s)}`;
 }

@@ -501,13 +501,12 @@ export class Match {
 
   _onRematchTimeout() {
     if (this.rematchRequestedBy.size === 0) return; // already resolved (both asked, or match moved on)
-    const requesterIndex = [...this.rematchRequestedBy][0];
     this.rematchRequestedBy.clear();
 
-    const requester = this.players.find((p) => p.playerIndex === requesterIndex);
-    if (requester?.connected) {
-      this._sendTo(requester.ws, { type: MSG.REMATCH_CANCELLED, reason: "timeout" });
-    }
+    // Both sides have a stale UI state to clear here: the requester's
+    // "waiting on opponent" prompt, and the opponent's "opponent wants a
+    // rematch" nudge — the offer expiring unaccepted moots both of them.
+    this.broadcast({ type: MSG.REMATCH_CANCELLED, reason: "timeout" });
   }
 
   // Guarded single-socket send, used by reject paths
