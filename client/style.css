@@ -1,7 +1,8 @@
 /* ===================== TOKENS ===================== */
 :root {
   /* Layout */
-  --board-size: 720px; /* ideal/max board size; actual size adapts to viewport */
+  --board-size: 960px; /* ideal/max board size in the wide 3-column layout; actual size adapts to viewport */
+  --board-size-stacked: 720px; /* separate cap for the stacked layout below — full-width panels there make a 960px board (and 960px-wide panels) feel oversized rather than "not empty" */
   --radius-sm: 4px;
   --radius-md: 8px;
 
@@ -90,6 +91,23 @@ button {
 }
 
 /* ===================== MAIN LAYOUT ===================== */
+/* .layout's own flex:1/grid-centering only has effect if its parent is
+   actually a flex container it can stretch against — without this,
+   #gameScreen is a plain block element and .layout just sits at its
+   natural content height, top-aligned, instead of centered in the
+   viewport. Mirrors the #menuScreen/#waitingRoomScreen treatment below. */
+#gameScreen {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+#gameScreen[hidden] {
+  display: none;
+}
+
 .layout {
   flex: 1;
   min-height: 0;
@@ -816,6 +834,16 @@ button {
     overflow: auto;
   }
 
+  /* Matches the html/body switch above: this breakpoint scrolls the
+     page itself instead of centering a fixed-height board, so the
+     wide-layout flex:1/overflow:hidden treatment on #gameScreen would
+     just clip stacked content instead of letting it flow. */
+  #gameScreen {
+    flex: none;
+    min-height: 0;
+    overflow: visible;
+  }
+
   .layout {
     display: flex;
     flex-direction: column;
@@ -836,7 +864,7 @@ button {
   .panel,
   .side-plate {
     width: 100%;
-    max-width: var(--board-size);
+    max-width: var(--board-size-stacked);
   }
 
   .side-plate--opponent {
@@ -867,7 +895,7 @@ button {
      the wide-layout formula (which subtracts --side-columns-budget) would
      go negative on a narrow viewport and collapse the board to 0. */
   .board-wrap {
-    --board-computed-size: min(var(--board-size), calc(100vw - (var(--layout-padding) * 2)));
+    --board-computed-size: min(var(--board-size-stacked), calc(100vw - (var(--layout-padding) * 2)));
   }
 }
 
@@ -883,7 +911,7 @@ button {
    on large boards even though the on-page board is capped smaller. */
 @media (max-width: 1340px) and (pointer: coarse) {
   .board-wrap {
-    --board-computed-size: min(var(--board-size), calc(100vw - (var(--layout-padding) * 2)), 65vh);
+    --board-computed-size: min(var(--board-size-stacked), calc(100vw - (var(--layout-padding) * 2)), 65vh);
   }
 }
 
