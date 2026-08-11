@@ -1,5 +1,6 @@
 import { CUSTOM_DEFAULTS, TIME_CUSTOM_DEFAULTS } from "../../../shared/config.js";
 import { resolveParams } from "../../../shared/params.js";
+import { sound } from "../audio/soundManager.js";
 
 // Same "zonegame.<thing>" key convention as matchClient.js's session storage.
 // localStorage (not sessionStorage): unlike match reconnect state.
@@ -75,6 +76,7 @@ export class Menu {
   }
 
   _selectMode(mode) {
+    sound.uiClick();
     this.mode = mode;
     this.els.modeClassic.classList.toggle("selected", mode === "classic");
     this.els.modeCustom.classList.toggle("selected", mode === "custom");
@@ -82,12 +84,14 @@ export class Menu {
   }
 
   _selectTimeMode(timeMode) {
+    sound.uiClick();
     this.timeMode = timeMode;
     this.els.timeCards.forEach((card) => card.classList.toggle("selected", card.dataset.timeMode === timeMode));
     this.els.timeCustomPanel.classList.toggle("collapsed", timeMode !== "custom");
   }
 
   _selectTab(tabId) {
+    sound.uiClick();
     this.els.tabs.forEach((tab) => tab.classList.toggle("active", tab.dataset.tab === tabId));
     this.els.panels.forEach((panel) => panel.classList.toggle("active", panel.id === tabId));
     this.clearJoinCode(); // stale code from a previous attempt shouldn't linger once you've navigated away
@@ -172,6 +176,7 @@ export class Menu {
     });
 
     this.els.btnCreate.addEventListener("click", () => {
+      sound.uiConfirm();
       const nickname = this.els.nicknameCreate.value.trim() || "Player";
       this._saveNickname(nickname); // belt-and-suspenders alongside the input listener (e.g. an autofilled value that never fired "input")
       this.onCreateMatch(nickname, this._buildParams());
@@ -182,6 +187,7 @@ export class Menu {
       this._saveNickname(nickname);
       const code = this.els.joinCode.value.trim().toUpperCase();
       if (!code) return;
+      sound.uiConfirm();
       this.onJoinMatch(nickname, code);
     });
 

@@ -69,6 +69,7 @@ function leaveCurrentMatch() {
 // it (intentional, so it doesn't also trigger onConnectionLost) and let
 // the person retry from the menu.
 function handleJoinError(message) {
+  sound.formError();
   currentConnection?.close();
   resetMatchState();
   menu.clearJoinCode();
@@ -81,7 +82,10 @@ function handleJoinError(message) {
 function setupMatchClient(conn) {
   const matchClient = new MatchClient(conn);
   currentMatchClient = matchClient;
-  matchClient.onMatchStart = (game) => startGame(game, matchClient);
+  matchClient.onMatchStart = (game) => {
+    sound.matchStart();
+    startGame(game, matchClient);
+  };
   matchClient.onMoveApplied = () => ui?.refresh(); // ui set once startGame runs
   matchClient.onRejected = () => ui?.playReject();
 
@@ -92,8 +96,14 @@ function setupMatchClient(conn) {
   matchClient.onOpponentLeft = () => handleOpponentLeft();
   matchClient.onConnectionLost = () => handleConnectionLost(matchClient);
   matchClient.onReconnectFailed = () => handleReconnectFailed();
-  matchClient.onOpponentWantsRematch = () => ui?.showOpponentWantsRematch();
-  matchClient.onRematchCancelled = () => ui?.resetRematchPrompt();
+  matchClient.onOpponentWantsRematch = () => {
+    sound.rematchInvite();
+    ui?.showOpponentWantsRematch();
+  };
+  matchClient.onRematchCancelled = () => {
+    sound.rematchCancelled();
+    ui?.resetRematchPrompt();
+  };
   matchClient.onError = (message) => handleJoinError(message);
   // Shared by reconnect success AND hash-mismatch resync (see matchClient.js) —
   // either way, the correct move is just "rebuild the UI from what the
@@ -136,6 +146,7 @@ function routeSyncedState(matchClient, game, syncMsg) {
 
 // The other player's connection dropped. Just informational.
 function handleOpponentDisconnected(abortInMs) {
+  sound.opponentDisconnected();
   clearInterval(opponentDisconnectTimer);
   clearTimeout(bannerAutoHideTimer);
   const deadline = Date.now() + abortInMs;
@@ -154,6 +165,7 @@ function handleOpponentDisconnected(abortInMs) {
 }
 
 function handleOpponentReconnected() {
+  sound.opponentReconnected();
   clearInterval(opponentDisconnectTimer);
   clearTimeout(bannerAutoHideTimer);
   showBanner("Opponent reconnected", { kind: "info" });
@@ -172,6 +184,7 @@ function handleMatchEnded(info) {
 // Match had already ended normally; the opponent just isn't coming
 // back. The result already stands — nothing to change, just let them know.
 function handleOpponentLeft() {
+  sound.opponentLeft();
   clearInterval(opponentDisconnectTimer);
   clearTimeout(bannerAutoHideTimer);
   showBanner("Opponent left the match.", { kind: "info" });
@@ -189,6 +202,7 @@ function handleOpponentLeft() {
 async function handleConnectionLost(matchClient) {
   if (reconnectInProgress) return; // don't start a second overlapping retry loop
   reconnectInProgress = true;
+  sound.connectionLost();
 
   const deadline = Date.now() + Math.max(DISCONNECT_ABORT_MS - 1500, 2000);
 
@@ -250,6 +264,7 @@ async function handleConnectionLost(matchClient) {
 // Shared terminal outcome for a reconnect attempt that the server
 // explicitly rejected (session invalid, or the match is genuinely gone).
 function handleReconnectFailed() {
+  sound.reconnectFailed();
   reconnectInProgress = false;
   resetMatchState();
   showBanner("Couldn't reconnect — that match is gone.", {
@@ -342,6 +357,7 @@ function attemptPageLoadReconnect(storedSession) {
 
 const menu = new Menu({
   onStartLocal: (params) => {
+    sound.matchStart();
     lastLocalParams = params;
     startGame(new Game(params));
   },
@@ -394,6 +410,7 @@ const menu = new Menu({
 }
 
 document.getElementById("btnCopyCode").addEventListener("click", (event) => {
+  sound.uiConfirm();
   const code = document.getElementById("inviteCodeDisplay").textContent;
   navigator.clipboard?.writeText(code);
 
@@ -407,6 +424,7 @@ document.getElementById("btnCopyCode").addEventListener("click", (event) => {
 });
 
 document.getElementById("btnCancelWait").addEventListener("click", () => {
+  sound.uiBack();
   leaveCurrentMatch();
   menu.clearJoinCode();
   showScreen(menuScreen);
@@ -414,11 +432,13 @@ document.getElementById("btnCancelWait").addEventListener("click", () => {
 
 document.getElementById("btnRematch").addEventListener("click", () => {
   if (!lastLocalParams) return; // hidden for online matches, but guard anyway
+  sound.matchStart();
   startGame(new Game({ ...lastLocalParams, seed: undefined })); // fresh board
 });
 
 document.getElementById("btnSameBoard").addEventListener("click", () => {
   if (!lastLocalParams || !ui) return;
+  sound.matchStart();
   startGame(new Game({ ...lastLocalParams, seed: ui.game.seed })); // same cave, roles reset
 });
 
@@ -428,6 +448,7 @@ document.getElementById("btnSameBoard").addEventListener("click", () => {
 // GameUI so its clock intervals/timers don't keep running invisibly behind
 // the menu screen.
 function goToMenu() {
+  sound.uiBack();
   leaveCurrentMatch();
   ui?.destroy();
   ui = null;

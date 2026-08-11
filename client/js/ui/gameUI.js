@@ -225,6 +225,7 @@ export class GameUI {
   // ===================== intents: piece selection & transforms =====================
 
   selectType(type) {
+    this.sound.uiClick();
     this.selectedType = type;
     this.rotationStep = 0;
     this.flipped = false;
@@ -238,6 +239,7 @@ export class GameUI {
   }
 
   rotate(direction) {
+    this.sound.uiClick();
     this.rotationStep = (this.rotationStep + direction + 4) % 4;
     // Only the ghost shape's orientation changes — no button, panel, or
     // plate depends on rotationStep.
@@ -245,6 +247,7 @@ export class GameUI {
   }
 
   flip() {
+    this.sound.uiClick();
     this.flipped = !this.flipped;
     // Same as rotate: canvas-only.
     this._syncCanvas();
@@ -325,6 +328,7 @@ export class GameUI {
   clearCalc() {
     if (this.selectedType !== "calc") return;
     if (!this.calcDrawing.clear()) return;
+    this.sound.uiDiscard();
     this._syncCanvas();
     this._syncCalcControls();
   }
@@ -332,6 +336,7 @@ export class GameUI {
   undoCalc() {
     if (this.selectedType !== "calc") return;
     if (!this.calcDrawing.undo()) return;
+    this.sound.uiClick();
     this._syncCanvas();
     this._syncCalcControls();
   }
@@ -339,6 +344,7 @@ export class GameUI {
   redoCalc() {
     if (this.selectedType !== "calc") return;
     if (!this.calcDrawing.redo()) return;
+    this.sound.uiClick();
     this._syncCanvas();
     this._syncCalcControls();
   }
@@ -486,6 +492,7 @@ export class GameUI {
   // and double-tap — they differ only in which control invokes it.
   discardStaged() {
     if (!this.gesture.isDrawing && !this.gesture.pending && !this.cursorCell) return;
+    this.sound.uiDiscard();
     this.gesture.cancel();
     this.cursorCell = null;
     this._renderHover();
@@ -1237,6 +1244,7 @@ export class GameUI {
   // wiring needed here.
   requestRematch() {
     if (!this.matchClient || this.matchClient.status !== "over") return;
+    this.sound.uiConfirm();
     this.matchClient.requestRematch();
     this.setRematchStatus("Waiting for opponent to accept…");
     const btn = document.getElementById("btnOnlineRematch");

@@ -230,6 +230,96 @@ export class SoundManager {
     this._noiseBurst({ duration: 0.02, gain: 0.14, filterFreq: 2200, filterType: "bandpass", filterQ: 4, delay: 0.14 });
     this._tone({ freq: 1400, duration: 0.025, type: "square", gain: 0.05, filterFreq: 3500, delay: 0.14 });
   }
+
+  // ===================== multiplayer connection/session events =====================
+
+  // A match is actually beginning — both seats filled (or a local hotseat
+  // game just started). Two-note rise, softer/shorter than gameOver's win
+  // fanfare so it doesn't compete with it in character.
+  matchStart() {
+    this._tone({ freq: 440, duration: 0.13, type: "sine", gain: 0.16 });
+    this._tone({ freq: 587, duration: 0.16, type: "sine", gain: 0.18, delay: 0.1 });
+  }
+
+  // Opponent's connection dropped. A slow wobble (low-rate tremolo) reads
+  // as "connection trouble" without the harshness of reject()'s fast buzz.
+  opponentDisconnected() {
+    this._buzzer({ freq: 300, lfoFreq: 8, duration: 0.4, gain: 0.12, filterFreq: 1800, carrierType: "sine" });
+  }
+
+  // Opponent reconnected — mirrors opponentDisconnected's wobble with a
+  // plain ascending two-note relief chime instead.
+  opponentReconnected() {
+    this._tone({ freq: 300, freqTo: 500, duration: 0.14, type: "sine", gain: 0.16 });
+    this._tone({ freq: 500, duration: 0.12, type: "sine", gain: 0.14, delay: 0.1 });
+  }
+
+  // Match had already ended normally; opponent just isn't coming back for
+  // a rematch. Purely informational — flat, no up/down direction.
+  opponentLeft() {
+    this._tone({ freq: 440, duration: 0.15, type: "sine", gain: 0.14 });
+  }
+
+  // Our own connection dropped unexpectedly. Needs to grab attention
+  // regardless of whose turn it is, so it's a plain alert beep-beep rather
+  // than anything reusing reject's "illegal move" character.
+  connectionLost() {
+    this._tone({ freq: 660, duration: 0.09, type: "square", gain: 0.12, filterFreq: 3000 });
+    this._tone({ freq: 660, duration: 0.09, type: "square", gain: 0.12, filterFreq: 3000, delay: 0.14 });
+  }
+
+  // Reconnect attempts exhausted — the "give up" case. Lower and sadder
+  // than connectionLost, shorter than gameOver's lose stinger.
+  reconnectFailed() {
+    this._tone({ freq: 330, freqTo: 220, duration: 0.25, type: "sine", gain: 0.16 });
+    this._tone({ freq: 196, duration: 0.3, type: "sine", gain: 0.13, delay: 0.15 });
+  }
+
+  // Opponent asked for a rematch — a small inviting ping.
+  rematchInvite() {
+    this._tone({ freq: 700, freqTo: 900, duration: 0.1, type: "triangle", gain: 0.14, filterFreq: 5000 });
+  }
+
+  // A pending rematch fizzled (opponent left instead of accepting).
+  rematchCancelled() {
+    this._tone({ freq: 400, freqTo: 300, duration: 0.09, type: "sine", gain: 0.11 });
+  }
+
+  // A join/create attempt was rejected (bad invite code, match full).
+  // Lighter than reject() — this is a form error, not an illegal move.
+  formError() {
+    this._noiseBurst({ duration: 0.1, gain: 0.14, filterFreq: 800, filterType: "lowpass", filterQ: 1, delay: 0 });
+    this._noiseBurst({ duration: 0.05, gain: 0.12, filterFreq: 800, filterType: "lowpass", filterQ: 1, delay: 0.09 });
+  }
+
+  // ===================== generic UI (menus, controls) =====================
+
+  // Neutral short click — menu tabs/cards, piece-type selection,
+  // rotate/flip, calc undo/redo. Quiet enough not to fatigue under heavy
+  // repeated use (e.g. mouse-wheel rotate).
+  uiClick() {
+    this._noiseBurst({ duration: 0.012, gain: 0.12, filterFreq: 3200, filterType: "bandpass", filterQ: 3 });
+  }
+
+  // Primary action confirm — Start/Create/Join, rematch, copy code.
+  // Brighter and rising vs. uiClick, without overlapping uiClick's use.
+  uiConfirm() {
+    this._tone({ freq: 520, freqTo: 720, duration: 0.09, type: "sine", gain: 0.14, filterFreq: 4000 });
+  }
+
+  // Secondary/back navigation — cancel waiting room, back to menu.
+  // Descending, mirrors uiConfirm's rise.
+  uiBack() {
+    this._tone({ freq: 480, freqTo: 320, duration: 0.09, type: "sine", gain: 0.12 });
+  }
+
+  // Deliberate discard/clear — discard staged piece, calc-mode clear.
+  // A soft downward whoosh, distinct from reject()'s buzzer since this is
+  // an intentional cancel, not an illegal move.
+  uiDiscard() {
+    this._noiseBurst({ duration: 0.08, gain: 0.1, filterFreq: 1200, filterType: "lowpass", filterQ: 0.7 });
+    this._tone({ freq: 500, freqTo: 200, duration: 0.1, type: "sine", gain: 0.08, delay: 0.01 });
+  }
 }
 
 // The one instance for the whole page — see the class comment above for why.
