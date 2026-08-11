@@ -88,16 +88,6 @@ export class GestureInput {
     this.suppressNextClick = false;
   }
 
-  // Confirms the pending gesture via onConfirm(type, shape, anchorRow, anchorCol).
-  // Returns true if a gesture was actually confirmed, false if nothing was pending.
-  confirm(onConfirm) {
-    if (!this.pending) return false;
-    const { type, shape, anchorRow, anchorCol } = this.pending;
-    onConfirm(type, shape, anchorRow, anchorCol);
-    this.pending = null;
-    return true;
-  }
-
   // The click right after a mouseup that just finished a gesture shouldn't
   // also place a piece — call this from the click handler and bail out if
   // it returns true.

@@ -294,23 +294,14 @@ export class GameUI {
     this._renderHover();
   }
 
+  // Abandons an in-progress draw or a drawn-but-unconfirmed gesture.
+  // Always resets cursorCell too, not just gesture state — a stale
+  // cursorCell left pointing at the just-abandoned cell is what used to
+  // leave a ghost/zone-highlight behind after cancel (see discardStaged).
   cancelGesture() {
     this.gesture.cancel();
+    this.cursorCell = null;
     this._renderHover();
-  }
-
-  confirmGesture() {
-    const confirmed = this.gesture.confirm((type, shape, anchorRow, anchorCol) => {
-      this._submitPlacement(type, shape, anchorRow, anchorCol);
-    });
-    if (!confirmed) return; // nothing was pending — nothing changed
-
-    // Local placements: _submitPlacement() above already ran a full
-    // _render() (real game state changed — history, scores, turn, etc).
-    // Anything else (matchClient waiting on the server broadcast, or a
-    // turn-gated no-op) only cleared gesture state, so the cheap path
-    // is enough to make the now-empty ghost/path disappear.
-    if (this.matchClient) this._renderHover();
   }
 
   secondaryAction() {
@@ -383,10 +374,6 @@ export class GameUI {
     if (!this.cursorCell) return;
     this.cursorCell = null;
     this._renderHover();
-  }
-
-  placeAt([row, col]) {
-    this._submitPlacement(this.selectedType, this.currentShape(), row, col);
   }
 
   skipTurn() {
@@ -465,26 +452,51 @@ export class GameUI {
     this._pinch = { dist, midX, midY };
   }
 
-  // Touch has no hover, so a non-gesture placement is staged on cursorCell
-  // (set by touchmove) instead of placed immediately — confirm/discard
-  // buttons resolve it. Mouse click still places directly, unaffected.
-  confirmStaged() {
+  // One staging system for every piece type: a drawn-and-released gesture
+  // (gesture.pending) or a hovered/tapped simple shape (cursorCell) are
+  // both just "the currently staged placement" — this is the single place
+  // that resolves either one into concrete { type, shape, anchorRow,
+  // anchorCol }, or null if nothing is staged. Everything else (rendering
+  // the ghost, enabling confirm/discard, confirming, discarding) reads
+  // through this instead of branching on gesture-vs-plain itself.
+  _stagedPlacement() {
     if (this.gesture.pending) {
-      this.confirmGesture();
-      return;
+      const { type, shape, anchorRow, anchorCol } = this.gesture.pending;
+      return { type, shape, anchorRow, anchorCol };
     }
-    if (this.selectedType !== "gesture" && this.cursorCell) {
-      this.placeAt(this.cursorCell);
-      this.clearHover();
-    }
+    if (this.selectedType === "gesture" || this.selectedType === "calc") return null;
+    if (!this.cursorCell) return null;
+    const shape = this.currentShape();
+    if (!shape) return null;
+    return { type: this.selectedType, shape, anchorRow: this.cursorCell[0], anchorCol: this.cursorCell[1] };
   }
 
+  // Confirms whatever is currently staged. Desktop's control for this is a
+  // canvas click; mobile's is the Confirm button (which also works on
+  // desktop) — both funnel through here so drawn gestures and hovered
+  // simple shapes resolve identically regardless of input method.
+  confirmStaged() {
+    const staged = this._stagedPlacement();
+    if (!staged) return;
+    // Reset staging state before submitting so a local hotseat's
+    // resulting _render() (or matchClient's _renderHover() below) never
+    // paints a stale ghost/zone-highlight from the now-resolved placement.
+    this.gesture.cancel();
+    this.cursorCell = null;
+    this._submitPlacement(staged.type, staged.shape, staged.anchorRow, staged.anchorCol);
+    // Local hotseat: _submitPlacement() above already ran a full _render().
+    // matchClient: it only sent the move and is waiting on the broadcast,
+    // so the cheap path is needed here to clear the now-empty ghost/path.
+    if (this.matchClient) this._renderHover();
+  }
+
+  // Discards whatever is currently staged — mobile's Discard button, or
+  // desktop's secondaryAction (right-click) for a drawn gesture.
   discardStaged() {
-    if (this.gesture.pending) {
-      this.cancelGesture();
-      return;
-    }
-    this.clearHover();
+    if (!this._stagedPlacement()) return;
+    this.gesture.cancel();
+    this.cursorCell = null;
+    this._renderHover();
   }
 
   // ===================== input: DOM event listeners =====================
@@ -543,12 +555,17 @@ export class GameUI {
       "click",
       (e) => {
         if (this.gesture.consumeSuppressedClick()) return;
-        if (this.gesture.pending) {
-          this.confirmGesture();
+        if (this.selectedType === "gesture" || this.selectedType === "calc") {
+          // gesture pieces are drawn via drag, not click — a bare click
+          // only confirms one that's already staged.
+          if (this.gesture.pending) this.confirmStaged();
           return;
         }
-        if (this.selectedType === "gesture" || this.selectedType === "calc") return; // drawn via drag, not click
-        this.placeAt(this._cellFromEvent(e));
+        // cursorCell should already track this cell via the preceding
+        // mousemove, but set it explicitly for the (rare) click that
+        // arrives with no prior hover — click is desktop's confirm control.
+        this.hover(this._cellFromEvent(e));
+        this.confirmStaged();
       },
       { signal },
     );
@@ -766,15 +783,6 @@ export class GameUI {
 
   // ===================== render: fully re-derive the DOM from state =====================
 
-  _activePlacement() {
-    if (this.gesture.pending) {
-      return [[this.gesture.pending.anchorRow, this.gesture.pending.anchorCol], this.gesture.pending.shape];
-    }
-    if (this.selectedType === "gesture" || this.selectedType === "calc") return [null, null];
-    if (!this.cursorCell) return [null, null];
-    return [this.cursorCell, this.currentShape()];
-  }
-
   // Full re-sync: everything that can only change on an actual game-state
   // event (placement, pass, selection/rotation/flip, gesture lifecycle,
   // remote move applied, game over). Never call this from hover/pointer
@@ -814,8 +822,9 @@ export class GameUI {
   }
 
   _syncCanvas() {
-    const [anchorCell, anchorShape] = this._activePlacement();
-    const pieceType = this.gesture.pending ? this.gesture.pending.type : this.selectedType;
+    const staged = this._stagedPlacement();
+    const [anchorCell, anchorShape] = staged ? [[staged.anchorRow, staged.anchorCol], staged.shape] : [null, null];
+    const pieceType = staged ? staged.type : this.selectedType;
     const viewerIndex = this.matchClient ? this.matchClient.myPlayerIndex : this.game.currentPlayerIndex;
 
     const zonePreview = anchorCell
@@ -927,8 +936,7 @@ export class GameUI {
   // so hover doesn't pay for the querySelectorAll piece-button loop too.
   _syncStagedButtons() {
     const myTurn = this._isMyTurn();
-    const hasStaged =
-      !!this.gesture.pending || (this.selectedType !== "gesture" && this.selectedType !== "calc" && !!this.cursorCell);
+    const hasStaged = !!this._stagedPlacement();
     const confirmBtn = document.getElementById("btnConfirm");
     const discardBtn = document.getElementById("btnDiscard");
     if (confirmBtn) confirmBtn.disabled = this.game.gameOver || !myTurn || !hasStaged;
