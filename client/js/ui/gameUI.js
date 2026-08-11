@@ -6,7 +6,7 @@ import { ZoneTooltip } from "./zoneTooltip.js";
 import { Zone } from "../../../shared/engine/zone.js";
 import { Board } from "../../../shared/engine/board.js";
 import { HistoryPanel } from "./historyPanel.js";
-import { SoundManager } from "../audio/soundManager.js";
+import { sound } from "../audio/soundManager.js";
 import {
   extrapolateRemaining,
   formatClockMs,
@@ -84,7 +84,7 @@ export class GameUI {
     this._endOverride = null; // set via showForcedEnd() for a forfeit — see END_REASON_TEXT
     this._clockInterval = null; // see _startClockTicker/destroy
 
-    this.sound = new SoundManager();
+    this.sound = sound; // shared page-level singleton — see soundManager.js
     // Edge-detection flags — _render()/_tickClocks() re-derive DOM state
     // every cycle, but these sounds should only fire once per transition,
     // not replay on every idempotent redraw.
