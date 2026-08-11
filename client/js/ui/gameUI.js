@@ -211,12 +211,14 @@ export class GameUI {
       this.sound.place();
     }
 
+    // TODO uncomment after completions are sorted in game.js
     /*
-    (entry.completions ?? []).forEach((completion, i) => { // TODO fist wins then loses
+    (entry.completions ?? []).forEach((completion, i) => { 
       this.sound.zoneWon(completion.winnerIndex === viewerIndex, i * 0.2);
     });
     */
 
+    // TODO remove after completions are sorted in game.js
     const wins = (entry.completions ?? []).filter((completion) => completion.winnerIndex === viewerIndex).length;
     for (let i = 0; i < wins; i++) {
       this.sound.zoneWon(true, i * 0.2);

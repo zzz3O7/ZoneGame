@@ -131,6 +131,7 @@ export class Game {
         completions.push({ zoneId: zone.id, winnerIndex, points: zone.cost });
       }
     }
+    // TODO order completions by mover's win/loss
     return completions;
   }
 
