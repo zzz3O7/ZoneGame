@@ -120,6 +120,7 @@ export class Game {
   }
 
   _checkZoneCompletions() {
+    const mover = this.currentPlayerIndex;
     const completions = [];
     for (const zone of this.zones) {
       if (!zone.active) continue;
@@ -131,7 +132,8 @@ export class Game {
         completions.push({ zoneId: zone.id, winnerIndex, points: zone.cost });
       }
     }
-    // TODO order completions by mover's win/loss
+    // Mover's wins first, then mover's losses.
+    completions.sort((a, b) => (b.winnerIndex === mover) - (a.winnerIndex === mover));
     return completions;
   }
 
