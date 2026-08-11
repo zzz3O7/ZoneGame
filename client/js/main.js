@@ -74,6 +74,7 @@ function setupMatchClient(conn) {
   currentMatchClient = matchClient;
   matchClient.onMatchStart = (game) => startGame(game, matchClient);
   matchClient.onMoveApplied = () => ui?.refresh(); // ui set once startGame runs
+  matchClient.onRejected = () => ui?.playReject();
 
   // disconnect / reconnect / end-of-match wiring
   matchClient.onOpponentDisconnected = (playerIndex, abortInMs) => handleOpponentDisconnected(abortInMs);

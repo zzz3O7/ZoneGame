@@ -6,6 +6,7 @@ import { ZoneTooltip } from "./zoneTooltip.js";
 import { Zone } from "../../../shared/engine/zone.js";
 import { Board } from "../../../shared/engine/board.js";
 import { HistoryPanel } from "./historyPanel.js";
+import { SoundManager } from "../audio/soundManager.js";
 import {
   extrapolateRemaining,
   formatClockMs,
@@ -18,7 +19,7 @@ const KEY_TO_TYPE = { 1: "gesture", 2: "domino", 3: "tromino", 4: "tetromino", 5
 
 // How often the online clock display re-paints between authoritative
 // server snapshots. Display-only — how smooth the ticking looks.
-const CLOCK_TICK_INTERVAL_MS = 250;
+const CLOCK_TICK_INTERVAL_MS = 100;
 
 // The "reason" a match ended, for the endcard's reason line.
 // "resign" isn't here — it's inherently viewer-relative
@@ -82,6 +83,13 @@ export class GameUI {
 
     this._endOverride = null; // set via showForcedEnd() for a forfeit — see END_REASON_TEXT
     this._clockInterval = null; // see _startClockTicker/destroy
+
+    this.sound = new SoundManager();
+    // Edge-detection flags — _render()/_tickClocks() re-derive DOM state
+    // every cycle, but these sounds should only fire once per transition,
+    // not replay on every idempotent redraw.
+    this._gameOverSoundPlayed = game.gameOver; // already-over game (e.g. reconnect into a finished match) shouldn't fanfare on load
+    this._lowTimeWarned = { 0: false, 1: false }; // reset per move, see _render()
     this.clock = null; // hotseat's OWN authoritative Clock — null for online (server owns it) or when this.game.timeControl is unset
     this._hotseatFlagTimer = null; // hotseat's own flag-fall timer, mirrors Match._flagTimer exactly — see _armHotseatFlagTimer/_onHotseatFlagFall
 
@@ -121,7 +129,11 @@ export class GameUI {
   }
 
   refresh() {
-    // public alias, so main.js can trigger re-render on remote moves
+    // public alias, so main.js can trigger re-render on remote moves.
+    // matchClient already applied the move to this.game before calling this
+    // (see MatchClient._handleMoveApplied), so history.last() is it — covers
+    // both the mover's own confirmed move and the opponent's.
+    this._playEntrySound(this.game.history.last());
     this._clearCalcIfOwnMove();
     this._render();
   }
@@ -154,8 +166,11 @@ export class GameUI {
     } else {
       const applied = this.game.attemptPlacement(pieceType, shape, anchorRow, anchorCol);
       if (applied) {
+        this._playEntrySound(applied);
         this._advanceHotseatClock();
         this._clearCalcIfOwnMove();
+      } else {
+        this.sound.reject();
       }
       this._render();
     }
@@ -168,11 +183,53 @@ export class GameUI {
       this.matchClient.sendPass();
       // same: wait for broadcast, don't mutate/render yet
     } else {
-      if (!this.game.pass()) return;
+      const entry = this.game.pass();
+      if (!entry) {
+        this.sound.reject();
+        return;
+      }
+      this._playEntrySound(entry);
       this._advanceHotseatClock();
       this._clearCalcIfOwnMove();
       this._render();
     }
+  }
+
+  // Shared by the local hotseat path above and refresh() (online) below —
+  // both end up with a freshly-recorded history entry and need the same
+  // place/pass/zone-completion sound logic applied to it.
+  _playEntrySound(entry) {
+    if (!entry) return;
+    // Online: always the viewer's own seat. Hotseat: whoever just moved —
+    // shared screen has no fixed "self", so frame the sound from the
+    // mover's side rather than always player 0.
+    const viewerIndex = this.matchClient ? this.matchClient.myPlayerIndex : entry.playerIndex;
+
+    if (entry.type === "pass") {
+      this.sound.pass();
+    } else {
+      this.sound.place();
+    }
+
+    /*
+    (entry.completions ?? []).forEach((completion, i) => { // TODO fist wins then loses
+      this.sound.zoneWon(completion.winnerIndex === viewerIndex, i * 0.2);
+    });
+    */
+
+    const wins = (entry.completions ?? []).filter((completion) => completion.winnerIndex === viewerIndex).length;
+    for (let i = 0; i < wins; i++) {
+      this.sound.zoneWon(true, i * 0.2);
+    }
+    for (let i = wins; i < (entry.completions ?? []).length; i++) {
+      this.sound.zoneWon(false, i * 0.2);
+    }
+  }
+
+  // Public entry point for main.js's matchClient.onRejected — a
+  // server-side "Illegal move" / "Not your turn" MOVE_REJECTED.
+  playReject() {
+    this.sound.reject();
   }
 
   // ===================== intents: piece selection & transforms =====================
@@ -733,6 +790,7 @@ export class GameUI {
   // remote move applied, game over). Never call this from hover/pointer
   // movement — see _renderHover below.
   _render() {
+    this._lowTimeWarned = { 0: false, 1: false }; // fresh turn cycle — see _renderClockFor
     this.renderer.setWaiting(!this._isMyTurn());
     this._syncStaticCanvas();
     this._syncCanvas();
@@ -1018,7 +1076,18 @@ export class GameUI {
     // "is this the ticking player" via _syncSidePlate — --low only adds the
     // extra "and they're running out" urgency state on top of that.
     const isTicking = playerId === snapshot.currentPlayerIndex;
-    clockEl.classList.toggle("side-plate__clock--low", isTicking && remaining <= LOW_TIME_THRESHOLD_MS);
+    const isLow = isTicking && remaining <= LOW_TIME_THRESHOLD_MS;
+    clockEl.classList.toggle("side-plate__clock--low", isLow);
+
+    // Warn once per crossing. Online: only the viewer's own clock. Hotseat:
+    // whoever's actually ticking — shared screen, so both players' own
+    // countdowns matter, not just player 0's. See _lowTimeWarned reset in
+    // _render() (fires again next time they're low).
+    const warnsFor = this.matchClient ? myIndex : snapshot.currentPlayerIndex;
+    if (isLow && playerId === warnsFor && !this._lowTimeWarned[playerId]) {
+      this._lowTimeWarned[playerId] = true;
+      this.sound.lowTime();
+    }
   }
 
   // End the match from outside the normal move flow. Deliberately not
@@ -1040,6 +1109,18 @@ export class GameUI {
       return;
     }
     overlay.hidden = false;
+
+    if (!this._gameOverSoundPlayed) {
+      this._gameOverSoundPlayed = true;
+      // Online: viewer's own seat. Hotseat: whoever made the last move —
+      // the game ends immediately after a move, so that's the natural
+      // "current player" to frame the win/lose sound from.
+      const viewerIndex = this.matchClient
+        ? this.matchClient.myPlayerIndex
+        : (this.game.history.last()?.playerIndex ?? 0);
+      const winner = this._endOverride ? this._endOverride.winnerIndex : this.game.winnerIndex;
+      this.sound.gameOver(winner === null ? "draw" : winner === viewerIndex ? "win" : "lose");
+    }
 
     this._syncEndcardHeader();
     this._syncEndcardScores();
