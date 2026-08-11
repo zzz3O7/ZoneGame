@@ -8,6 +8,15 @@ import { Menu } from "./ui/menu.js";
 import { showBanner, hideBanner } from "./ui/banner.js";
 import { DISCONNECT_ABORT_MS } from "../../shared/config.js";
 import { formatTimeControlLabel } from "../../shared/clock.js";
+import { sound } from "./audio/soundManager.js";
+
+// Unlock the shared AudioContext on the very first real interaction
+// anywhere on the page — before that, browsers won't let it play. Doing
+// this once, up front, means every match afterward (including ones started
+// from an async MATCH_START/SYNC_STATE message rather than a click, and
+// sounds triggered by an incoming multiplayer move) reuses this
+// already-unlocked context instead of needing its own gesture.
+document.addEventListener("pointerdown", () => sound.unlock(), { once: true });
 
 const menuScreen = document.getElementById("menuScreen");
 const waitingRoomScreen = document.getElementById("waitingRoomScreen");

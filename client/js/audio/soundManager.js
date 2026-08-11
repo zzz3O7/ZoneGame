@@ -3,6 +3,19 @@
 // concerns. AudioContext is created lazily on the first play() call, since
 // browsers refuse to start one before a user gesture; if that first call
 // happens before any gesture, we just resume() on the next one.
+//
+// Exactly one SoundManager exists for the whole page (see the singleton
+// export at the bottom) — audio output is a page-level resource, not a
+// per-match one. GameUI used to instantiate a fresh SoundManager (and
+// therefore a fresh AudioContext) on every startGame(), including every
+// rematch and every reconnect/resync — old contexts were never closed, so
+// a long multiplayer session (far more prone to repeated startGame() calls
+// than a single hotseat game — match start, rematch, reconnect, resync all
+// go through it) would eventually hit the browser's concurrent-AudioContext
+// limit and every sound after that silently stopped working. A shared
+// instance also means the very first user gesture anywhere on the page
+// (see unlock()) keeps the same context alive for every match afterward,
+// instead of each new match needing its own fresh unlock.
 export class SoundManager {
   constructor() {
     this._ctx = null;
@@ -16,6 +29,16 @@ export class SoundManager {
     }
     if (this._ctx.state === "suspended") this._ctx.resume();
     return this._ctx;
+  }
+
+  // Call from a genuine, direct user-gesture handler (e.g. the very first
+  // click/tap anywhere on the page) to create/resume the AudioContext while
+  // it's actually allowed to. Safe to call redundantly — later sounds
+  // triggered from non-gesture contexts (an incoming multiplayer move,
+  // a WebSocket message) reuse this same already-unlocked context instead
+  // of trying to create/resume their own, which browsers may block.
+  unlock() {
+    this._ensureCtx();
   }
 
   // One oscillator note with a short attack/decay envelope so it clicks
@@ -208,3 +231,6 @@ export class SoundManager {
     this._tone({ freq: 1400, duration: 0.025, type: "square", gain: 0.05, filterFreq: 3500, delay: 0.14 });
   }
 }
+
+// The one instance for the whole page — see the class comment above for why.
+export const sound = new SoundManager();

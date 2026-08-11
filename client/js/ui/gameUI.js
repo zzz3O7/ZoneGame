@@ -299,6 +299,7 @@ export class GameUI {
   // cursorCell left pointing at the just-abandoned cell is what used to
   // leave a ghost/zone-highlight behind after cancel (see discardStaged).
   cancelGesture() {
+    // TODO do we need two different methods that do the same thing?
     this.gesture.cancel();
     this.cursorCell = null;
     this._renderHover();
@@ -310,6 +311,7 @@ export class GameUI {
     } else if (this.selectedType === "calc") {
       // no-op: flip doesn't apply to calc marks, and right-click already
       // clears them via the contextmenu listener directly.
+      // TODO move calc mode clear here
     } else {
       this.flip();
     }
@@ -493,6 +495,7 @@ export class GameUI {
   // Discards whatever is currently staged — mobile's Discard button, or
   // desktop's secondaryAction (right-click) for a drawn gesture.
   discardStaged() {
+    // TODO do we need two different methods that do the same thing?
     if (!this._stagedPlacement()) return;
     this.gesture.cancel();
     this.cursorCell = null;
