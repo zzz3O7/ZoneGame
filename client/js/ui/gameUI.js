@@ -294,24 +294,11 @@ export class GameUI {
     this._renderHover();
   }
 
-  // Abandons an in-progress draw or a drawn-but-unconfirmed gesture.
-  // Always resets cursorCell too, not just gesture state — a stale
-  // cursorCell left pointing at the just-abandoned cell is what used to
-  // leave a ghost/zone-highlight behind after cancel (see discardStaged).
-  cancelGesture() {
-    // TODO do we need two different methods that do the same thing?
-    this.gesture.cancel();
-    this.cursorCell = null;
-    this._renderHover();
-  }
-
   secondaryAction() {
     if (this.selectedType === "gesture") {
-      this.cancelGesture();
+      this.discardStaged();
     } else if (this.selectedType === "calc") {
-      // no-op: flip doesn't apply to calc marks, and right-click already
-      // clears them via the contextmenu listener directly.
-      // TODO move calc mode clear here
+      this.clearCalc();
     } else {
       this.flip();
     }
@@ -492,11 +479,13 @@ export class GameUI {
     if (this.matchClient) this._renderHover();
   }
 
-  // Discards whatever is currently staged — mobile's Discard button, or
-  // desktop's secondaryAction (right-click) for a drawn gesture.
+  // Discards whatever is currently in progress or staged — a mid-draw
+  // gesture, a finished-but-unconfirmed one, or a hovered/tapped plain
+  // piece. Every "cancel" trigger routes through here: the Discard button,
+  // right-click/secondaryAction, a two-finger pinch interrupting a draw,
+  // and double-tap — they differ only in which control invokes it.
   discardStaged() {
-    // TODO do we need two different methods that do the same thing?
-    if (!this._stagedPlacement()) return;
+    if (!this.gesture.isDrawing && !this.gesture.pending && !this.cursorCell) return;
     this.gesture.cancel();
     this.cursorCell = null;
     this._renderHover();
@@ -577,10 +566,6 @@ export class GameUI {
       "contextmenu",
       (e) => {
         e.preventDefault();
-        if (this.selectedType === "calc") {
-          this.clearCalc();
-          return;
-        }
         this.secondaryAction();
       },
       { signal },
@@ -630,7 +615,7 @@ export class GameUI {
           } else if (this.gesture.isDrawing) {
             // Delay already resolved — a real single-finger draw was in
             // progress and got interrupted by a second finger.
-            this.cancelGesture();
+            this.discardStaged();
           }
           this._suppressHoverUntilLift = true;
           this._startPinch(e.touches);
@@ -716,7 +701,7 @@ export class GameUI {
       // leaving a piece preview behind that the user never asked to place.
       this.resetView();
       this.clearHover();
-      if (this.gesture.isDrawing || this.gesture.pending) this.cancelGesture();
+      this.discardStaged();
       this._lastTap = null;
     } else {
       this._lastTap = { time: Date.now(), x: touch.clientX, y: touch.clientY };
