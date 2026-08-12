@@ -29,7 +29,7 @@ export class SoundManager {
   // "ui" explicitly, so this only needed touching those four call sites
   // instead of every gain value in the file.
   _categoryVolume(category) {
-    return category === "ui" ? this.uiVolume : this.gameVolume;
+    return (category === "ui" ? this.uiVolume : this.gameVolume) * 5;
   }
 
   _ensureCtx() {
