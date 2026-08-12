@@ -60,6 +60,7 @@ export class GameUI {
     this.rotationStep = 0;
     this.flipped = false;
     this.cursorCell = null;
+    this._placementLocked = false; // requireConfirm: a plain piece was staged by a click and should survive further mouse movement until Confirm/Discard resolves it
 
     // Board-local pinch-zoom/pan (mobile). Lives entirely as a CSS transform
     // on the canvas, clipped by .board-wrap's overflow:hidden — the board's
@@ -231,6 +232,7 @@ export class GameUI {
     this.rotationStep = 0;
     this.flipped = false;
     this.cursorCell = null;
+    this._placementLocked = false;
     this.gesture.reset();
     // Changes the ghost (canvas), which piece button is marked selected,
     // and hasStaged (cursorCell/gesture just got reset) — but never the
@@ -353,6 +355,10 @@ export class GameUI {
   // ===================== intents: board interaction =====================
 
   hover(cell) {
+    // requireConfirm locked a staged plain piece in place (see the click
+    // handler below) — further mouse movement, including toward the
+    // Confirm/Discard buttons, must not drift or clear it.
+    if (this._placementLocked) return;
     // mousemove/touchmove fire far more often than the resolved board cell
     // actually changes (many events per cell while the pointer sits still
     // or crawls within one cell) — bail before touching state or rendering
@@ -367,6 +373,7 @@ export class GameUI {
   }
 
   clearHover() {
+    if (this._placementLocked) return;
     if (!this.cursorCell) return;
     this.cursorCell = null;
     this._renderHover();
@@ -479,6 +486,7 @@ export class GameUI {
     // paints a stale ghost/zone-highlight from the now-resolved placement.
     this.gesture.cancel();
     this.cursorCell = null;
+    this._placementLocked = false;
     this._submitPlacement(staged.type, staged.shape, staged.anchorRow, staged.anchorCol);
     // Local hotseat: _submitPlacement() above already ran a full _render().
     // matchClient: it only sent the move and is waiting on the broadcast,
@@ -496,6 +504,7 @@ export class GameUI {
     this.sound.uiDiscard();
     this.gesture.cancel();
     this.cursorCell = null;
+    this._placementLocked = false;
     this._renderHover();
   }
 
@@ -557,18 +566,29 @@ export class GameUI {
         if (this.gesture.consumeSuppressedClick()) return;
         if (this.selectedType === "gesture" || this.selectedType === "calc") {
           // gesture pieces are drawn via drag, not click — a bare click
-          // only confirms one that's already staged.
-          if (this.gesture.pending) this.confirmStaged();
+          // only confirms one that's already staged, unless Settings >
+          // Require confirm is on, in which case only the Confirm button
+          // (or Enter) may.
+          if (this.gesture.pending && !settings.requireConfirm) this.confirmStaged();
+          return;
+        }
+        if (settings.requireConfirm) {
+          // Click stages (or re-stages) the piece and locks it there —
+          // set cursorCell directly rather than through hover(), which
+          // now refuses to move a locked placement. Mouse movement
+          // afterward (including leaving the canvas for the button row)
+          // won't drift or clear it; only Confirm/Discard/Enter/Escape
+          // resolve it from here.
+          this.cursorCell = this._cellFromEvent(e);
+          this._placementLocked = true;
+          this._renderHover();
           return;
         }
         // cursorCell should already track this cell via the preceding
         // mousemove, but set it explicitly for the (rare) click that
-        // arrives with no prior hover — click is desktop's confirm control,
-        // unless Settings > Require confirm is on, in which case a click
-        // only stages it (same as mobile) and the visible Confirm button
-        // (or Enter) commits it.
+        // arrives with no prior hover — click is desktop's confirm control.
         this.hover(this._cellFromEvent(e));
-        if (!settings.requireConfirm) this.confirmStaged();
+        this.confirmStaged();
       },
       { signal },
     );
