@@ -242,6 +242,7 @@ export class GameUI {
   }
 
   rotate(direction) {
+    if (this.selectedType === "gesture" || this.selectedType === "calc") return; // no shape to rotate in these modes — also silences mouse-wheel scrolling with no effect
     this.sound.uiClick();
     this.rotationStep = (this.rotationStep + direction + 4) % 4;
     // Only the ghost shape's orientation changes — no button, panel, or
@@ -250,6 +251,7 @@ export class GameUI {
   }
 
   flip() {
+    if (this.selectedType === "gesture" || this.selectedType === "calc") return; // same as rotate: no shape to flip
     this.sound.uiClick();
     this.flipped = !this.flipped;
     // Same as rotate: canvas-only.
@@ -579,6 +581,7 @@ export class GameUI {
           // afterward (including leaving the canvas for the button row)
           // won't drift or clear it; only Confirm/Discard/Enter/Escape
           // resolve it from here.
+          this.sound.uiClick();
           this.cursorCell = this._cellFromEvent(e);
           this._placementLocked = true;
           this._renderHover();
