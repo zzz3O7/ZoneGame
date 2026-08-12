@@ -11,6 +11,7 @@ import { formatTimeControlLabel } from "../../shared/clock.js";
 import { sound } from "./audio/soundManager.js";
 import { applySettings } from "./settings.js";
 import { initSettingsPanel } from "./ui/settingsPanel.js";
+import { initRulesPanel } from "./ui/rulesPanel.js";
 
 applySettings(); // sound volumes + require-confirm body class, before anything can play/render
 
@@ -471,3 +472,4 @@ document.getElementById("btnLocalBackToMenu").addEventListener("click", () => {
 // Run once to avoid stacking listeners on new games
 initHintsPanel();
 initSettingsPanel();
+initRulesPanel();

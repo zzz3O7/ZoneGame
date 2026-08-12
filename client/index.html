@@ -38,7 +38,7 @@
             <input type="range" id="settingGameVolume" min="0" max="100" step="1" />
             <span class="settings-row__value" id="settingGameVolumeValue"></span>
           </div>
-          <div class="settings-row settings-row--toggle">
+          <div class="settings-row settings-row--toggle pointer-only">
             <label for="settingRequireConfirm">Require confirm before placing</label>
             <input type="checkbox" id="settingRequireConfirm" />
           </div>
@@ -58,9 +58,75 @@
       </div>
     </div>
 
+    <div class="board-overlay rules-overlay" id="rulesOverlay" hidden>
+      <div class="endcard rules-panel">
+        <div class="endcard__header">
+          <div class="endcard__winner">How to play</div>
+        </div>
+        <div class="rules-panel__body">
+          <div class="rules-section">
+            <div class="section-label">Goal</div>
+            <p>Claim more zone points than your opponent by the time neither of you can move.</p>
+          </div>
+          <div class="rules-section">
+            <div class="section-label">The board</div>
+            <p>
+              Each match starts on a procedurally generated cave. Only floor cells can be played on. Some wall cells
+              hold bonus markers.
+            </p>
+          </div>
+          <div class="rules-section">
+            <div class="section-label">Placing pieces</div>
+            <p>
+              On your turn, place one piece on empty floor: a domino, tromino, tetromino. Dominoes are limited each
+              game; trominoes and tetrominoes are unlimited.
+            </p>
+          </div>
+          <div class="rules-section">
+            <div class="section-label">Creating a zone</div>
+            <p>
+              Placing a piece on cells that aren't part of any zone yet creates a new zone around it. That zone is now
+              contested between you and your opponent.
+            </p>
+          </div>
+          <div class="rules-section">
+            <div class="section-label">Contesting a zone</div>
+            <p>
+              Once a zone exists, you and your opponent take turns adding pieces inside it — each piece must fit
+              entirely within that zone's cells, and only on your turn to act there.
+            </p>
+          </div>
+          <div class="rules-section">
+            <div class="section-label">Winning a zone</div>
+            <p>
+              If it's your turn to act in a zone and you have no legal move left inside it, the zone is completed — and
+              your opponent scores its full value (1 point per cell, +5 per bonus marker).
+            </p>
+          </div>
+          <div class="rules-section">
+            <div class="section-label">Passing</div>
+            <p>
+              If you have no legal move anywhere on the board, you must pass — but it costs you 30% of your current
+              score.
+            </p>
+          </div>
+          <div class="rules-section">
+            <div class="section-label">End of game</div>
+            <p>
+              The match ends once neither player can move. Whoever has the higher score wins — equal scores are a draw.
+            </p>
+          </div>
+        </div>
+        <div class="btn-row">
+          <button class="btn btn--ghost" id="btnRulesClose">Close</button>
+        </div>
+      </div>
+    </div>
+
     <div id="menuScreen">
       <div class="menu">
         <div class="menu__title">Zone<span>Game</span></div>
+        <button class="menu__rules-link" id="btnRules" type="button">How to play</button>
 
         <div>
           <div class="section-label">Mode</div>

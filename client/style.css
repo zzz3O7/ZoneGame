@@ -251,7 +251,8 @@ button {
   }
   .hints__item.pointer-only,
   .piece-btn.pointer-only,
-  .piece-selector.pointer-only {
+  .piece-selector.pointer-only,
+  .settings-row.pointer-only {
     display: none;
   }
 }
@@ -975,6 +976,21 @@ body.require-confirm .piece-selector--touch {
   color: var(--color-score);
 }
 
+.menu__rules-link {
+  align-self: center;
+  margin-top: -14px;
+  background: none;
+  border: none;
+  padding: 0;
+  color: var(--color-text-muted);
+  font-size: 12px;
+  text-decoration: underline;
+  cursor: pointer;
+}
+.menu__rules-link:hover {
+  color: var(--color-text-secondary);
+}
+
 .section-label {
   font-family: var(--font-mono);
   font-size: 11px;
@@ -1496,6 +1512,29 @@ body.require-confirm .piece-selector--touch {
 
 .settings-overlay {
   z-index: 110; /* above the net-banner (100) — settings should always be reachable */
+}
+
+/* ---------- rules (menu-only "How to play") ---------- */
+.rules-overlay {
+  z-index: 110;
+}
+.rules-panel {
+  max-width: 520px;
+}
+.rules-panel__body {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 20px 24px;
+}
+.rules-section .section-label {
+  margin-bottom: 4px;
+}
+.rules-section p {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--color-text-secondary);
 }
 .settings-panel {
   max-width: 380px;
