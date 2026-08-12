@@ -9,6 +9,10 @@ import { showBanner, hideBanner } from "./ui/banner.js";
 import { DISCONNECT_ABORT_MS } from "../../shared/config.js";
 import { formatTimeControlLabel } from "../../shared/clock.js";
 import { sound } from "./audio/soundManager.js";
+import { applySettings } from "./settings.js";
+import { initSettingsPanel } from "./ui/settingsPanel.js";
+
+applySettings(); // sound volumes + require-confirm body class, before anything can play/render
 
 // Unlock the shared AudioContext on the very first real interaction
 // anywhere on the page — before that, browsers won't let it play. Doing
@@ -466,3 +470,4 @@ document.getElementById("btnLocalBackToMenu").addEventListener("click", () => {
 
 // Run once to avoid stacking listeners on new games
 initHintsPanel();
+initSettingsPanel();

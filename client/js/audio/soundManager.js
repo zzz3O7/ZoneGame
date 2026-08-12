@@ -19,6 +19,17 @@
 export class SoundManager {
   constructor() {
     this._ctx = null;
+    this.uiVolume = 1; // 0..1 — interface clicks/confirm/back/discard
+    this.gameVolume = 1; // 0..1 — everything else: moves, zones, game-over, multiplayer events
+  }
+
+  // category picks which of the two volume sliders (Settings) scales this
+  // sound. Every public method below is "game" by default via the
+  // primitives' own defaults — only the four generic UI sounds opt into
+  // "ui" explicitly, so this only needed touching those four call sites
+  // instead of every gain value in the file.
+  _categoryVolume(category) {
+    return category === "ui" ? this.uiVolume : this.gameVolume;
   }
 
   _ensureCtx() {
@@ -45,9 +56,20 @@ export class SoundManager {
   // cleanly in and out instead of popping. freqTo (optional) makes it
   // sweep, for up/down "chime" character. filterFreq (optional) lowpasses
   // it to soften harsher waveforms like square/sawtooth.
-  _tone({ freq, freqTo = null, duration = 0.12, type = "sine", gain = 0.18, delay = 0, filterFreq = null }) {
+  _tone({
+    freq,
+    freqTo = null,
+    duration = 0.12,
+    type = "sine",
+    gain = 0.18,
+    delay = 0,
+    filterFreq = null,
+    category = "game",
+  }) {
     const ctx = this._ensureCtx();
     if (!ctx) return;
+    gain *= this._categoryVolume(category);
+    if (gain <= 0) return;
 
     const start = ctx.currentTime + delay;
     const osc = ctx.createOscillator();
@@ -78,9 +100,19 @@ export class SoundManager {
   // Short burst of filtered white noise. Used for the percussive click in
   // place() — bandpass with a Q gives it a resonant "knock" instead of a
   // flat hiss.
-  _noiseBurst({ duration = 0.1, gain = 0.15, filterFreq = 900, filterType = "lowpass", filterQ = 1, delay = 0 }) {
+  _noiseBurst({
+    duration = 0.1,
+    gain = 0.15,
+    filterFreq = 900,
+    filterType = "lowpass",
+    filterQ = 1,
+    delay = 0,
+    category = "game",
+  }) {
     const ctx = this._ensureCtx();
     if (!ctx) return;
+    gain *= this._categoryVolume(category);
+    if (gain <= 0) return;
 
     const start = ctx.currentTime + delay;
     const frames = Math.floor(ctx.sampleRate * duration);
@@ -118,9 +150,12 @@ export class SoundManager {
     filterFreq = 1000,
     carrierType = "sawtooth",
     delay = 0,
+    category = "game",
   }) {
     const ctx = this._ensureCtx();
     if (!ctx) return;
+    gain *= this._categoryVolume(category);
+    if (gain <= 0) return;
 
     const start = ctx.currentTime + delay;
     const end = start + duration;
@@ -298,27 +333,41 @@ export class SoundManager {
   // rotate/flip, calc undo/redo. Quiet enough not to fatigue under heavy
   // repeated use (e.g. mouse-wheel rotate).
   uiClick() {
-    this._noiseBurst({ duration: 0.012, gain: 0.12, filterFreq: 3200, filterType: "bandpass", filterQ: 3 });
+    this._noiseBurst({
+      duration: 0.012,
+      gain: 0.12,
+      filterFreq: 3200,
+      filterType: "bandpass",
+      filterQ: 3,
+      category: "ui",
+    });
   }
 
   // Primary action confirm — Start/Create/Join, rematch, copy code.
   // Brighter and rising vs. uiClick, without overlapping uiClick's use.
   uiConfirm() {
-    this._tone({ freq: 520, freqTo: 720, duration: 0.09, type: "sine", gain: 0.14, filterFreq: 4000 });
+    this._tone({ freq: 520, freqTo: 720, duration: 0.09, type: "sine", gain: 0.14, filterFreq: 4000, category: "ui" });
   }
 
   // Secondary/back navigation — cancel waiting room, back to menu.
   // Descending, mirrors uiConfirm's rise.
   uiBack() {
-    this._tone({ freq: 480, freqTo: 320, duration: 0.09, type: "sine", gain: 0.12 });
+    this._tone({ freq: 480, freqTo: 320, duration: 0.09, type: "sine", gain: 0.12, category: "ui" });
   }
 
   // Deliberate discard/clear — discard staged piece, calc-mode clear.
   // A soft downward whoosh, distinct from reject()'s buzzer since this is
   // an intentional cancel, not an illegal move.
   uiDiscard() {
-    this._noiseBurst({ duration: 0.08, gain: 0.1, filterFreq: 1200, filterType: "lowpass", filterQ: 0.7 });
-    this._tone({ freq: 500, freqTo: 200, duration: 0.1, type: "sine", gain: 0.08, delay: 0.01 });
+    this._noiseBurst({
+      duration: 0.08,
+      gain: 0.1,
+      filterFreq: 1200,
+      filterType: "lowpass",
+      filterQ: 0.7,
+      category: "ui",
+    });
+    this._tone({ freq: 500, freqTo: 200, duration: 0.1, type: "sine", gain: 0.08, delay: 0.01, category: "ui" });
   }
 }
 

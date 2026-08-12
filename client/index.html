@@ -15,9 +15,47 @@
     <link rel="icon" type="image/svg+xml" href="favicon.svg" />
   </head>
   <body>
+    <button class="settings-btn" id="btnSettings" title="Settings" aria-label="Settings">⚙</button>
+
     <div id="netBanner" class="net-banner" hidden>
       <span id="netBannerText" class="net-banner__text"></span>
       <div id="netBannerActions" class="net-banner__actions"></div>
+    </div>
+
+    <div class="board-overlay settings-overlay" id="settingsOverlay" hidden>
+      <div class="endcard settings-panel">
+        <div class="endcard__header">
+          <div class="endcard__winner">Settings</div>
+        </div>
+        <div class="settings-panel__body">
+          <div class="settings-row">
+            <label for="settingUiVolume">Interface volume</label>
+            <input type="range" id="settingUiVolume" min="0" max="100" step="1" />
+            <span class="settings-row__value" id="settingUiVolumeValue"></span>
+          </div>
+          <div class="settings-row">
+            <label for="settingGameVolume">Game &amp; lobby volume</label>
+            <input type="range" id="settingGameVolume" min="0" max="100" step="1" />
+            <span class="settings-row__value" id="settingGameVolumeValue"></span>
+          </div>
+          <div class="settings-row settings-row--toggle">
+            <label for="settingRequireConfirm">Require confirm before placing</label>
+            <input type="checkbox" id="settingRequireConfirm" />
+          </div>
+          <div class="settings-row settings-row--future">
+            <label>Board colour scheme</label>
+            <div class="settings-row--future__control">
+              <select disabled>
+                <option>Default</option>
+              </select>
+              <span class="settings-row__badge">Coming soon</span>
+            </div>
+          </div>
+        </div>
+        <div class="btn-row">
+          <button class="btn btn--ghost" id="btnSettingsClose">Close</button>
+        </div>
+      </div>
     </div>
 
     <div id="menuScreen">
@@ -270,13 +308,13 @@
                 <button class="piece-btn" id="btnDiscard" title="Discard staged piece" disabled>
                   <span class="piece-btn__icon">✕</span>
                 </button>
-                <button class="piece-btn" id="btnRotateLeft" title="Rotate left">
+                <button class="piece-btn transform-btn" id="btnRotateLeft" title="Rotate left">
                   <span class="piece-btn__icon">↺</span>
                 </button>
-                <button class="piece-btn" id="btnFlip" title="Flip">
+                <button class="piece-btn transform-btn" id="btnFlip" title="Flip">
                   <span class="piece-btn__icon">⇄</span>
                 </button>
-                <button class="piece-btn" id="btnRotateRight" title="Rotate right">
+                <button class="piece-btn transform-btn" id="btnRotateRight" title="Rotate right">
                   <span class="piece-btn__icon">↻</span>
                 </button>
                 <button class="piece-btn" id="btnConfirm" title="Confirm staged piece" disabled>

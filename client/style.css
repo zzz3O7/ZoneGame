@@ -308,6 +308,21 @@ button {
 .piece-selector--touch {
   margin-top: 6px;
 }
+
+/* Desktop opt-in staged-placement flow (Settings > Require confirm before
+   placing) reuses the same Discard/Confirm buttons mobile already shows in
+   this row, without pulling in Rotate/Flip/Rotate — desktop already has
+   those via mouse wheel, right-click, and the r/f keys. Scoped to
+   (pointer: fine) so a touch device that also happens to have the setting
+   on doesn't lose its rotate/flip buttons. */
+body.require-confirm .piece-selector--touch {
+  display: flex;
+}
+@media (pointer: fine) {
+  body.require-confirm .piece-selector--touch .transform-btn {
+    display: none;
+  }
+}
 .piece-selector--controls .piece-btn {
   flex: 1;
   min-width: 0;
@@ -1457,6 +1472,80 @@ button {
 }
 .endcard__rematch-status--active {
   color: var(--color-score);
+}
+
+/* ---------- settings ---------- */
+.settings-btn {
+  position: fixed;
+  top: 14px;
+  right: 14px;
+  z-index: 90;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  border: 1px solid var(--color-border);
+  background: var(--color-surface-raised);
+  color: var(--color-text-secondary);
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+}
+.settings-btn:hover {
+  color: var(--color-text);
+}
+
+.settings-overlay {
+  z-index: 110; /* above the net-banner (100) — settings should always be reachable */
+}
+.settings-panel {
+  max-width: 380px;
+}
+.settings-panel__body {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  padding: 20px 24px;
+}
+.settings-row {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.settings-row label {
+  font-size: 13px;
+  color: var(--color-text-secondary);
+}
+.settings-row input[type="range"] {
+  width: 100%;
+}
+.settings-row__value {
+  align-self: flex-end;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--color-text-muted);
+}
+.settings-row--toggle {
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+}
+.settings-row--future {
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  opacity: 0.6;
+}
+.settings-row--future__control {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.settings-row__badge {
+  padding: 2px 8px;
+  border: 1px solid var(--color-border);
+  border-radius: 999px;
+  font-size: 11px;
+  color: var(--color-text-muted);
 }
 
 /* ---------- net status banner ---------- */

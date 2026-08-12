@@ -7,6 +7,7 @@ import { Zone } from "../../../shared/engine/zone.js";
 import { Board } from "../../../shared/engine/board.js";
 import { HistoryPanel } from "./historyPanel.js";
 import { sound } from "../audio/soundManager.js";
+import { settings } from "../settings.js";
 import {
   extrapolateRemaining,
   formatClockMs,
@@ -562,9 +563,12 @@ export class GameUI {
         }
         // cursorCell should already track this cell via the preceding
         // mousemove, but set it explicitly for the (rare) click that
-        // arrives with no prior hover — click is desktop's confirm control.
+        // arrives with no prior hover — click is desktop's confirm control,
+        // unless Settings > Require confirm is on, in which case a click
+        // only stages it (same as mobile) and the visible Confirm button
+        // (or Enter) commits it.
         this.hover(this._cellFromEvent(e));
-        this.confirmStaged();
+        if (!settings.requireConfirm) this.confirmStaged();
       },
       { signal },
     );
@@ -742,6 +746,10 @@ export class GameUI {
     document.addEventListener(
       "keydown",
       (event) => {
+        // Settings panel (or any future modal) owns the keyboard while open
+        // — otherwise Escape-to-close-settings would also discard a staged
+        // piece underneath it.
+        if (!document.getElementById("settingsOverlay")?.hidden) return;
         if ((event.key === "z" || event.key === "Z") && (event.ctrlKey || event.metaKey)) {
           event.preventDefault();
           if (event.shiftKey) this.redoCalc();
@@ -759,6 +767,14 @@ export class GameUI {
         }
         if (event.key === "f") {
           this.secondaryAction();
+          return;
+        }
+        if (event.key === "Enter") {
+          this.confirmStaged();
+          return;
+        }
+        if (event.key === "Escape") {
+          this.discardStaged();
           return;
         }
       },
