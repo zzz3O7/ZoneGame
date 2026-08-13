@@ -1,9 +1,26 @@
+import http from "http";
 import { WebSocketServer } from "ws";
 import { MatchManager } from "./matchManager.js";
 import { MSG } from "../shared/net/protocol.js";
 import { log, shortId } from "./logger.js";
+import { handleAuthRequest } from "./authRoutes.js";
 
-const wss = new WebSocketServer({ port: 8080, host: "127.0.0.1" });
+// A plain http.Server sits in front of the WS server now, because
+// Google's OAuth redirect (GET /auth/google/callback) is a real browser
+// navigation, not something that can arrive over a WebSocket. Anything
+// that isn't an /auth/* route falls through to 404 — static files are
+// served by nginx, not this process.
+const httpServer = http.createServer((req, res) => {
+  const url = new URL(req.url, `http://${req.headers.host}`);
+  handleAuthRequest(req, res, url).then((handled) => {
+    if (!handled) {
+      res.writeHead(404);
+      res.end();
+    }
+  });
+});
+
+const wss = new WebSocketServer({ server: httpServer });
 const manager = new MatchManager();
 
 function heartbeat() {
@@ -151,4 +168,4 @@ const interval = setInterval(() => {
 
 wss.on("close", () => clearInterval(interval));
 
-log("Server listening on :8080");
+httpServer.listen(8080, "127.0.0.1", () => log("Server listening on :8080"));
