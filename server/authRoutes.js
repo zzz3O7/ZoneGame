@@ -1,12 +1,8 @@
 import { randomUUID } from "crypto";
 import { authConfig, isAuthConfigured } from "./config.js";
 import { buildGoogleAuthUrl, exchangeCodeForUserInfo } from "./googleOAuth.js";
-import {
-  findOrCreatePlayer,
-  createSession,
-  getSessionPlayer,
-  destroySession,
-} from "./sessionStore.js";
+import { findOrCreatePlayerByGoogleSub, setNickname, NicknameError } from "./playerRepository.js";
+import { createSession, getSessionPlayer, destroySession } from "./sessionStore.js";
 import { readSessionCookie, buildSessionCookie } from "./cookies.js";
 import { log } from "./logger.js";
 
@@ -33,6 +29,26 @@ function sendJson(res, status, body) {
   res.end(JSON.stringify(body));
 }
 
+function readJsonBody(req) {
+  return new Promise((resolve, reject) => {
+    let raw = "";
+    req.on("data", (chunk) => {
+      raw += chunk;
+      // A nickname request has no business being large; bail out early
+      // rather than buffering an arbitrarily large body in memory.
+      if (raw.length > 10_000) req.destroy();
+    });
+    req.on("end", () => {
+      try {
+        resolve(raw ? JSON.parse(raw) : {});
+      } catch {
+        reject(new Error("Invalid JSON body"));
+      }
+    });
+    req.on("error", reject);
+  });
+}
+
 // Returns true if this request was an /auth/* route and was handled
 // (regardless of success/failure response code) — false means the
 // caller should fall through to its own 404.
@@ -57,8 +73,8 @@ export async function handleAuthRequest(req, res, url) {
     }
     try {
       const { googleSub, email } = await exchangeCodeForUserInfo(code);
-      findOrCreatePlayer({ googleSub, email });
-      const sessionId = createSession(googleSub);
+      const player = findOrCreatePlayerByGoogleSub({ googleSub, email });
+      const sessionId = createSession(player.id);
       log(`Login: ${email}`);
       res.writeHead(302, {
         Location: authConfig.frontendUrl,
@@ -85,6 +101,38 @@ export async function handleAuthRequest(req, res, url) {
       nickname: player.nickname,
       rating: player.rating,
     });
+    return true;
+  }
+
+  if (url.pathname === "/auth/nickname" && req.method === "POST") {
+    const sessionId = readSessionCookie(req);
+    const player = sessionId ? getSessionPlayer(sessionId) : null;
+    if (!player) {
+      sendJson(res, 401, { error: "Not logged in" });
+      return true;
+    }
+    let body;
+    try {
+      body = await readJsonBody(req);
+    } catch {
+      sendJson(res, 400, { error: "Invalid request body" });
+      return true;
+    }
+    if (typeof body.nickname !== "string") {
+      sendJson(res, 400, { error: "nickname is required" });
+      return true;
+    }
+    try {
+      const updated = setNickname(player.id, body.nickname);
+      sendJson(res, 200, { nickname: updated.nickname });
+    } catch (err) {
+      if (err instanceof NicknameError) {
+        sendJson(res, err.code === "taken" ? 409 : 400, { error: err.message });
+      } else {
+        console.error("setNickname failed:", err);
+        sendJson(res, 500, { error: "Could not set nickname" });
+      }
+    }
     return true;
   }
 

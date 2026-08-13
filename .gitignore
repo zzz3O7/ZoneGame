@@ -2,3 +2,4 @@ node_modules/
 docs/sound-lab_v2.html
 docs/sound-lab.html
 .env
+server/data/

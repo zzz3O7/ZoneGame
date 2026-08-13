@@ -1,37 +1,25 @@
 import { randomUUID } from "crypto";
+import { getPlayerById } from "./playerRepository.js";
 
-// STEP 1 SCAFFOLDING ONLY. Nothing here survives a restart — step 2
-// swaps both maps for SQLite-backed tables (`players`, plus a real
-// sessions table or this same in-memory map kept as a cache in front
-// of it). Kept deliberately minimal so the OAuth round-trip itself can
-// be verified before persistence enters the picture.
+// Sessions are intentionally in-memory only: losing them on a server
+// restart just means players need to log in again, no data loss, and
+// it avoids needing a sessions table + expiry/cleanup logic in SQLite
+// for what's a purely transient mapping.
+const sessions = new Map(); // sessionId -> playerId
 
-const playersByGoogleSub = new Map(); // googleSub -> player
-const sessions = new Map(); // sessionId -> googleSub
-
-export function findOrCreatePlayer({ googleSub, email }) {
-  let player = playersByGoogleSub.get(googleSub);
-  if (!player) {
-    player = { googleSub, email, nickname: null, rating: 1000, createdAt: Date.now() };
-    playersByGoogleSub.set(googleSub, player);
-  }
-  return player;
-}
-
-export function getPlayerByGoogleSub(googleSub) {
-  return playersByGoogleSub.get(googleSub) || null;
-}
-
-export function createSession(googleSub) {
+export function createSession(playerId) {
   const sessionId = randomUUID();
-  sessions.set(sessionId, googleSub);
+  sessions.set(sessionId, playerId);
   return sessionId;
 }
 
+// Always re-reads the player row fresh from the DB rather than caching
+// it on the session, so a nickname/rating change is reflected on the
+// player's very next request instead of only after their next login.
 export function getSessionPlayer(sessionId) {
-  const googleSub = sessions.get(sessionId);
-  if (!googleSub) return null;
-  return getPlayerByGoogleSub(googleSub);
+  const playerId = sessions.get(sessionId);
+  if (playerId == null) return null;
+  return getPlayerById(playerId);
 }
 
 export function destroySession(sessionId) {

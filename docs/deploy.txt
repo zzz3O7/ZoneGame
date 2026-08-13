@@ -3,5 +3,10 @@ cd server && npm install
 sudo systemctl restart zonegame
 
 sudo systemctl status zonegame
-journalctl -u zonegame -n 30 --no-pager
 journalctl -u zonegame -f
+journalctl -u zonegame -n 30 --no-pager
+
+
+LOCAL:
+node --env-file=.env index.js
+http://127.0.0.1:8080/
