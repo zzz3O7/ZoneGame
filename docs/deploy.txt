@@ -2,5 +2,6 @@ cd /var/www/ZoneGame && git pull
 cd server && npm install
 sudo systemctl restart zonegame
 
-journalctl -u zonegame -n 30 --no-pager
 sudo systemctl status zonegame
+journalctl -u zonegame -n 30 --no-pager
+journalctl -u zonegame -f

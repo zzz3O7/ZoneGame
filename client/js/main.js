@@ -40,7 +40,8 @@ function showScreen(screen) {
 }
 
 function wsUrl() {
-  return `wss://${location.host}/ws`;
+  const proto = location.protocol === "https:" ? "wss" : "ws";
+  return `${proto}://${location.host}/ws`;
 }
 
 // Shared teardown for "this match is done, one way or another" —

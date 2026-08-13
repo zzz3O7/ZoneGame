@@ -4,20 +4,21 @@ import { MatchManager } from "./matchManager.js";
 import { MSG } from "../shared/net/protocol.js";
 import { log, shortId } from "./logger.js";
 import { handleAuthRequest } from "./authRoutes.js";
+import { serveStatic } from "./staticServer.js";
 
 // A plain http.Server sits in front of the WS server now, because
 // Google's OAuth redirect (GET /auth/google/callback) is a real browser
-// navigation, not something that can arrive over a WebSocket. Anything
-// that isn't an /auth/* route falls through to 404 — static files are
-// served by nginx, not this process.
-const httpServer = http.createServer((req, res) => {
+// navigation, not something that can arrive over a WebSocket.
+//
+// Static file serving (client/ + shared/) is included here for local
+// dev convenience only — in production nginx serves those paths
+// directly and requests for them never reach this process at all.
+const httpServer = http.createServer(async (req, res) => {
   const url = new URL(req.url, `http://${req.headers.host}`);
-  handleAuthRequest(req, res, url).then((handled) => {
-    if (!handled) {
-      res.writeHead(404);
-      res.end();
-    }
-  });
+  if (await handleAuthRequest(req, res, url)) return;
+  if (await serveStatic(req, res, url)) return;
+  res.writeHead(404);
+  res.end();
 });
 
 const wss = new WebSocketServer({ server: httpServer });
