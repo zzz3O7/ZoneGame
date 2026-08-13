@@ -32,5 +32,19 @@ export const MSG = {
   OPPONENT_WANTS_REMATCH: "opponentWantsRematch", // server -> other client
   REMATCH_CANCELLED: "rematchCancelled", // server -> waiting client: { reason }
 
+  // Matchmaking — separate from the invite-code create/join flow above.
+  // { rated: boolean, nickname?, params } -> server. rated:true requires
+  // an authenticated session; nickname is ignored for rated (the
+  // account's own nickname is used instead) and required for unrated.
+  JOIN_QUEUE: "joinQueue", // client -> server
+  LEAVE_QUEUE: "leaveQueue", // client -> server
+  QUEUED: "queued", // server -> client: still waiting for an opponent
+  QUEUE_CANCELLED: "queueCancelled", // server -> client: left the queue
+  // Sent individually to each paired player once matched — carries the
+  // same identity info MATCH_JOINED does, since queue-matched players
+  // never go through create/join. Note: the Match's own MATCH_START
+  // broadcast fires (and arrives client-side) before this message does.
+  QUEUE_MATCHED: "queueMatched", // server -> each matched client
+
   ERROR: "error",
 };

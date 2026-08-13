@@ -7,20 +7,22 @@ import { DISCONNECT_ABORT_MS, REMATCH_TIMEOUT_MS } from "../shared/config.js";
 import { log, shortId, formatDuration } from "./logger.js";
 
 export class Match {
-  constructor(matchId, inviteCode, rawParams, onClose) {
+  constructor(matchId, inviteCode, rawParams, onClose, onGameEnd = null, rated = false) {
     this.matchId = matchId;
     this.inviteCode = inviteCode;
-    this.players = []; // { nickname, playerIndex, ws, sessionId, connected }
+    this.players = []; // { nickname, playerIndex, ws, sessionId, connected, accountPlayerId }
     // waiting: <2 players. active: game in progress. over: game ended
     // normally (rematch or leave still possible). aborted: a disconnect
     // grace period expired — terminal, about to be removed.
     this.status = "waiting";
+    this.rated = rated; // set once at creation, never toggled mid-match
     this.game = null;
     this.activeParams = null; // the actual (seeded) params the current Game was built with — needed to replay it identically on reconnect
     this.actions = []; // ordered log of applied actions, replayable through a fresh Game — this IS the reconnect/resync payload
     this.endInfo = null; // { reason, winnerIndex } once status is "over" or "aborted"
     this.clock = null; // server-authoritative Clock for the current game, or null if this match has no time control
     this._onClose = onClose;
+    this._onGameEnd = onGameEnd; // fired once per finished game, only when a game actually started — see _logMatchEnd
     this._abortTimer = null;
     this._rematchTimer = null;
     this._flagTimer = null;
@@ -40,10 +42,10 @@ export class Match {
   // socket currently happens to be attached to that identity, and it's
   // expected to change across reconnects/refreshes. Never key player state
   // off ws itself for anything meant to survive a reconnect.
-  addPlayer(nickname, ws) {
+  addPlayer(nickname, ws, accountPlayerId = null) {
     const playerIndex = this.players.length;
     const sessionId = randomUUID();
-    const player = { nickname, playerIndex, ws, sessionId, connected: true };
+    const player = { nickname, playerIndex, ws, sessionId, connected: true, accountPlayerId };
     this.players.push(player);
     if (this.players.length === 2) this._start();
     return player;
@@ -120,6 +122,7 @@ export class Match {
     log(
       `Match ${shortId(this.matchId)} ended: reason=${reason} winner=${winnerName} score=${scores} duration=${duration}`,
     );
+    this._onGameEnd?.(reason);
   }
 
   // (re)arms the flag-fall timer for whoever the clock says is

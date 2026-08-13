@@ -5,6 +5,9 @@ import { MSG } from "../shared/net/protocol.js";
 import { log, shortId } from "./logger.js";
 import { handleAuthRequest } from "./authRoutes.js";
 import { serveStatic } from "./staticServer.js";
+import { readSessionCookie } from "./cookies.js";
+import { getSessionPlayer } from "./sessionStore.js";
+import { MatchmakingQueue } from "./matchmakingQueue.js";
 
 // A plain http.Server sits in front of the WS server now, because
 // Google's OAuth redirect (GET /auth/google/callback) is a real browser
@@ -23,14 +26,23 @@ const httpServer = http.createServer(async (req, res) => {
 
 const wss = new WebSocketServer({ server: httpServer });
 const manager = new MatchManager();
+const queue = new MatchmakingQueue();
 
 function heartbeat() {
   this.isAlive = true;
 }
 
-wss.on("connection", (ws) => {
+wss.on("connection", (ws, req) => {
   ws.isAlive = true;
   ws.on("pong", heartbeat);
+
+  // Resolves account identity once, from the cookie sent on the WS
+  // upgrade request — same cookie/session the HTTP /auth/* routes use.
+  // null for guests. Not re-checked per-message: if a session is
+  // revoked mid-connection the player just keeps whatever identity they
+  // connected with until they reconnect, which is fine for now.
+  const sessionId = readSessionCookie(req);
+  ws.__accountPlayer = sessionId ? getSessionPlayer(sessionId) : null;
 
   // prevent unhandled 'error' crashing whole process
   ws.on("error", (err) => {
@@ -48,7 +60,7 @@ wss.on("connection", (ws) => {
 
     try {
       if (msg.type === MSG.CREATE_MATCH) {
-        const { match, player } = manager.createMatch(msg.nickname, ws, msg.params);
+        const { match, player } = manager.createMatch(msg.nickname, ws, msg.params, ws.__accountPlayer?.id ?? null);
         ws.send(
           JSON.stringify({
             type: MSG.MATCH_CREATED,
@@ -62,7 +74,7 @@ wss.on("connection", (ws) => {
       }
 
       if (msg.type === MSG.JOIN_MATCH) {
-        const result = manager.joinMatch(msg.inviteCode, msg.nickname, ws);
+        const result = manager.joinMatch(msg.inviteCode, msg.nickname, ws, ws.__accountPlayer?.id ?? null);
         if (result.error) {
           ws.send(JSON.stringify({ type: MSG.ERROR, message: result.error }));
           return;
@@ -76,6 +88,59 @@ wss.on("connection", (ws) => {
             sessionId: player.sessionId,
           }),
         );
+        return;
+      }
+
+      // Matchmaking modes 2 (unrated) and 3 (rated) — separate from the
+      // invite-code create/join flow above, which is always unrated.
+      if (msg.type === MSG.JOIN_QUEUE) {
+        const rated = Boolean(msg.rated);
+
+        if (rated && !ws.__accountPlayer) {
+          ws.send(JSON.stringify({ type: MSG.ERROR, message: "Log in to play rated matches" }));
+          return;
+        }
+        if (rated && !ws.__accountPlayer.nickname) {
+          ws.send(JSON.stringify({ type: MSG.ERROR, message: "Set a nickname before playing rated matches" }));
+          return;
+        }
+
+        // Rated always uses the account's own nickname (never a
+        // client-supplied one); unrated matchmaking accepts guests, so
+        // it takes whatever nickname the client sent, same as invite-code play.
+        const nickname = rated ? ws.__accountPlayer.nickname : msg.nickname;
+        if (!nickname) {
+          ws.send(JSON.stringify({ type: MSG.ERROR, message: "Nickname required" }));
+          return;
+        }
+
+        const entry = { nickname, accountPlayerId: ws.__accountPlayer?.id ?? null, params: msg.params };
+        const pair = queue.join(ws, entry, rated);
+        if (!pair) {
+          ws.send(JSON.stringify({ type: MSG.QUEUED }));
+          return;
+        }
+
+        const [a, b] = pair;
+        const { match, players } = manager.createMatchForPair(a, b, a.params, rated);
+        [a, b].forEach((entry, i) => {
+          entry.ws.send(
+            JSON.stringify({
+              type: MSG.QUEUE_MATCHED,
+              matchId: match.matchId,
+              inviteCode: match.inviteCode,
+              yourPlayerIndex: players[i].playerIndex,
+              sessionId: players[i].sessionId,
+              rated: match.rated,
+            }),
+          );
+        });
+        return;
+      }
+
+      if (msg.type === MSG.LEAVE_QUEUE) {
+        queue.leave(ws);
+        ws.send(JSON.stringify({ type: MSG.QUEUE_CANCELLED }));
         return;
       }
 
@@ -153,6 +218,7 @@ wss.on("connection", (ws) => {
   });
 
   ws.on("close", () => {
+    queue.leave(ws);
     const match = manager.findMatchByWs(ws);
     if (match) match.handleDisconnect(ws);
   });
