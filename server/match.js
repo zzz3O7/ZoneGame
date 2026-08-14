@@ -5,6 +5,7 @@ import { resolveParams } from "../shared/params.js";
 import { MSG } from "../shared/net/protocol.js";
 import { DISCONNECT_ABORT_MS, REMATCH_TIMEOUT_MS } from "../shared/config.js";
 import { log, shortId, formatDuration } from "./logger.js";
+import { getPlayerById } from "./playerRepository.js";
 
 export class Match {
   constructor(matchId, inviteCode, rawParams, onClose, onGameEnd = null, rated = false) {
@@ -93,7 +94,8 @@ export class Match {
       matchId: this.matchId,
       params: finalParams,
       yourPlayerIndex: p.playerIndex,
-      players: this.players.map((pp) => ({ index: pp.playerIndex, nickname: pp.nickname })),
+      players: this._playersPayload(),
+      rated: this.rated,
       clock: this.clock ? this.clock.snapshot(now) : null,
     }));
 
@@ -342,7 +344,8 @@ export class Match {
     return {
       type: MSG.SYNC_STATE,
       yourPlayerIndex: forPlayer.playerIndex,
-      players: this.players.map((p) => ({ index: p.playerIndex, nickname: p.nickname })),
+      players: this._playersPayload(),
+      rated: this.rated,
       inviteCode: this.inviteCode, // only meaningful while status === "waiting"
       params: this.activeParams ?? this.params, // fall back to the un-seeded config params while still "waiting" — activeParams isn't set until the game actually starts
       actions: this.actions,
@@ -354,6 +357,17 @@ export class Match {
       // already be reflected in what they're handed on the way back in.
       clock: this.clock ? this.clock.snapshot(Date.now()) : null,
     };
+  }
+
+  // Shared by MATCH_START and buildSyncState — rating is only looked up
+  // (and only meaningful) for rated matches; unrated always sends null so
+  // the client has a uniform "no rating to show" signal either way.
+  _playersPayload() {
+    return this.players.map((p) => ({
+      index: p.playerIndex,
+      nickname: p.nickname,
+      rating: this.rated && p.accountPlayerId != null ? (getPlayerById(p.accountPlayerId)?.rating ?? null) : null,
+    }));
   }
 
   // Two genuinely different situations, must not conflate them.

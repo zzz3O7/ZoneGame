@@ -201,6 +201,13 @@ export class RenderSync {
       nameEl.textContent = ui.matchClient?.playerNames?.[player.id] ?? `player_${player.id + 1}`;
     }
 
+    const ratingEl = plate.querySelector(".side-plate__rating");
+    if (ratingEl) {
+      const rating = ui.matchClient?.rated ? ui.matchClient.playerRatings?.[player.id] : null;
+      ratingEl.hidden = rating == null;
+      if (rating != null) ratingEl.textContent = rating;
+    }
+
     const scoreEl = plate.querySelector(".side-plate__score");
     if (scoreEl) scoreEl.textContent = player.score;
 

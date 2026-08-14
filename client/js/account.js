@@ -23,3 +23,13 @@ export async function refreshAccount() {
   listeners.forEach((cb) => cb(account));
   return account;
 }
+
+// Cheaper than refreshAccount() for the one field that actually changes
+// mid-session: a rated game's result arrives over the match's own socket
+// (MatchClient's RATING_UPDATE), not through a fresh fetch, so this just
+// patches the singleton in place and notifies the same listeners — the
+// account widget picks it up next render with no reload needed.
+export function applyRatingUpdate(newRating) {
+  account.rating = newRating;
+  listeners.forEach((cb) => cb(account));
+}

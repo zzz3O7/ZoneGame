@@ -9,6 +9,9 @@ export class MatchClient {
     this.inviteCode = null;
     this.myPlayerIndex = null;
     this.playerNames = null;
+    this.playerRatings = null; // indexed like playerNames; null entries for unrated matches or players with no account
+    this.rated = false; // set from MATCH_START/SYNC_STATE — always false for local/invite-code/unrated-queue matches
+    this.ratingUpdate = null; // { ratingBefore, ratingAfter, opponentRatingBefore, opponentRatingAfter } once a rated game's result lands — cleared on the next MATCH_START (fresh game or rematch)
     this.game = null;
     this.sessionId = null;
     this.status = null; // "waiting" | "active" | "over" | "aborted"
@@ -31,6 +34,7 @@ export class MatchClient {
     this.onQueued = null; // () => void — still waiting for an opponent
     this.onQueueCancelled = null; // () => void
     this.onQueueMatched = null; // ({ rated }) => void — fires alongside (order not guaranteed vs) onMatchStart
+    this.onRatingUpdate = null; // (update) => void — see this.ratingUpdate; always arrives before the game-ending message, so consumers should just let it stash and be picked up by that message's own render, not force one themselves
 
     this._bind(connection);
   }
@@ -54,6 +58,7 @@ export class MatchClient {
     connection.on(MSG.QUEUED, () => this.onQueued?.());
     connection.on(MSG.QUEUE_CANCELLED, () => this.onQueueCancelled?.());
     connection.on(MSG.QUEUE_MATCHED, (msg) => this._handleQueueMatched(msg));
+    connection.on(MSG.RATING_UPDATE, (msg) => this._handleRatingUpdate(msg));
     connection.on(MSG.ERROR, (msg) => this.onError?.(msg.message));
     connection.on("__close", () => {
       if (!connection.intentionalClose) this.onConnectionLost?.();
@@ -103,10 +108,16 @@ export class MatchClient {
     return this.game && this.game.currentPlayerIndex === this.myPlayerIndex;
   }
 
-  _namesByIndex(players) {
+  // Shared by _handleMatchStart/_handleSyncState — both send the same
+  // { index, nickname, rating } shape (see Match._playersPayload server-side).
+  _indexPlayers(players) {
     const names = [];
-    for (const p of players) names[p.index] = p.nickname;
-    return names;
+    const ratings = [];
+    for (const p of players) {
+      names[p.index] = p.nickname;
+      ratings[p.index] = p.rating ?? null;
+    }
+    return { names, ratings };
   }
 
   sendMove(pieceType, shape, anchorRow, anchorCol) {
@@ -208,7 +219,11 @@ export class MatchClient {
   _handleMatchStart(msg) {
     this.myPlayerIndex = msg.yourPlayerIndex;
     this.game = new Game(msg.params);
-    this.playerNames = this._namesByIndex(msg.players);
+    const { names, ratings } = this._indexPlayers(msg.players);
+    this.playerNames = names;
+    this.playerRatings = ratings;
+    this.rated = Boolean(msg.rated);
+    this.ratingUpdate = null; // fresh game (or rematch) — any previous game's result no longer applies
     this.status = "active";
     this.clock = msg.clock ?? null;
     this.onMatchStart?.(this.game);
@@ -240,7 +255,10 @@ export class MatchClient {
   // replay each action through the same attemptPlacement/pass calls.
   _handleSyncState(msg) {
     this.myPlayerIndex = msg.yourPlayerIndex;
-    this.playerNames = this._namesByIndex(msg.players);
+    const { names, ratings } = this._indexPlayers(msg.players);
+    this.playerNames = names;
+    this.playerRatings = ratings;
+    this.rated = Boolean(msg.rated);
     this.inviteCode = msg.inviteCode;
     this.params = msg.params;
     this.status = msg.status;
@@ -271,6 +289,11 @@ export class MatchClient {
 
     this.game = game;
     this.onSynced?.(game, msg);
+  }
+
+  _handleRatingUpdate(msg) {
+    this.ratingUpdate = msg;
+    this.onRatingUpdate?.(msg);
   }
 
   _handleReconnectFailed(msg) {

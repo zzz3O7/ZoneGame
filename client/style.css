@@ -1412,6 +1412,17 @@ body.require-confirm .piece-selector--touch {
   font-weight: 700;
   color: var(--color-score);
 }
+.score-side__rating {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  margin-top: 4px;
+}
+.score-side__rating.pos {
+  color: var(--color-accent);
+}
+.score-side__rating.neg {
+  color: var(--color-danger);
+}
 .score-vs {
   font-family: var(--font-mono);
   color: var(--color-text-muted);

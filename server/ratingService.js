@@ -2,6 +2,7 @@ import { getPlayerById } from "./playerRepository.js";
 import { recordRatedGame } from "./gameRepository.js";
 import { computeElo } from "./rating.js";
 import { log, shortId } from "./logger.js";
+import { MSG } from "../shared/net/protocol.js";
 
 // Called once, right after a rated match's status/endInfo have already
 // been set to a final result (see Match._logMatchEnd — this fires from
@@ -45,4 +46,15 @@ export function finalizeRatedGame(match) {
       `${player0.nickname ?? player0.email} ${player0.rating}->${ratingAfter0}, ` +
       `${player1.nickname ?? player1.email} ${player1.rating}->${ratingAfter1}`,
   );
+
+  // Personalized so each client just reads "my" before/after without
+  // having to know its own playerIndex maps to p0 vs p1 — mirrors how the
+  // endcard already frames everything as viewer-relative.
+  match.broadcastPersonalized((p) => ({
+    type: MSG.RATING_UPDATE,
+    ratingBefore: p.playerIndex === 0 ? player0.rating : player1.rating,
+    ratingAfter: p.playerIndex === 0 ? ratingAfter0 : ratingAfter1,
+    opponentRatingBefore: p.playerIndex === 0 ? player1.rating : player0.rating,
+    opponentRatingAfter: p.playerIndex === 0 ? ratingAfter1 : ratingAfter0,
+  }));
 }

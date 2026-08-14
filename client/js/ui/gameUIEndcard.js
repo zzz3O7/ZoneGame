@@ -41,15 +41,14 @@ export class EndcardController {
       // Online: viewer's own seat. Hotseat: whoever made the last move —
       // the game ends immediately after a move, so that's the natural
       // "current player" to frame the win/lose sound from.
-      const viewerIndex = ui.matchClient
-        ? ui.matchClient.myPlayerIndex
-        : (ui.game.history.last()?.playerIndex ?? 0);
+      const viewerIndex = ui.matchClient ? ui.matchClient.myPlayerIndex : (ui.game.history.last()?.playerIndex ?? 0);
       const winner = ui._endOverride ? ui._endOverride.winnerIndex : ui.game.winnerIndex;
       ui.sound.gameOver(winner === null ? "draw" : winner === viewerIndex ? "win" : "lose");
     }
 
     this._syncEndcardHeader();
     this._syncEndcardScores();
+    this._syncEndcardRating();
     this._syncEndcardBreakdown();
     this._syncEndcardActions();
   }
@@ -102,6 +101,41 @@ export class EndcardController {
     if (valueB) valueB.textContent = ui.game.players[opponentIndex].score;
     sideA?.classList.toggle("winner", winner === myIndex || winner === null);
     sideB?.classList.toggle("winner", winner === opponentIndex || winner === null);
+  }
+
+  // Rated-only. Rides on the same viewer-relative A/B split as
+  // _syncEndcardScores. matchClient.ratingUpdate is populated by
+  // MSG.RATING_UPDATE — it always arrives before the message that actually
+  // triggers this render (see matchClient.js), so by the time syncGameOver()
+  // runs it's either already there or this genuinely wasn't a rated game.
+  _syncEndcardRating() {
+    const { ui } = this;
+    const changeA = document.getElementById("ratingChangeA");
+    const changeB = document.getElementById("ratingChangeB");
+    if (!changeA || !changeB) return;
+
+    const update = ui.matchClient?.rated ? ui.matchClient.ratingUpdate : null;
+    if (!update) {
+      changeA.hidden = true;
+      changeB.hidden = true;
+      return;
+    }
+
+    this._renderRatingChange(changeA, update.ratingBefore, update.ratingAfter);
+    this._renderRatingChange(changeB, update.opponentRatingBefore, update.opponentRatingAfter);
+  }
+
+  _renderRatingChange(el, before, after) {
+    if (before == null || after == null) {
+      el.hidden = true;
+      return;
+    }
+    const delta = after - before;
+    const sign = delta >= 0 ? "+" : "";
+    el.textContent = `${after} (${sign}${delta})`;
+    el.classList.toggle("pos", delta >= 0);
+    el.classList.toggle("neg", delta < 0);
+    el.hidden = false;
   }
 
   _syncEndcardBreakdown() {

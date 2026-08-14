@@ -46,5 +46,14 @@ export const MSG = {
   // broadcast fires (and arrives client-side) before this message does.
   QUEUE_MATCHED: "queueMatched", // server -> each matched client
 
+  // Sent personalized to each player right after a rated game's result is
+  // persisted (see ratingService.finalizeRatedGame) — always arrives BEFORE
+  // the game-ending message itself (MOVE_APPLIED's gameOver flag, or
+  // MATCH_ENDED for resign/timeout/abort), since finalizeRatedGame runs
+  // synchronously inside _logMatchEnd, ahead of that broadcast. Consumers
+  // should just stash this and let the subsequent game-ending render pick
+  // it up — the endcard isn't shown yet when this arrives.
+  RATING_UPDATE: "ratingUpdate", // server -> each player: { ratingBefore, ratingAfter, opponentRatingBefore, opponentRatingAfter }
+
   ERROR: "error",
 };

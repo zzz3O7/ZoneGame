@@ -13,6 +13,7 @@ import { applySettings } from "./settings.js";
 import { initSettingsPanel } from "./ui/settingsPanel.js";
 import { initRulesPanel } from "./ui/rulesPanel.js";
 import { initAccountWidget } from "./ui/accountWidget.js";
+import { applyRatingUpdate } from "./account.js";
 
 applySettings(); // sound volumes + require-confirm body class, before anything can play/render
 
@@ -125,6 +126,13 @@ function setupMatchClient(conn) {
     ui?.resetRematchPrompt();
   };
   matchClient.onError = (message) => handleJoinError(message);
+  // Live-updates the account widget's rating (no reload needed). This
+  // always arrives before the game-ending message itself (see MSG.RATING_UPDATE),
+  // so deliberately doesn't try to sync the endcard here — matchClient has
+  // already stashed the full update by the time the subsequent
+  // onMoveApplied/onMatchEnded render runs, and that render's own
+  // syncGameOver() picks it up then.
+  matchClient.onRatingUpdate = (update) => applyRatingUpdate(update.ratingAfter);
   // Shared by reconnect success AND hash-mismatch resync (see matchClient.js) —
   // either way, the correct move is just "rebuild the UI from what the
   // server says is true right now", same as a fresh match start.
