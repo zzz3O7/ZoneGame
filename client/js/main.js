@@ -38,6 +38,19 @@ let reconnectInProgress = false; // guards handleConnectionLost against running 
 
 function showScreen(screen) {
   [menuScreen, waitingRoomScreen, gameScreen].forEach((s) => (s.hidden = s !== screen));
+  // Sign-in/out only makes sense before a match — also stops the widget
+  // from sitting on top of the board once a game starts.
+  document.getElementById("accountWidget").hidden = screen !== menuScreen;
+}
+
+// The page-load reconnect flow (below) shows/hides the menu directly
+// rather than through showScreen() — there's no dedicated "reconnecting"
+// screen, it just hides the menu behind a banner. Routes through here so
+// the account widget's visibility can't drift from the menu's the way it
+// briefly did before this existed.
+function setMenuVisible(visible) {
+  menuScreen.hidden = !visible;
+  document.getElementById("accountWidget").hidden = !visible;
 }
 
 function wsUrl() {
@@ -285,7 +298,7 @@ function handleReconnectFailed() {
           ui?.destroy();
           ui = null;
           menu.clearJoinCode();
-          menuScreen.hidden = false;
+          setMenuVisible(true);
           showScreen(menuScreen);
         },
       },
@@ -341,7 +354,7 @@ function populateSearchingRoom(rated, timeMode) {
 // went away (refresh, or the tab was closed and reopened within the same
 // session). Skips the menu entirely, "Abandon" is right there if they'd rather not.
 function attemptPageLoadReconnect(storedSession) {
-  menuScreen.hidden = true;
+  setMenuVisible(false);
 
   const conn = new Connection(wsUrl());
   currentConnection = conn;
@@ -349,7 +362,7 @@ function attemptPageLoadReconnect(storedSession) {
   const abandon = () => {
     leaveCurrentMatch();
     menu.clearJoinCode();
-    menuScreen.hidden = false;
+    setMenuVisible(true);
   };
 
   showBanner("Reconnecting to your match…", {
@@ -368,14 +381,14 @@ function attemptPageLoadReconnect(storedSession) {
         matchClient.onReconnectFailed = () => handleReconnectFailed();
         resetMatchState();
         menu.clearJoinCode();
-        menuScreen.hidden = false;
+        setMenuVisible(true);
       };
 
       if (!matchClient.attemptReconnect()) {
         matchClient.onReconnectFailed = () => handleReconnectFailed();
         resetMatchState();
         menu.clearJoinCode();
-        menuScreen.hidden = false;
+        setMenuVisible(true);
       }
     })
     .catch(() => abandon());

@@ -13,5 +13,8 @@
   "dependencies": {
     "better-sqlite3": "^13.0.3",
     "ws": "^8.21.1"
+  },
+  "allowScripts": {
+    "better-sqlite3@13.0.3": true
   }
 }
