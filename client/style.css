@@ -945,10 +945,25 @@ body.require-confirm .piece-selector--touch {
   flex: 1;
   min-height: 0;
   display: flex;
-  align-items: center;
   justify-content: center;
   padding: 40px 20px;
   overflow-y: auto;
+}
+
+/* Top-anchored, not centered: the tab-panels (Local/Create/Join/Quick
+   play/Ranked) vary hugely in height — Local's full mode+time param grids
+   vs. Join's two inputs — and that height can also change within a single
+   tab (e.g. picking Custom mode expands a params panel). Centering the
+   whole .menu column meant every one of those height changes shifted the
+   tabs themselves up/down on screen. Anchoring to the top means only the
+   space below the tabs grows or shrinks, so the title/tabs stay put.
+   Waiting room has no such variable content, so it keeps the nicer
+   vertically-centered look. */
+#menuScreen {
+  align-items: flex-start;
+}
+#waitingRoomScreen {
+  align-items: center;
 }
 
 #menuScreen[hidden],
