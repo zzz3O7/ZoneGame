@@ -1,6 +1,9 @@
 import { CUSTOM_DEFAULTS, TIME_CUSTOM_DEFAULTS } from "../../../shared/config.js";
 import { resolveParams } from "../../../shared/params.js";
 import { sound } from "../audio/soundManager.js";
+import { account, onAccountChange } from "../account.js";
+import { signInWithGoogle } from "../net/authClient.js";
+import { promptNickname } from "./accountWidget.js";
 
 // Same "zonegame.<thing>" key convention as matchClient.js's session storage.
 // localStorage (not sessionStorage): unlike match reconnect state.
@@ -10,41 +13,109 @@ const NICKNAME_KEY = "zonegame.nickname";
 // tabs. Emits fully-resolved params objects via callbacks — never hands raw
 // input values to the caller.
 export class Menu {
-  constructor({ onStartLocal, onCreateMatch, onJoinMatch }) {
+  constructor({ onStartLocal, onCreateMatch, onJoinMatch, onJoinQueue, onLeaveQueue }) {
     this.onStartLocal = onStartLocal;
     this.onCreateMatch = onCreateMatch;
     this.onJoinMatch = onJoinMatch;
+    this.onJoinQueue = onJoinQueue;
+    this.onLeaveQueue = onLeaveQueue;
 
-    this.mode = "classic";
-    this.timeMode = "none";
+    this.qpTimeMode = "blitz";
+    this.rankedTimeMode = "blitz";
+
+    // Local and Create each get their own independent mode/time-control
+    // picker — same shape, same defaults, but a Custom board on one
+    // shouldn't affect the other. See _makeBoardSection.
+    this.localSection = this._makeBoardSection("local");
+    this.createSection = this._makeBoardSection("create");
 
     this._cacheDom();
-    this._populateDefaults();
     this._restoreNickname();
     this._bindEvents();
+
+    this._renderRankedTab();
+    this._syncNicknameFields();
+    onAccountChange(() => {
+      this._renderRankedTab();
+      this._syncNicknameFields();
+    });
+  }
+
+  // Builds one self-contained Mode + Time-control section (Local and
+  // Create each have one, with a shared `${prefix}` ID convention —
+  // e.g. "localModeCardClassic" / "createModeCardClassic"). Returns
+  // { buildParams() } — everything else is private to the closure.
+  _makeBoardSection(prefix) {
+    const els = {
+      modeClassic: document.getElementById(`${prefix}ModeCardClassic`),
+      modeCustom: document.getElementById(`${prefix}ModeCardCustom`),
+      paramsPanel: document.getElementById(`${prefix}ParamsPanel`),
+      boardSize: document.getElementById(`${prefix}ParamBoardSize`),
+      boardSizeValue: document.getElementById(`${prefix}ParamBoardSizeValue`),
+      zoneRadius: document.getElementById(`${prefix}ParamZoneRadius`),
+      zoneRadiusValue: document.getElementById(`${prefix}ParamZoneRadiusValue`),
+      startingDominoes: document.getElementById(`${prefix}ParamStartingDominoes`),
+      startingDominoesValue: document.getElementById(`${prefix}ParamStartingDominoesValue`),
+      seed: document.getElementById(`${prefix}ParamSeed`),
+      timeCards: [...document.querySelectorAll(`#${prefix}TimeGrid .mode-card`)],
+      timeCustomPanel: document.getElementById(`${prefix}TimeCustomPanel`),
+      timeInitial: document.getElementById(`${prefix}ParamTimeInitial`),
+      timeInitialValue: document.getElementById(`${prefix}ParamTimeInitialValue`),
+      timeIncrement: document.getElementById(`${prefix}ParamTimeIncrement`),
+      timeIncrementValue: document.getElementById(`${prefix}ParamTimeIncrementValue`),
+    };
+
+    const state = { mode: "classic", timeMode: "none" };
+
+    this._initSlider(els.boardSize, els.boardSizeValue, CUSTOM_DEFAULTS.boardSize);
+    this._initSlider(els.zoneRadius, els.zoneRadiusValue, CUSTOM_DEFAULTS.zoneRadius);
+    this._initSlider(els.startingDominoes, els.startingDominoesValue, CUSTOM_DEFAULTS.startingDominoes);
+    this._initSlider(els.timeInitial, els.timeInitialValue, TIME_CUSTOM_DEFAULTS.initialMs / 60_000);
+    this._initSlider(els.timeIncrement, els.timeIncrementValue, TIME_CUSTOM_DEFAULTS.incrementMs / 1000);
+
+    els.modeClassic.addEventListener("click", () => {
+      sound.uiClick();
+      state.mode = "classic";
+      els.modeClassic.classList.add("selected");
+      els.modeCustom.classList.remove("selected");
+      els.paramsPanel.classList.add("collapsed");
+    });
+    els.modeCustom.addEventListener("click", () => {
+      sound.uiClick();
+      state.mode = "custom";
+      els.modeCustom.classList.add("selected");
+      els.modeClassic.classList.remove("selected");
+      els.paramsPanel.classList.remove("collapsed");
+    });
+    els.timeCards.forEach((card) => {
+      card.addEventListener("click", () => {
+        sound.uiClick();
+        state.timeMode = card.dataset.timeMode;
+        els.timeCards.forEach((c) => c.classList.toggle("selected", c === card));
+        els.timeCustomPanel.classList.toggle("collapsed", card.dataset.timeMode !== "custom");
+      });
+    });
+
+    return {
+      buildParams: () =>
+        resolveParams(state.mode, {
+          boardSize: els.boardSize.value,
+          zoneRadius: els.zoneRadius.value,
+          startingDominoes: els.startingDominoes.value,
+          seed: els.seed.value.trim(),
+          // resolveParams() clamps/validates all of this against
+          // TIME_PRESETS/TIME_CUSTOM_LIMITS, same as the board params
+          // above; a tampered/stale DOM value here can't produce an
+          // out-of-range clock.
+          timeMode: state.timeMode,
+          timeInitialMs: Number(els.timeInitial.value) * 60_000,
+          timeIncrementMs: Number(els.timeIncrement.value) * 1000,
+        }),
+    };
   }
 
   _cacheDom() {
     this.els = {
-      modeClassic: document.getElementById("modeCardClassic"),
-      modeCustom: document.getElementById("modeCardCustom"),
-      paramsPanel: document.getElementById("paramsPanel"),
-
-      boardSize: document.getElementById("paramBoardSize"),
-      boardSizeValue: document.getElementById("paramBoardSizeValue"),
-      zoneRadius: document.getElementById("paramZoneRadius"),
-      zoneRadiusValue: document.getElementById("paramZoneRadiusValue"),
-      startingDominoes: document.getElementById("paramStartingDominoes"),
-      startingDominoesValue: document.getElementById("paramStartingDominoesValue"),
-      seed: document.getElementById("paramSeed"),
-
-      timeCards: [...document.querySelectorAll("#timeGrid .mode-card")],
-      timeCustomPanel: document.getElementById("timeCustomPanel"),
-      timeInitial: document.getElementById("paramTimeInitial"),
-      timeInitialValue: document.getElementById("paramTimeInitialValue"),
-      timeIncrement: document.getElementById("paramTimeIncrement"),
-      timeIncrementValue: document.getElementById("paramTimeIncrementValue"),
-
       tabs: [...document.querySelectorAll("#menuScreen .tab")],
       panels: [...document.querySelectorAll("#menuScreen .tab-panel")],
 
@@ -55,16 +126,15 @@ export class Menu {
       nicknameCreate: document.getElementById("nicknameCreateInput"),
       nicknameJoin: document.getElementById("nicknameJoinInput"),
       joinCode: document.getElementById("joinCodeInput"),
+
+      nicknameQuickPlay: document.getElementById("nicknameQuickPlayInput"),
+      qpTimeCards: [...document.querySelectorAll("#qpTimeGrid .mode-card")],
+      btnQuickPlay: document.getElementById("btnQuickPlay"),
+
+      rankedTimeCards: [...document.querySelectorAll("#rankedTimeGrid .mode-card")],
+      rankedStatus: document.getElementById("rankedStatus"),
+      btnRanked: document.getElementById("btnRanked"),
     };
-  }
-
-  _populateDefaults() {
-    this._initSlider(this.els.boardSize, this.els.boardSizeValue, CUSTOM_DEFAULTS.boardSize);
-    this._initSlider(this.els.zoneRadius, this.els.zoneRadiusValue, CUSTOM_DEFAULTS.zoneRadius);
-    this._initSlider(this.els.startingDominoes, this.els.startingDominoesValue, CUSTOM_DEFAULTS.startingDominoes);
-
-    this._initSlider(this.els.timeInitial, this.els.timeInitialValue, TIME_CUSTOM_DEFAULTS.initialMs / 60_000);
-    this._initSlider(this.els.timeIncrement, this.els.timeIncrementValue, TIME_CUSTOM_DEFAULTS.incrementMs / 1000);
   }
 
   _initSlider(input, valueEl, defaultValue) {
@@ -75,19 +145,31 @@ export class Menu {
     });
   }
 
-  _selectMode(mode) {
+  _selectQpTimeMode(timeMode) {
     sound.uiClick();
-    this.mode = mode;
-    this.els.modeClassic.classList.toggle("selected", mode === "classic");
-    this.els.modeCustom.classList.toggle("selected", mode === "custom");
-    this.els.paramsPanel.classList.toggle("collapsed", mode !== "custom");
+    this.qpTimeMode = timeMode;
+    this.els.qpTimeCards.forEach((card) => card.classList.toggle("selected", card.dataset.timeMode === timeMode));
   }
 
-  _selectTimeMode(timeMode) {
+  _selectRankedTimeMode(timeMode) {
     sound.uiClick();
-    this.timeMode = timeMode;
-    this.els.timeCards.forEach((card) => card.classList.toggle("selected", card.dataset.timeMode === timeMode));
-    this.els.timeCustomPanel.classList.toggle("collapsed", timeMode !== "custom");
+    this.rankedTimeMode = timeMode;
+    this.els.rankedTimeCards.forEach((card) => card.classList.toggle("selected", card.dataset.timeMode === timeMode));
+  }
+
+  // Reacts to login/nickname state — Ranked is the only tab whose
+  // content depends on the account rather than just local UI state.
+  _renderRankedTab() {
+    if (!account.loggedIn) {
+      this.els.rankedStatus.textContent = "Sign in to play ranked matches.";
+      this.els.btnRanked.textContent = "Sign in with Google";
+    } else if (!account.nickname) {
+      this.els.rankedStatus.textContent = "Set a nickname to play ranked matches.";
+      this.els.btnRanked.textContent = "Set nickname";
+    } else {
+      this.els.rankedStatus.textContent = `Playing as ${account.nickname} · Rating ${account.rating}`;
+      this.els.btnRanked.textContent = "Find match";
+    }
   }
 
   _selectTab(tabId) {
@@ -97,9 +179,32 @@ export class Menu {
     this.clearJoinCode(); // stale code from a previous attempt shouldn't linger once you've navigated away
   }
 
-  // Pre-fill both nickname fields from whatever was last saved.
-  // Create and Join are really one identity, not two separate fields, so
-  // both get the same restored value.
+  // A logged-in account's nickname is the identity used everywhere —
+  // the Create/Join/Quick Play fields just mirror it and lock while
+  // signed in, rather than letting a stale/different nickname get typed
+  // in underneath the account that's actually attached to the match.
+  // Logging out (or being logged in with no nickname yet) unlocks them
+  // and falls back to whatever was last saved locally.
+  _syncNicknameFields() {
+    const fields = [this.els.nicknameCreate, this.els.nicknameJoin, this.els.nicknameQuickPlay];
+    const locked = account.loggedIn && Boolean(account.nickname);
+    if (locked) {
+      fields.forEach((input) => {
+        input.value = account.nickname;
+        input.readOnly = true;
+      });
+    } else {
+      fields.forEach((input) => {
+        input.readOnly = false;
+      });
+      this._restoreNickname();
+    }
+  }
+
+  // Pre-fill nickname fields from whatever was last saved. Create, Join,
+  // and Quick Play are really one identity, not three separate fields —
+  // all get the same restored value. Only meaningful while unlocked
+  // (see _syncNicknameFields) — a locked, account-driven value always wins.
   _restoreNickname() {
     let saved = "";
     try {
@@ -110,6 +215,7 @@ export class Menu {
     if (saved) {
       this.els.nicknameCreate.value = saved;
       this.els.nicknameJoin.value = saved;
+      this.els.nicknameQuickPlay.value = saved;
     }
   }
 
@@ -128,58 +234,40 @@ export class Menu {
     this.els.joinCode.value = "";
   }
 
-  _readCustomInputs() {
-    return {
-      boardSize: this.els.boardSize.value,
-      zoneRadius: this.els.zoneRadius.value,
-      startingDominoes: this.els.startingDominoes.value,
-      seed: this.els.seed.value.trim(),
-
-      // resolveParams() clamps/validates all of this against
-      // TIME_PRESETS/TIME_CUSTOM_LIMITS, same as the board params above;
-      // a tampered/stale DOM value here can't produce an out-of-range clock.
-      timeMode: this.timeMode,
-      timeInitialMs: Number(this.els.timeInitial.value) * 60_000,
-      timeIncrementMs: Number(this.els.timeIncrement.value) * 1000,
-    };
-  }
-
-  _buildParams() {
-    return resolveParams(this.mode, this._readCustomInputs());
-  }
-
   _bindEvents() {
-    this.els.modeClassic.addEventListener("click", () => this._selectMode("classic"));
-    this.els.modeCustom.addEventListener("click", () => this._selectMode("custom"));
-
-    this.els.timeCards.forEach((card) => {
-      card.addEventListener("click", () => this._selectTimeMode(card.dataset.timeMode));
-    });
-
     this.els.tabs.forEach((tab) => {
       tab.addEventListener("click", () => this._selectTab(tab.dataset.tab));
     });
 
     this.els.btnLocal.addEventListener("click", () => {
-      this.onStartLocal(this._buildParams());
+      sound.uiConfirm();
+      this.onStartLocal(this.localSection.buildParams());
     });
 
-    // Keep the Create/Join nickname fields in sync (one identity,
-    // two tabs) and persist as the person types.
+    // Keep the Create/Join/Quick Play nickname fields in sync (one
+    // identity, three tabs) and persist as the person types. No-op while
+    // account-locked, since the fields are read-only in that state.
     this.els.nicknameCreate.addEventListener("input", () => {
       this.els.nicknameJoin.value = this.els.nicknameCreate.value;
+      this.els.nicknameQuickPlay.value = this.els.nicknameCreate.value;
       this._saveNickname(this.els.nicknameCreate.value.trim());
     });
     this.els.nicknameJoin.addEventListener("input", () => {
       this.els.nicknameCreate.value = this.els.nicknameJoin.value;
+      this.els.nicknameQuickPlay.value = this.els.nicknameJoin.value;
       this._saveNickname(this.els.nicknameJoin.value.trim());
+    });
+    this.els.nicknameQuickPlay.addEventListener("input", () => {
+      this.els.nicknameCreate.value = this.els.nicknameQuickPlay.value;
+      this.els.nicknameJoin.value = this.els.nicknameQuickPlay.value;
+      this._saveNickname(this.els.nicknameQuickPlay.value.trim());
     });
 
     this.els.btnCreate.addEventListener("click", () => {
       sound.uiConfirm();
       const nickname = this.els.nicknameCreate.value.trim() || "Player";
       this._saveNickname(nickname); // belt-and-suspenders alongside the input listener (e.g. an autofilled value that never fired "input")
-      this.onCreateMatch(nickname, this._buildParams());
+      this.onCreateMatch(nickname, this.createSection.buildParams());
     });
 
     this.els.btnJoin.addEventListener("click", () => {
@@ -197,6 +285,36 @@ export class Menu {
       const { selectionStart, selectionEnd } = input;
       input.value = input.value.toUpperCase();
       input.setSelectionRange(selectionStart, selectionEnd);
+    });
+
+    this.els.qpTimeCards.forEach((card) => {
+      card.addEventListener("click", () => this._selectQpTimeMode(card.dataset.timeMode));
+    });
+    this.els.rankedTimeCards.forEach((card) => {
+      card.addEventListener("click", () => this._selectRankedTimeMode(card.dataset.timeMode));
+    });
+
+    this.els.btnQuickPlay.addEventListener("click", () => {
+      const nickname = this.els.nicknameQuickPlay.value.trim() || "Player";
+      this._saveNickname(nickname);
+      sound.uiConfirm();
+      this.onJoinQueue(false, this.qpTimeMode, nickname);
+    });
+
+    // Three different states share one button — see _renderRankedTab.
+    this.els.btnRanked.addEventListener("click", () => {
+      if (!account.loggedIn) {
+        sound.uiClick();
+        signInWithGoogle();
+        return;
+      }
+      if (!account.nickname) {
+        sound.uiClick();
+        promptNickname();
+        return;
+      }
+      sound.uiConfirm();
+      this.onJoinQueue(true, this.rankedTimeMode, null);
     });
   }
 }

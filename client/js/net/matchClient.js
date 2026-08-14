@@ -28,6 +28,9 @@ export class MatchClient {
     this.onConnectionLost = null; // () => void
     this.onOpponentWantsRematch = null; // () => void
     this.onRematchCancelled = null; // (reason) => void
+    this.onQueued = null; // () => void — still waiting for an opponent
+    this.onQueueCancelled = null; // () => void
+    this.onQueueMatched = null; // ({ rated }) => void — fires alongside (order not guaranteed vs) onMatchStart
 
     this._bind(connection);
   }
@@ -48,6 +51,9 @@ export class MatchClient {
     connection.on(MSG.RECONNECT_FAILED, (msg) => this._handleReconnectFailed(msg));
     connection.on(MSG.OPPONENT_WANTS_REMATCH, () => this.onOpponentWantsRematch?.());
     connection.on(MSG.REMATCH_CANCELLED, (msg) => this.onRematchCancelled?.(msg.reason));
+    connection.on(MSG.QUEUED, () => this.onQueued?.());
+    connection.on(MSG.QUEUE_CANCELLED, () => this.onQueueCancelled?.());
+    connection.on(MSG.QUEUE_MATCHED, (msg) => this._handleQueueMatched(msg));
     connection.on(MSG.ERROR, (msg) => this.onError?.(msg.message));
     connection.on("__close", () => {
       if (!connection.intentionalClose) this.onConnectionLost?.();
@@ -80,6 +86,17 @@ export class MatchClient {
 
   joinMatch(inviteCode, nickname) {
     this.connection.send({ type: MSG.JOIN_MATCH, inviteCode, nickname });
+  }
+
+  // nickname is ignored server-side for rated (the account's own
+  // nickname is used instead) — still passed here so unrated callers
+  // don't need a separate method.
+  joinQueue(rated, timeMode, nickname) {
+    this.connection.send({ type: MSG.JOIN_QUEUE, rated, timeMode, nickname });
+  }
+
+  leaveQueue() {
+    this.connection.send({ type: MSG.LEAVE_QUEUE });
   }
 
   isMyTurn() {
@@ -135,6 +152,23 @@ export class MatchClient {
     this.myPlayerIndex = msg.yourPlayerIndex;
     this.sessionId = msg.sessionId;
     this._saveSession();
+  }
+
+  // Queue-matched players never go through _handleCreated/_handleJoined
+  // (no create/join round-trip happened) — this carries the same
+  // identity info. Note: Match._start() broadcasts MATCH_START the
+  // instant the second player is seated, which happens before the server
+  // gets to send this — so onMatchStart may well fire before this does.
+  // That's fine: MATCH_START already carries everything needed to render
+  // the game itself, this just fills in sessionId/inviteCode for later
+  // reconnect.
+  _handleQueueMatched(msg) {
+    this.matchId = msg.matchId;
+    this.inviteCode = msg.inviteCode;
+    this.myPlayerIndex = msg.yourPlayerIndex;
+    this.sessionId = msg.sessionId;
+    this._saveSession();
+    this.onQueueMatched?.({ rated: msg.rated });
   }
 
   // Session persistence — matchId + sessionId is enough for the

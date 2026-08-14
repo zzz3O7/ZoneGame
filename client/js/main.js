@@ -6,12 +6,13 @@ import { Connection } from "./net/connection.js";
 import { MatchClient } from "./net/matchClient.js";
 import { Menu } from "./ui/menu.js";
 import { showBanner, hideBanner } from "./ui/banner.js";
-import { DISCONNECT_ABORT_MS } from "../../shared/config.js";
+import { DISCONNECT_ABORT_MS, MODES, TIME_PRESETS } from "../../shared/config.js";
 import { formatTimeControlLabel } from "../../shared/clock.js";
 import { sound } from "./audio/soundManager.js";
 import { applySettings } from "./settings.js";
 import { initSettingsPanel } from "./ui/settingsPanel.js";
 import { initRulesPanel } from "./ui/rulesPanel.js";
+import { initAccountWidget } from "./ui/accountWidget.js";
 
 applySettings(); // sound volumes + require-confirm body class, before anything can play/render
 
@@ -308,12 +309,31 @@ function startGame(game, matchClient = null) {
 // params here are always already resolved/clamped (see js/params.js) —
 // Menu never hands raw form input to these callbacks.
 function populateWaitingRoom(params, inviteCode) {
+  document.getElementById("waitTitle").textContent = "Waiting for opponent…";
+  document.getElementById("waitSub").textContent = "Share this code with your opponent";
+  document.getElementById("codeBoxRow").hidden = false;
   document.getElementById("inviteCodeDisplay").textContent = inviteCode;
   document.getElementById("waitModeValue").textContent = params.mode === "classic" ? "Classic" : "Custom";
   document.getElementById("waitBoardValue").textContent = `${params.boardSize} x ${params.boardSize}`;
   document.getElementById("waitZoneRadiusValue").textContent = params.zoneRadius;
   document.getElementById("waitDominoValue").textContent = params.startingDominoes;
   document.getElementById("waitTimeValue").textContent = formatTimeControlLabel(params.timeControl);
+}
+
+// Matchmaking's "waiting" state reuses the same screen/markup as the
+// invite-code wait — just no code to show, and the board/time details
+// are known upfront (always Classic) rather than read back from params.
+function populateSearchingRoom(rated, timeMode) {
+  document.getElementById("waitTitle").textContent = "Searching for opponent…";
+  document.getElementById("waitSub").textContent = rated ? "Ranked matchmaking" : "Quick play matchmaking";
+  document.getElementById("codeBoxRow").hidden = true;
+  const classic = MODES.classic;
+  document.getElementById("waitModeValue").textContent = "Classic";
+  document.getElementById("waitBoardValue").textContent = `${classic.boardSize} x ${classic.boardSize}`;
+  document.getElementById("waitZoneRadiusValue").textContent = classic.zoneRadius;
+  document.getElementById("waitDominoValue").textContent = classic.startingDominoes;
+  document.getElementById("waitTimeValue").textContent =
+    timeMode === "any" ? "Any" : formatTimeControlLabel(TIME_PRESETS[timeMode]);
 }
 
 // Page-load reconnect. Checked once, before Menu even shows the
@@ -407,6 +427,28 @@ const menu = new Menu({
     const matchClient = setupMatchClient(conn);
     matchClient.joinMatch(code, nickname);
   },
+
+  onJoinQueue: async (rated, timeMode, nickname) => {
+    const conn = new Connection(wsUrl());
+    currentConnection = conn;
+    try {
+      await conn.connect();
+    } catch {
+      currentConnection = null;
+      showBanner("Couldn't reach the server. Check your connection and try again.", {
+        kind: "danger",
+        actions: [{ label: "Dismiss", onClick: hideBanner }],
+      });
+      return;
+    }
+
+    const matchClient = setupMatchClient(conn);
+    matchClient.onQueued = () => {
+      populateSearchingRoom(rated, timeMode);
+      showScreen(waitingRoomScreen);
+    };
+    matchClient.joinQueue(rated, timeMode, nickname);
+  },
 });
 
 // Run the reconnect check once, at startup, before anything else.
@@ -431,6 +473,11 @@ document.getElementById("btnCopyCode").addEventListener("click", (event) => {
 
 document.getElementById("btnCancelWait").addEventListener("click", () => {
   sound.uiBack();
+  // Covers both waiting reasons: leaveMatch() no-ops server-side if we
+  // were only queued (no match exists yet to leave), leaveQueue() no-ops
+  // if we were actually in an invite-code wait (nothing queued to leave)
+  // — no need to track which one got us here.
+  currentMatchClient?.leaveQueue();
   leaveCurrentMatch();
   menu.clearJoinCode();
   showScreen(menuScreen);
@@ -474,3 +521,4 @@ document.getElementById("btnLocalBackToMenu").addEventListener("click", () => {
 initHintsPanel();
 initSettingsPanel();
 initRulesPanel();
+initAccountWidget();

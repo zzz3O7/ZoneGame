@@ -82,3 +82,14 @@ export const TIME_CUSTOM_LIMITS = {
   initialMs: [15_000, 3_600_000],
   incrementMs: [0, 60_000],
 };
+
+// Time control choices offered specifically in matchmaking (Quick Play /
+// Ranked) — a stranger match always needs a clock, so "none" and "custom"
+// (both only meaningful for local/invite play) are excluded. "any" isn't a
+// real time control itself, it's a matchmaking preference: the server
+// resolves it to whichever specific preset it gets paired against, falling
+// back to MATCHMAKING_ANY_FALLBACK if two "any" queuers pair with nothing
+// specific to inherit. Shared so client (queue UI) and server (queue
+// validation/pairing) agree on the exact same set of valid keys.
+export const MATCHMAKING_TIME_MODES = ["bullet", "blitz", "rapid", "classical", "any"];
+export const MATCHMAKING_ANY_FALLBACK = "blitz";

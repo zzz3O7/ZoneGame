@@ -1184,6 +1184,11 @@ body.require-confirm .piece-selector--touch {
 .field::placeholder {
   color: var(--color-text-muted);
 }
+.field:read-only {
+  color: var(--color-text-secondary);
+  background: var(--color-bg);
+  cursor: default;
+}
 
 .btn {
   border: none;
@@ -1287,6 +1292,9 @@ body.require-confirm .piece-selector--touch {
   border: 1px solid var(--color-border);
   border-radius: var(--radius-sm);
   padding: 12px 14px;
+}
+.code-box[hidden] {
+  display: none;
 }
 .code-box__value {
   flex: 1;
@@ -1510,8 +1518,101 @@ body.require-confirm .piece-selector--touch {
   color: var(--color-text);
 }
 
+/* ---------- account widget ---------- */
+.account-widget {
+  position: fixed;
+  top: 14px;
+  left: 14px;
+  z-index: 90;
+}
+.account-widget__signin {
+  background: var(--color-surface-raised);
+  color: var(--color-text);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: 8px 14px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.account-widget__signin:hover {
+  border-color: var(--color-text-muted);
+}
+.account-widget__profile {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--color-surface-raised);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: 6px 8px 6px 12px;
+}
+.account-widget__profile[hidden] {
+  display: none;
+}
+.account-widget__name {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--color-text);
+}
+.account-widget__rating {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--color-score);
+}
+.account-widget__signout {
+  background: transparent;
+  border: none;
+  color: var(--color-text-muted);
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 2px 4px;
+}
+.account-widget__signout:hover {
+  color: var(--color-danger);
+}
+
+/* ---------- nickname modal ---------- */
+.nickname-panel {
+  max-width: 380px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.nickname-panel__error {
+  font-size: 12px;
+  color: var(--color-danger);
+}
+.nickname-panel__error[hidden] {
+  display: none;
+}
+
+/* ---------- matchmaking (Quick Play / Ranked) ---------- */
+#qpPresetGrid,
+#rankedPresetGrid {
+  grid-template-columns: 1fr;
+}
+.mode-grid--queue-time {
+  grid-template-columns: repeat(5, 1fr);
+}
+@media (max-width: 480px) {
+  .mode-grid--queue-time {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+.ranked-status {
+  font-size: 12px;
+  color: var(--color-text-secondary);
+  text-align: center;
+}
+
 .settings-overlay {
   z-index: 110; /* above the net-banner (100) — settings should always be reachable */
+}
+
+.nickname-overlay {
+  z-index: 110;
 }
 
 /* ---------- rules (menu-only "How to play") ---------- */

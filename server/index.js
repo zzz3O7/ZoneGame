@@ -8,6 +8,7 @@ import { serveStatic } from "./staticServer.js";
 import { readSessionCookie } from "./cookies.js";
 import { getSessionPlayer } from "./sessionStore.js";
 import { MatchmakingQueue } from "./matchmakingQueue.js";
+import { MATCHMAKING_TIME_MODES } from "../shared/config.js";
 
 // A plain http.Server sits in front of the WS server now, because
 // Google's OAuth redirect (GET /auth/google/callback) is a real browser
@@ -104,6 +105,10 @@ wss.on("connection", (ws, req) => {
           ws.send(JSON.stringify({ type: MSG.ERROR, message: "Set a nickname before playing rated matches" }));
           return;
         }
+        if (!MATCHMAKING_TIME_MODES.includes(msg.timeMode)) {
+          ws.send(JSON.stringify({ type: MSG.ERROR, message: "Invalid time control" }));
+          return;
+        }
 
         // Rated always uses the account's own nickname (never a
         // client-supplied one); unrated matchmaking accepts guests, so
@@ -114,15 +119,18 @@ wss.on("connection", (ws, req) => {
           return;
         }
 
-        const entry = { nickname, accountPlayerId: ws.__accountPlayer?.id ?? null, params: msg.params };
-        const pair = queue.join(ws, entry, rated);
+        const entry = { nickname, accountPlayerId: ws.__accountPlayer?.id ?? null };
+        const pair = queue.join(ws, entry, rated, msg.timeMode);
         if (!pair) {
           ws.send(JSON.stringify({ type: MSG.QUEUED }));
           return;
         }
 
-        const [a, b] = pair;
-        const { match, players } = manager.createMatchForPair(a, b, a.params, rated);
+        const [a, b, resolvedTimeMode] = pair;
+        // Board preset is always "classic" for matchmaking today — see
+        // the comment atop matchmakingQueue.js.
+        const params = { mode: "classic", timeMode: resolvedTimeMode };
+        const { match, players } = manager.createMatchForPair(a, b, params, rated);
         [a, b].forEach((entry, i) => {
           entry.ws.send(
             JSON.stringify({
