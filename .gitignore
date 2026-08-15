@@ -3,4 +3,4 @@ docs/sound-lab.html
 docs/rating-lab.html
 .env
 server/data/
-docs/deploy.txt
+docs/deploy.md
