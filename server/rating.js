@@ -184,7 +184,19 @@ export function updateTau({ tauA, tauB, muA, muB, sigmaA, sigmaB, margin }) {
   const delta = muA - muB;
   const expectedMargin = Math.tanh(delta / MARGIN_C_SCALE);
   const e = margin - expectedMargin;
-  const rho2 = (sigmaA * sigmaA + tauA * tauA + sigmaB * sigmaB + tauB * tauB) / (MARGIN_C_SCALE * MARGIN_C_SCALE);
+  // rho2 needs the same saturation correction as expectedMargin got above,
+  // not just the mean. Margin is bounded to [-1,1], so once expectedMargin
+  // is already near an edge there's little room left for it to vary — the
+  // achievable variance must shrink near the boundary (same shape as a
+  // Bernoulli's p(1-p) shrinking near 0/1). Without this, rho2 stays flat
+  // regardless of how lopsided the matchup already is, which systematically
+  // overestimates expected variance for any real mismatch and drags tau
+  // down for everyone — confirmed via population simulation: tau collapsed
+  // to a near-universal value at TAU_MIN regardless of true consistency.
+  // This is the delta-method (first-order) correction: Var(tanh(t)) ~=
+  // tanh'(t)^2 * Var(t), and tanh'(t) = 1 - tanh(t)^2.
+  const rho2raw = (sigmaA * sigmaA + tauA * tauA + sigmaB * sigmaB + tauB * tauB) / (MARGIN_C_SCALE * MARGIN_C_SCALE);
+  const rho2 = rho2raw * (1 - expectedMargin * expectedMargin) ** 2;
   const surpriseRatio = (e * e) / Math.max(rho2, 1e-9);
 
   const shareA = (tauA * tauA) / (tauA * tauA + tauB * tauB);
