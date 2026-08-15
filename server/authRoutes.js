@@ -1,7 +1,7 @@
 import { randomUUID } from "crypto";
 import { authConfig, isAuthConfigured } from "./config.js";
 import { buildGoogleAuthUrl, exchangeCodeForUserInfo } from "./googleOAuth.js";
-import { findOrCreatePlayerByGoogleSub, setNickname, NicknameError } from "./playerRepository.js";
+import { findOrCreatePlayerByGoogleSub, setNickname, NicknameError, displayRating } from "./playerRepository.js";
 import { createSession, getSessionPlayer, destroySession } from "./sessionStore.js";
 import { readSessionCookie, buildSessionCookie } from "./cookies.js";
 import { log } from "./logger.js";
@@ -99,7 +99,7 @@ export async function handleAuthRequest(req, res, url) {
       loggedIn: true,
       email: player.email,
       nickname: player.nickname,
-      rating: player.rating,
+      rating: displayRating(player),
     });
     return true;
   }

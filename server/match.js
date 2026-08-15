@@ -5,7 +5,7 @@ import { resolveParams } from "../shared/params.js";
 import { MSG } from "../shared/net/protocol.js";
 import { DISCONNECT_ABORT_MS, REMATCH_TIMEOUT_MS } from "../shared/config.js";
 import { log, shortId, formatDuration } from "./logger.js";
-import { getPlayerById } from "./playerRepository.js";
+import { getPlayerById, displayRating } from "./playerRepository.js";
 
 export class Match {
   constructor(matchId, inviteCode, rawParams, onClose, onGameEnd = null, rated = false) {
@@ -366,7 +366,7 @@ export class Match {
     return this.players.map((p) => ({
       index: p.playerIndex,
       nickname: p.nickname,
-      rating: this.rated && p.accountPlayerId != null ? (getPlayerById(p.accountPlayerId)?.rating ?? null) : null,
+      rating: this.rated && p.accountPlayerId != null ? displayRating(getPlayerById(p.accountPlayerId)) : null,
     }));
   }
 

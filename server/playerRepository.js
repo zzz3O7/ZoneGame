@@ -9,9 +9,7 @@ export class NicknameError extends Error {
   }
 }
 
-const insertPlayer = db.prepare(
-  `INSERT INTO players (google_sub, email, created_at) VALUES (?, ?, ?)`,
-);
+const insertPlayer = db.prepare(`INSERT INTO players (google_sub, email, created_at) VALUES (?, ?, ?)`);
 const getByGoogleSub = db.prepare(`SELECT * FROM players WHERE google_sub = ?`);
 const getById = db.prepare(`SELECT * FROM players WHERE id = ?`);
 const updateNickname = db.prepare(`UPDATE players SET nickname = ? WHERE id = ?`);
@@ -30,16 +28,22 @@ export function getPlayerById(id) {
   return getById.get(id) || null;
 }
 
+// Single source of truth for "what number does the player see" — always
+// the rounded skill mean, floored so players never see a negative or
+// unsettlingly-low number even in extreme cases (sigma/tau dynamics could
+// in principle push a real beginner's internal mu quite low despite the
+// INITIAL_MU headroom). sigma/tau never surface to clients directly.
+export function displayRating(player) {
+  return player ? Math.max(100, Math.round(player.rating_mu)) : null;
+}
+
 // Throws NicknameError("invalid" | "taken") rather than returning a
 // boolean, so the route handler can give a specific error message
 // instead of a generic "failed" — these are two different UX cases.
 export function setNickname(playerId, rawNickname) {
   const nickname = rawNickname.trim();
   if (!NICKNAME_PATTERN.test(nickname)) {
-    throw new NicknameError(
-      "invalid",
-      "Nickname must be 3-20 characters: letters, numbers, underscore, hyphen only.",
-    );
+    throw new NicknameError("invalid", "Nickname must be 3-20 characters: letters, numbers, underscore, hyphen only.");
   }
   try {
     updateNickname.run(nickname, playerId);

@@ -16,8 +16,18 @@ db.exec(`
     google_sub TEXT UNIQUE NOT NULL,
     email TEXT NOT NULL,
     nickname TEXT UNIQUE,
-    rating INTEGER NOT NULL DEFAULT 1000,
+    -- Three-parameter rating state (see server/rating.js for the math):
+    -- mu = skill mean, sigma = certainty of that estimate (shrinks with
+    -- games played), tau = consistency/performance-variance (stable trait,
+    -- estimated from margin data). Defaults mirror rating.js's INITIAL_*.
+    -- Displayed rating is always round(rating_mu) — see displayRating().
+    rating_mu REAL NOT NULL DEFAULT 1500,
+    rating_sigma REAL NOT NULL DEFAULT 350,
+    rating_tau REAL NOT NULL DEFAULT 580,
     games_played INTEGER NOT NULL DEFAULT 0,
+    -- Set on every rated game; reserved for future sigma-regrowth-on-
+    -- inactivity behavior (not implemented yet — see docs/TODO).
+    last_rated_game_at INTEGER,
     created_at INTEGER NOT NULL
   );
 
@@ -26,17 +36,21 @@ db.exec(`
   CREATE UNIQUE INDEX IF NOT EXISTS idx_players_nickname_ci
     ON players (nickname COLLATE NOCASE);
 
-  -- Schema for step 4 (rating integration) — created now so there's a
-  -- single source of truth for the schema, not touched by anything yet.
   CREATE TABLE IF NOT EXISTS games (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     player0_id INTEGER REFERENCES players(id),
     player1_id INTEGER REFERENCES players(id),
     winner INTEGER, -- 0, 1, or NULL for draw
-    rating_before_0 INTEGER,
-    rating_before_1 INTEGER,
-    rating_after_0 INTEGER,
-    rating_after_1 INTEGER,
+    score_0 INTEGER,
+    score_1 INTEGER,
+    end_reason TEXT, -- "no-moves" | "resign" | "timeout" | "abort"
+    margin_applied INTEGER, -- 0/1: whether the score margin fed this update
+    -- Full before/after snapshot of the three-parameter rating state, so
+    -- history is self-explaining without recomputation.
+    mu_before_0 REAL, sigma_before_0 REAL, tau_before_0 REAL,
+    mu_after_0 REAL, sigma_after_0 REAL, tau_after_0 REAL,
+    mu_before_1 REAL, sigma_before_1 REAL, tau_before_1 REAL,
+    mu_after_1 REAL, sigma_after_1 REAL, tau_after_1 REAL,
     params_json TEXT,
     started_at INTEGER NOT NULL,
     ended_at INTEGER
