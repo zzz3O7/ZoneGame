@@ -11,3 +11,5 @@ journalctl -u zonegame -n 30 --no-pager
 LOCAL:
 node --env-file=.env index.js
 http://127.0.0.1:8080/
+
+
