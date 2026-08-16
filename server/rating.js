@@ -156,23 +156,26 @@ export function applyInactivityRegrowth(sigma, lastRatedGameAt, now = Date.now()
 
 // --- Visible-rating cosmetic modifier ----------------------------------
 
-// Only meaningful for a natural "no-moves" finish — resign/timeout/abort
-// scores don't reflect a real margin. Returns modifier=1 (no-op) otherwise.
-export function computeMarginModifier(score0, score1, endReason) {
-  if (endReason !== "no-moves") return { modifier: 1, marginApplied: false, margin: null };
-  const total = score0 + score1;
-  if (!(total > 0)) return { modifier: 1, marginApplied: false, margin: null };
-
-  const margin = (score0 - score1) / total; // player0's perspective, in [-1, 1]
+// Every ending now produces a margin — no endReason gating here anymore.
+// Normalized by the board's total point capacity (not score0+score1):
+// that way the margin reflects how much of the WHOLE board was actually
+// settled, not just the ratio within whatever small slice got contested,
+// so a truncated game with little decided correctly reads as a small,
+// honest margin instead of an artificially confident one from a tiny
+// denominator. resign's score0/score1 are expected to already have the
+// winner's remaining-points award folded in by the caller — this
+// function just normalizes and squashes whatever it's given.
+export function computeMarginModifier(score0, score1, totalBoardPoints) {
+  const margin = clamp((score0 - score1) / totalBoardPoints, -1, 1); // player0's perspective
   const squashed = Math.tanh(MARGIN_BETA * Math.abs(margin));
   const modifier = 1 + MARGIN_MODIFIER_CAP * (2 * squashed - 1); // in [0.85, 1.15]
-  return { modifier, marginApplied: true, margin };
+  return { modifier, margin };
 }
 
 // --- tau (consistency) EWMA ---------------------------------------------
 
 // Uses the raw, unclamped margin — no cosmetic cap here, this is where
-// margin should do its real work. Call only when marginApplied is true.
+// margin should do its real work.
 //
 // expectedMargin is tanh-bounded (not a raw linear delta/C_SCALE) because
 // margin itself can never exceed +/-1 — a plain linear map lets the
@@ -180,7 +183,7 @@ export function computeMarginModifier(score0, score1, endReason) {
 // mu gap grows large, which reads a stable, perfectly consistent blowout
 // as endless surprise and drives tau up without bound. Bounding it means
 // a persistent, exactly-repeated result correctly reads as low variance.
-export function updateTau({ tauA, tauB, muA, muB, sigmaA, sigmaB, margin }) {
+export function updateTau({ tauA, tauB, muA, muB, sigmaA, sigmaB, margin, remainingPossiblePoints, totalBoardPoints }) {
   const delta = muA - muB;
   const expectedMargin = Math.tanh(delta / MARGIN_C_SCALE);
   const e = margin - expectedMargin;
@@ -195,18 +198,33 @@ export function updateTau({ tauA, tauB, muA, muB, sigmaA, sigmaB, margin }) {
   // to a near-universal value at TAU_MIN regardless of true consistency.
   // This is the delta-method (first-order) correction: Var(tanh(t)) ~=
   // tanh'(t)^2 * Var(t), and tanh'(t) = 1 - tanh(t)^2.
+  // rho2 measures ONLY genuine model uncertainty — deliberately untouched
+  // by how much of the board got decided. That's a separate question (see
+  // evidenceWeight below), and conflating the two here previously caused a
+  // real bug: inflating rho2 by incompleteness made ANY residual look
+  // "unsurprising" as truncation grew, guaranteeing tau drifted DOWN for
+  // heavily-truncated games regardless of what actually happened, instead
+  // of correctly having ~no effect either direction.
   const rho2raw = (sigmaA * sigmaA + tauA * tauA + sigmaB * sigmaB + tauB * tauB) / (MARGIN_C_SCALE * MARGIN_C_SCALE);
   const rho2 = rho2raw * (1 - expectedMargin * expectedMargin) ** 2;
   const surpriseRatio = (e * e) / Math.max(rho2, 1e-9);
 
+  // How much this game's evidence should be trusted at all, separate from
+  // how surprising it was. Scales linearly with how much of the board was
+  // actually decided — a natural no-moves finish has ~nothing left, so
+  // this is ~1 (full trust) by construction, no endReason check needed. A
+  // fully-undecided abort has weight 0: the whole update term vanishes,
+  // tau genuinely doesn't move, rather than being nudged toward "unsurprising."
+  const evidenceWeight = 1 - remainingPossiblePoints / totalBoardPoints;
+
   const shareA = (tauA * tauA) / (tauA * tauA + tauB * tauB);
   const tauA2 = clamp(
-    tauA * tauA * (1 + TAU_ALPHA * shareA * (surpriseRatio - 1)),
+    tauA * tauA * (1 + TAU_ALPHA * evidenceWeight * shareA * (surpriseRatio - 1)),
     TAU_MIN * TAU_MIN,
     TAU_MAX * TAU_MAX,
   );
   const tauB2 = clamp(
-    tauB * tauB * (1 + TAU_ALPHA * (1 - shareA) * (surpriseRatio - 1)),
+    tauB * tauB * (1 + TAU_ALPHA * evidenceWeight * (1 - shareA) * (surpriseRatio - 1)),
     TAU_MIN * TAU_MIN,
     TAU_MAX * TAU_MAX,
   );

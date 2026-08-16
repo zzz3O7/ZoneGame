@@ -3,7 +3,7 @@ import { db } from "./db.js";
 const insertGame = db.prepare(`
   INSERT INTO games (
     player0_id, player1_id, winner,
-    score_0, score_1, end_reason, margin_applied,
+    score_0, score_1, end_reason, margin, remaining_possible_points, total_board_points,
     mu_before_0, sigma_before_0, tau_before_0,
     mu_after_0, sigma_after_0, tau_after_0,
     mu_before_1, sigma_before_1, tau_before_1,
@@ -11,7 +11,7 @@ const insertGame = db.prepare(`
     params_json, started_at, ended_at
   ) VALUES (
     @player0_id, @player1_id, @winner,
-    @score_0, @score_1, @end_reason, @margin_applied,
+    @score_0, @score_1, @end_reason, @margin, @remaining_possible_points, @total_board_points,
     @mu_before_0, @sigma_before_0, @tau_before_0,
     @mu_after_0, @sigma_after_0, @tau_after_0,
     @mu_before_1, @sigma_before_1, @tau_before_1,

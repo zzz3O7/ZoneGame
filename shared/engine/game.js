@@ -27,6 +27,12 @@ export class Game {
     const bonusMarkers = CaveGenerator.placeBonusMarkers(grid, 5, 6, rng);
 
     this.board = new Board(grid, bonusMarkers);
+    // Fixed at construction — the board's total point capacity never
+    // changes after generation, so this is a one-time snapshot, not a
+    // live-recomputed value (unlike remainingPossiblePoints below).
+    let floorCells = 0;
+    for (const row of grid) for (const cell of row) if (cell === 1) floorCells++;
+    this.totalBoardPoints = floorCells + bonusMarkers.size * 5;
     this.zones = [];
     this.players = [
       new Player(0, "Player 1", params.startingDominoes),
@@ -146,6 +152,30 @@ export class Game {
     const [s0, s1] = this.players.map((p) => p.score);
     if (s0 === s1) return null;
     return s0 > s1 ? 0 : 1;
+  }
+
+  // Upper bound on points still winnable by anyone: zones currently in
+  // progress (guaranteed to resolve to someone), plus floor cells not yet
+  // claimed by any zone, plus bonus markers not yet claimed by any zone.
+  // Deliberately generous rather than exact — it only needs to be a SAFE
+  // bound, since it's used to prove a trailing player mathematically
+  // cannot catch up (a looser bound only makes that harder to prove,
+  // never wrong to conclude). Also doubles as the discount term for how
+  // much of a truncated game's outcome is still genuinely unresolved.
+  get remainingPossiblePoints() {
+    let points = 0;
+    for (const zone of this.zones) {
+      if (zone.active) points += zone.cost;
+    }
+    for (let r = 0; r < this.board.rows; r++) {
+      for (let c = 0; c < this.board.cols; c++) {
+        if (this.board.isFloor(r, c) && this.board.zoneIdAt(r, c) === null) points++;
+      }
+    }
+    for (const marker of this.board.bonusMarkers.values()) {
+      if (!marker.claimed) points += 5;
+    }
+    return points;
   }
 
   getStateHash() {

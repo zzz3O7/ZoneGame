@@ -156,14 +156,30 @@ export class Match {
     this.clock.freeze(now); // no increment — running out is not a completed move
 
     this.status = "over"; // a decided result, same standing as any other natural end — rematch still possible
-    this.endInfo = { reason: "timeout", winnerIndex: winner?.playerIndex ?? null };
+    const winnerIndex = this._wasUnbeatablyAhead(flaggedIndex) ? null : (winner?.playerIndex ?? null);
+    this.endInfo = { reason: "timeout", winnerIndex };
     this._logMatchEnd("timeout");
     this.broadcast({
       type: MSG.MATCH_ENDED,
       reason: "timeout",
-      winnerIndex: winner?.playerIndex ?? null,
+      winnerIndex,
       clock: this.clock.snapshot(now), // clock is guaranteed non-null on this path
     });
+  }
+
+  // Chess-style "insufficient material" fairness check: if the player who
+  // timed out or disconnected already had a mathematically unbeatable
+  // lead — the opponent couldn't have caught up even by winning every
+  // remaining contestable point on the board — crediting a clean forfeit
+  // win to the remaining player isn't right either, since they hadn't
+  // actually secured that outcome on the board. Ruled a draw instead.
+  // Deliberately NOT applied to resign, which is a deliberate act, not an
+  // accident — see resign() below.
+  _wasUnbeatablyAhead(playerIndex) {
+    const [s0, s1] = this.game.players.map((p) => p.score);
+    const myScore = playerIndex === 0 ? s0 : s1;
+    const oppScore = playerIndex === 0 ? s1 : s0;
+    return myScore >= oppScore + this.game.remainingPossiblePoints;
   }
 
   attemptMove(ws, pieceType, shape, anchorRow, anchorCol) {
@@ -399,8 +415,14 @@ export class Match {
     // disconnected player may well have been ahead on points. The forfeit
     // outcome lives only in this message; the client treats MATCH_ENDED as
     // authoritative and shows the endcard from it directly.
+    // One narrow exception: _wasUnbeatablyAhead below, which can turn this
+    // into a draw (never a win) — see that method for the reasoning.
     this.status = "aborted";
-    this.endInfo = { reason: "abort", winnerIndex: remaining?.playerIndex ?? null };
+    const winnerIndex =
+      remaining != null && this._wasUnbeatablyAhead(1 - remaining.playerIndex)
+        ? null
+        : (remaining?.playerIndex ?? null);
+    this.endInfo = { reason: "abort", winnerIndex };
     this._logMatchEnd("abort");
 
     // Same reasoning as resign() — an abandonment isn't a completed
@@ -414,7 +436,7 @@ export class Match {
       this._sendTo(remaining.ws, {
         type: MSG.MATCH_ENDED,
         reason: "abort",
-        winnerIndex: remaining.playerIndex,
+        winnerIndex,
         clock: this.clock ? this.clock.snapshot(now) : null,
       });
     }

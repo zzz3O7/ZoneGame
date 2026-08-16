@@ -44,7 +44,15 @@ db.exec(`
     score_0 INTEGER,
     score_1 INTEGER,
     end_reason TEXT, -- "no-moves" | "resign" | "timeout" | "abort"
-    margin_applied INTEGER, -- 0/1: whether the score margin fed this update
+    -- margin: the actual [-1,1] value fed into computeMarginModifier/updateTau
+    -- (already includes resign's remaining-points-to-winner award, if any) —
+    -- stored directly rather than recomputed later, so a future per-player
+    -- estimator reading this game as historical input can't drift from what
+    -- was actually used at the time. remaining/total let it also reconstruct
+    -- how much this specific game's evidence should be discounted.
+    margin REAL,
+    remaining_possible_points INTEGER,
+    total_board_points INTEGER,
     -- Full before/after snapshot of the three-parameter rating state, so
     -- history is self-explaining without recomputation.
     mu_before_0 REAL, sigma_before_0 REAL, tau_before_0 REAL,

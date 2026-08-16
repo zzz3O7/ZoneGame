@@ -27,7 +27,25 @@ export function finalizeRatedGame(match) {
   const winnerIndex = match.endInfo?.winnerIndex ?? null;
   const endReason = match.endInfo?.reason ?? null;
   const scoreP0 = winnerIndex === 0 ? 1 : winnerIndex === 1 ? 0 : 0.5;
-  const [rawScore0, rawScore1] = match.game.players.map((p) => p.score);
+
+  let [rawScore0, rawScore1] = match.game.players.map((p) => p.score);
+  const totalBoardPoints = match.game.totalBoardPoints;
+  const remainingPossiblePoints = match.game.remainingPossiblePoints;
+
+  // Resignation is a deliberate concession — award whatever was still
+  // contestable to the winner, since a rational player doesn't resign a
+  // position they believe they're winning. Only score0/score1 (fed to
+  // margin below) get this adjustment; the raw board score stored in
+  // history stays the honest, unadjusted value. Timeout/abort do NOT get
+  // this treatment — a disconnect carries real uncertainty about who was
+  // ahead, which is exactly why the insufficient-material draw check
+  // exists upstream in match.js instead of an assumption like this one.
+  let marginScore0 = rawScore0,
+    marginScore1 = rawScore1;
+  if (endReason === "resign" && winnerIndex != null) {
+    if (winnerIndex === 0) marginScore0 += remainingPossiblePoints;
+    else marginScore1 += remainingPossiblePoints;
+  }
 
   const muBefore0 = player0.rating_mu,
     tauBefore0 = player0.rating_tau;
@@ -55,29 +73,32 @@ export function finalizeRatedGame(match) {
   });
 
   // Layer 2: small capped cosmetic modifier on the visible mu delta.
-  const { modifier, marginApplied, margin } = computeMarginModifier(rawScore0, rawScore1, endReason);
+  // Every ending produces a margin now — normalized by the board's total
+  // capacity, a truncated game naturally reads as a small, honest margin
+  // rather than needing an endReason check to be excluded.
+  const { modifier, margin } = computeMarginModifier(marginScore0, marginScore1, totalBoardPoints);
 
   const muAfter0 = muBefore0 + binary.muDeltaA * modifier;
   const muAfter1 = muBefore1 + binary.muDeltaB * modifier;
   const sigmaAfter0 = binary.sigmaAfterA;
   const sigmaAfter1 = binary.sigmaAfterB;
 
-  // Layer 3: tau EWMA, fed the raw unclamped margin — only when one exists.
-  let tauAfter0 = tauBefore0,
-    tauAfter1 = tauBefore1;
-  if (marginApplied) {
-    const tau = updateTau({
-      tauA: tauBefore0,
-      tauB: tauBefore1,
-      muA: muBefore0,
-      muB: muBefore1,
-      sigmaA: sigmaBefore0,
-      sigmaB: sigmaBefore1,
-      margin,
-    });
-    tauAfter0 = tau.tauAfterA;
-    tauAfter1 = tau.tauAfterB;
-  }
+  // Layer 3: tau, fed the raw unclamped margin plus how much of the board
+  // was still genuinely contestable when this game ended — no endReason
+  // branching here either, see updateTau's own comment.
+  const tau = updateTau({
+    tauA: tauBefore0,
+    tauB: tauBefore1,
+    muA: muBefore0,
+    muB: muBefore1,
+    sigmaA: sigmaBefore0,
+    sigmaB: sigmaBefore1,
+    margin,
+    remainingPossiblePoints,
+    totalBoardPoints,
+  });
+  const tauAfter0 = tau.tauAfterA;
+  const tauAfter1 = tau.tauAfterB;
 
   const ratingBefore0 = Math.round(muBefore0);
   const ratingBefore1 = Math.round(muBefore1);
@@ -91,7 +112,9 @@ export function finalizeRatedGame(match) {
     score_0: rawScore0,
     score_1: rawScore1,
     end_reason: endReason,
-    margin_applied: marginApplied ? 1 : 0,
+    margin,
+    remaining_possible_points: remainingPossiblePoints,
+    total_board_points: totalBoardPoints,
     mu_before_0: muBefore0,
     sigma_before_0: sigmaBefore0,
     tau_before_0: tauBefore0,
@@ -112,8 +135,8 @@ export function finalizeRatedGame(match) {
   log(
     `Rated match ${shortId(match.matchId)}: ` +
       `${player0.nickname ?? player0.email} ${ratingBefore0}->${ratingAfter0}, ` +
-      `${player1.nickname ?? player1.email} ${ratingBefore1}->${ratingAfter1}` +
-      (marginApplied ? ` (margin=${margin.toFixed(2)}, mod=${modifier.toFixed(3)})` : ` (${endReason}, no margin)`),
+      `${player1.nickname ?? player1.email} ${ratingBefore1}->${ratingAfter1} ` +
+      `(${endReason}, margin=${margin.toFixed(2)}, mod=${modifier.toFixed(3)}, remaining=${remainingPossiblePoints}/${totalBoardPoints})`,
   );
 
   // Personalized so each client just reads "my" before/after without
