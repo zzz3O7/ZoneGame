@@ -1,6 +1,6 @@
 import { getPlayerById } from "./playerRepository.js";
 import { recordRatedGame } from "./gameRepository.js";
-import { computeBinaryUpdate, computeMarginModifier, updateTau, applyInactivityRegrowth } from "./rating.js";
+import { computeBinaryUpdate, computeMarginModifier, applyInactivityRegrowth } from "./rating.js";
 import { log, shortId } from "./logger.js";
 import { MSG } from "../shared/net/protocol.js";
 
@@ -47,10 +47,8 @@ export function finalizeRatedGame(match) {
     else marginScore1 += remainingPossiblePoints;
   }
 
-  const muBefore0 = player0.rating_mu,
-    tauBefore0 = player0.rating_tau;
-  const muBefore1 = player1.rating_mu,
-    tauBefore1 = player1.rating_tau;
+  const muBefore0 = player0.rating_mu;
+  const muBefore1 = player1.rating_mu;
 
   // Widen sigma for time away since each player's last rated game before
   // using it — this is the only place inactivity regrowth applies. The
@@ -61,44 +59,29 @@ export function finalizeRatedGame(match) {
   const sigmaBefore1 = applyInactivityRegrowth(player1.rating_sigma, player1.last_rated_game_at, endedAt);
 
   // Layer 1: margin-blind binary update — this is the only thing that
-  // moves sigma, and the only source of the "raw" mu delta.
+  // moves sigma, and the only source of the "raw" mu delta. Performance
+  // variance is TAU_GLOBAL now (a fixed constant inside rating.js), not
+  // passed in here — see that constant's comment for why per-player
+  // tau estimation was removed.
   const binary = computeBinaryUpdate({
     muA: muBefore0,
     sigmaA: sigmaBefore0,
-    tauA: tauBefore0,
     muB: muBefore1,
     sigmaB: sigmaBefore1,
-    tauB: tauBefore1,
     scoreA: scoreP0,
   });
 
   // Layer 2: small capped cosmetic modifier on the visible mu delta.
   // Every ending produces a margin now — normalized by the board's total
   // capacity, a truncated game naturally reads as a small, honest margin
-  // rather than needing an endReason check to be excluded.
+  // rather than needing an endReason check to be excluded. This is
+  // margin's only remaining consumer.
   const { modifier, margin } = computeMarginModifier(marginScore0, marginScore1, totalBoardPoints);
 
   const muAfter0 = muBefore0 + binary.muDeltaA * modifier;
   const muAfter1 = muBefore1 + binary.muDeltaB * modifier;
   const sigmaAfter0 = binary.sigmaAfterA;
   const sigmaAfter1 = binary.sigmaAfterB;
-
-  // Layer 3: tau, fed the raw unclamped margin plus how much of the board
-  // was still genuinely contestable when this game ended — no endReason
-  // branching here either, see updateTau's own comment.
-  const tau = updateTau({
-    tauA: tauBefore0,
-    tauB: tauBefore1,
-    muA: muBefore0,
-    muB: muBefore1,
-    sigmaA: sigmaBefore0,
-    sigmaB: sigmaBefore1,
-    margin,
-    remainingPossiblePoints,
-    totalBoardPoints,
-  });
-  const tauAfter0 = tau.tauAfterA;
-  const tauAfter1 = tau.tauAfterB;
 
   const ratingBefore0 = Math.round(muBefore0);
   const ratingBefore1 = Math.round(muBefore1);
@@ -117,16 +100,12 @@ export function finalizeRatedGame(match) {
     total_board_points: totalBoardPoints,
     mu_before_0: muBefore0,
     sigma_before_0: sigmaBefore0,
-    tau_before_0: tauBefore0,
     mu_after_0: muAfter0,
     sigma_after_0: sigmaAfter0,
-    tau_after_0: tauAfter0,
     mu_before_1: muBefore1,
     sigma_before_1: sigmaBefore1,
-    tau_before_1: tauBefore1,
     mu_after_1: muAfter1,
     sigma_after_1: sigmaAfter1,
-    tau_after_1: tauAfter1,
     params_json: JSON.stringify(match.params),
     started_at: match._gameStartedAt ?? endedAt,
     ended_at: endedAt,
