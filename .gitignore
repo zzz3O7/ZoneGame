@@ -1,9 +1,5 @@
 node_modules/
-docs/sound-lab.html
-docs/rating-lab.html
 .env
 server/data/
 docs/deploy.md
-docs/population-sim-output.json
-docs/population-sim.mjs
-docs/population-viewer.html
+labs/*
