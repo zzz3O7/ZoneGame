@@ -1,4 +1,10 @@
-import { MATCHMAKING_TIME_MODES, MATCHMAKING_ANY_FALLBACK } from "../shared/config.js";
+import {
+  MATCHMAKING_TIME_MODES,
+  MATCHMAKING_ANY_FALLBACK,
+  MATCHMAKING_WINDOW_BASE_DEVIATION,
+  MATCHMAKING_WINDOW_GROWTH_PER_SEC,
+} from "../shared/config.js";
+import { winProbability } from "./rating.js";
 
 const SPECIFIC_TIME_MODES = MATCHMAKING_TIME_MODES.filter((t) => t !== "any");
 
@@ -8,12 +14,21 @@ const SPECIFIC_TIME_MODES = MATCHMAKING_TIME_MODES.filter((t) => t !== "any");
 // here yet. If a second preset is ever added to matchmaking, this needs a
 // preset key alongside `rated` below; not building that ahead of need.
 //
-// Within a rated/unrated pool, each specific time mode has its own FIFO
-// queue. "any" is a separate pool that cross-matches: joining "any" first
-// tries to fill whichever specific queue already has someone waiting
-// (inheriting their time control), and joining a specific queue first
-// checks whether an "any" player is already waiting to fill it. Only if
-// neither side finds a match does the entry actually wait — see join().
+// Pairing is rating-aware (see shared/config.js's MATCHMAKING_WINDOW_*
+// for the design). Entries carry `mu`/`sigma` when known (always for
+// rated — guests can't reach rated at all; for unrated whenever the
+// player is logged in) and `null` for guests. A `null` rating on either
+// side of a pairing means there's nothing to compare, so that pairing is
+// always accepted on rating grounds — guests behave like plain FIFO.
+//
+// Within a rated/unrated pool, each specific time mode has its own
+// waiting list. "any" is a separate flexible pool: an "any" waiter can
+// pair against any specific-mode waiter (inheriting their time control)
+// or another "any" waiter (falling back to MATCHMAKING_ANY_FALLBACK,
+// since neither side has a real preference to inherit). Matching happens
+// both synchronously on join() and via a periodic sweep() — see
+// server/index.js for the timer — since a waiting pair's acceptance
+// window keeps widening even when nobody new joins.
 export class MatchmakingQueue {
   constructor() {
     this.rated = this._emptyPool();
@@ -28,37 +43,162 @@ export class MatchmakingQueue {
     return rated ? this.rated : this.unrated;
   }
 
+  // --- rating-aware acceptance -------------------------------------
+
+  // How far from a coinflip (0.5 win probability) this entry currently
+  // accepts, given how long it's been waiting. Widens linearly, capped
+  // at 0.5 (accept literally anyone).
+  _deviationFor(entry, now) {
+    const waitedSec = Math.max(0, (now - entry.joinedAt) / 1000);
+    return Math.min(0.5, MATCHMAKING_WINDOW_BASE_DEVIATION + MATCHMAKING_WINDOW_GROWTH_PER_SEC * waitedSec);
+  }
+
+  // Predicted deviation-from-coinflip for a specific pairing, or null
+  // when either side has no known rating (guest) — nothing to compare.
+  _pairDeviation(a, b) {
+    if (a.mu == null || b.mu == null) return null;
+    return Math.abs(winProbability({ muA: a.mu, sigmaA: a.sigma, muB: b.mu, sigmaB: b.sigma }) - 0.5);
+  }
+
+  _acceptable(a, b, now) {
+    // Never match a player against themself (two guests are both
+    // accountPlayerId === null, which must NOT count as "same identity").
+    if (a.accountPlayerId != null && b.accountPlayerId != null && a.accountPlayerId === b.accountPlayerId) {
+      return false;
+    }
+    const dev = this._pairDeviation(a, b);
+    if (dev == null) return true; // guest involved — no rating signal, accept like plain FIFO
+    // Accept once EITHER side's currently-widened tolerance covers the
+    // gap — a long-waiting player should be able to pull in a fresh one
+    // even though the fresh one's own tolerance hasn't widened yet.
+    return dev <= Math.max(this._deviationFor(a, now), this._deviationFor(b, now));
+  }
+
+  // Lower is a better match. A guest-involved pairing (no rating signal)
+  // sorts as the best possible score, so it never loses out to a distant
+  // rated candidate purely because of this scoring pass.
+  _matchScore(a, b) {
+    return this._pairDeviation(a, b) ?? 0;
+  }
+
+  // --- flat candidate view of a pool, for both join() and sweep() ------
+
+  // Every waiting entry, tagged with the time mode it resolves to if
+  // matched (null = flexible, i.e. an "any" waiter), plus a `remove`
+  // closure so a match can pull it out of wherever it actually lives.
+  _flatten(pool) {
+    const out = [];
+    for (const [mode, list] of pool.specific) {
+      for (const entry of list) {
+        out.push({ entry, mode, remove: () => this._removeFrom(list, entry) });
+      }
+    }
+    for (const entry of pool.any) {
+      out.push({ entry, mode: null, remove: () => this._removeFrom(pool.any, entry) });
+    }
+    return out;
+  }
+
+  _removeFrom(list, entry) {
+    const i = list.indexOf(entry);
+    if (i !== -1) list.splice(i, 1);
+  }
+
+  // Whether two flat candidates can share a time control: same specific
+  // mode, or either is flexible. Returns the resolved mode, or null if
+  // incompatible (two different specific modes).
+  _resolveMode(descA, descB) {
+    if (descA.mode && descB.mode) return descA.mode === descB.mode ? descA.mode : null;
+    return descA.mode || descB.mode || MATCHMAKING_ANY_FALLBACK;
+  }
+
+  // Finds the best acceptable match for `selfDesc` among `candidates`
+  // (both {entry, mode} shaped). Ties broken by longest wait.
+  _bestAgainst(selfDesc, candidates, now) {
+    let best = null;
+    for (const cand of candidates) {
+      if (cand.entry === selfDesc.entry) continue;
+      const resolvedMode = this._resolveMode(selfDesc, cand);
+      if (resolvedMode == null) continue; // incompatible time controls
+      if (!this._acceptable(selfDesc.entry, cand.entry, now)) continue;
+      const score = this._matchScore(selfDesc.entry, cand.entry);
+      if (!best || score < best.score || (score === best.score && cand.entry.joinedAt < best.cand.entry.joinedAt)) {
+        best = { cand, score, resolvedMode };
+      }
+    }
+    return best;
+  }
+
   // Returns [entryA, entryB, resolvedTimeMode] if joining completed a
   // pair, or null if this player is now waiting alone. resolvedTimeMode
-  // is always one of SPECIFIC_TIME_MODES, never "any" — by the time a
-  // pair exists, a concrete time control has always been settled on.
-  join(ws, entry, rated, timeMode) {
+  // is always one of SPECIFIC_TIME_MODES, never "any".
+  join(ws, entryData, rated, timeMode) {
     this.leave(ws); // guard against a double JOIN_QUEUE queuing twice
     const pool = this._poolFor(rated);
-    const self = { ws, ...entry }; // attach once, so every return path below carries ws — a bare `entry` return here previously shipped without it
+    const now = Date.now();
+    const self = { ws, ...entryData, joinedAt: now };
+    const selfDesc = { mode: timeMode === "any" ? null : timeMode, entry: self };
 
-    if (timeMode !== "any") {
-      // An "any" player already waiting is a ready-made match — they
-      // take whatever specific mode this new joiner asked for.
-      if (pool.any.length > 0) return [self, pool.any.shift(), timeMode];
-      const queue = pool.specific.get(timeMode);
-      queue.push(self);
-      if (queue.length >= 2) return [queue.shift(), queue.shift(), timeMode];
-      return null;
+    const candidates =
+      timeMode === "any"
+        ? this._flatten(pool) // an "any" joiner can pair against literally anyone waiting
+        : [
+            ...pool.any.map((entry) => ({ entry, mode: null, remove: () => this._removeFrom(pool.any, entry) })),
+            ...pool.specific
+              .get(timeMode)
+              .map((entry) => ({
+                entry,
+                mode: timeMode,
+                remove: () => this._removeFrom(pool.specific.get(timeMode), entry),
+              })),
+          ];
+
+    const match = this._bestAgainst(selfDesc, candidates, now);
+    if (match) {
+      match.cand.remove();
+      return [self, match.cand.entry, match.resolvedMode];
     }
 
-    // timeMode === "any": fill the first specific queue that already has
-    // someone waiting, inheriting their time control.
-    for (const mode of SPECIFIC_TIME_MODES) {
-      const queue = pool.specific.get(mode);
-      if (queue.length > 0) return [self, queue.shift(), mode];
-    }
-    // Nobody specific waiting either — park in the "any" pool. Two "any"
-    // players pairing with each other have nothing to inherit, so they
-    // fall back to a fixed default time control.
-    pool.any.push(self);
-    if (pool.any.length >= 2) return [pool.any.shift(), pool.any.shift(), MATCHMAKING_ANY_FALLBACK];
+    if (timeMode === "any") pool.any.push(self);
+    else pool.specific.get(timeMode).push(self);
     return null;
+  }
+
+  // Re-checks everyone still waiting for a now-acceptable pairing —
+  // windows widen purely with elapsed time, so two players who were both
+  // already waiting when they last joined might match now even though
+  // neither has taken a new action since. Called on a timer (see
+  // server/index.js), not from any player-triggered event.
+  //
+  // Greedy: repeatedly pulls the single best remaining pairing out of
+  // each pool until none are left. O(n^3) worst case across a full
+  // sweep, which is negligible at the queue sizes this game will see —
+  // see design discussion for why this wasn't worth optimizing further.
+  //
+  // Returns an array of [entryA, entryB, resolvedTimeMode, rated] tuples.
+  sweep(now = Date.now()) {
+    const results = [];
+    for (const rated of [true, false]) {
+      const pool = this._poolFor(rated);
+      for (;;) {
+        const flat = this._flatten(pool);
+        if (flat.length < 2) break;
+
+        let best = null;
+        for (let i = 0; i < flat.length; i++) {
+          const candidate = this._bestAgainst(flat[i], flat, now);
+          if (candidate && (!best || candidate.score < best.match.score)) {
+            best = { self: flat[i], match: candidate };
+          }
+        }
+        if (!best) break;
+
+        best.self.remove();
+        best.match.cand.remove();
+        results.push([best.self.entry, best.match.cand.entry, best.match.resolvedMode, rated]);
+      }
+    }
+    return results;
   }
 
   leave(ws) {

@@ -93,3 +93,26 @@ export const TIME_CUSTOM_LIMITS = {
 // validation/pairing) agree on the exact same set of valid keys.
 export const MATCHMAKING_TIME_MODES = ["bullet", "blitz", "rapid", "classical", "any"];
 export const MATCHMAKING_ANY_FALLBACK = "blitz";
+
+// Rating-aware queue pairing. Acceptance is expressed as a deviation from
+// a 50% predicted win probability (see rating.js's winProbability) rather
+// than a raw mu difference — that stays meaningful regardless of a
+// player's sigma or a future TAU_GLOBAL retune, since it's already the
+// outcome-space conversion of a mu gap, not the gap itself. A waiting
+// entry's acceptable deviation widens with elapsed wait time and is
+// capped at 0.5 (a pure coinflip — i.e. "accept anyone").
+//
+// Calibrated so a 200-mu-point gap between two fully-converged players
+// (sigma near SIGMA_MIN) starts out acceptable (~0.12 deviation at
+// TAU_GLOBAL=460), and the window is fully open (deviation clamps to
+// 0.5) after roughly 10 seconds of waiting — this project is still in
+// development, so fast pairing matters more than pairing precision.
+// Tune directly if real play feels off once there's actual queue traffic.
+export const MATCHMAKING_WINDOW_BASE_DEVIATION = 0.12;
+export const MATCHMAKING_WINDOW_GROWTH_PER_SEC = 0.04;
+
+// How often the queue re-checks everyone still waiting for a now-widened
+// match, independent of new players joining — see matchmakingQueue.js's
+// sweep(). Cheap at any realistic queue size (see design discussion),
+// so this can stay aggressive.
+export const MATCHMAKING_SWEEP_INTERVAL_MS = 1000;

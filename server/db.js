@@ -26,8 +26,7 @@ db.exec(`
     rating_mu REAL NOT NULL DEFAULT 1500,
     rating_sigma REAL NOT NULL DEFAULT 350,
     games_played INTEGER NOT NULL DEFAULT 0,
-    -- Set on every rated game; reserved for future sigma-regrowth-on-
-    -- inactivity behavior (not implemented yet — see docs/TODO).
+    -- Set on every rated game
     last_rated_game_at INTEGER,
     created_at INTEGER NOT NULL
   );

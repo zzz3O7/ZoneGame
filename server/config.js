@@ -16,8 +16,8 @@ export const authConfig = {
 export function isAuthConfigured() {
   return Boolean(
     authConfig.googleClientId &&
-      authConfig.googleClientSecret &&
-      authConfig.googleRedirectUri &&
-      authConfig.cookieSecret,
+    authConfig.googleClientSecret &&
+    authConfig.googleRedirectUri &&
+    authConfig.cookieSecret,
   );
 }

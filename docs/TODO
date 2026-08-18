@@ -1,12 +1,17 @@
 matchmaking
-
 prevent self mathcmaking
+
+include seed in games repository
+
+reject sound on move while not your turn
+
+engines to populate matchmaking queues
+
+different timeouts on disconnect for different time control settings
 
 account overview
 game history
 rating graph
-
-engine
 
 undo/redo history panel
 

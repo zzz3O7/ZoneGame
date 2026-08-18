@@ -8,7 +8,8 @@ import { serveStatic } from "./staticServer.js";
 import { readSessionCookie } from "./cookies.js";
 import { getSessionPlayer } from "./sessionStore.js";
 import { MatchmakingQueue } from "./matchmakingQueue.js";
-import { MATCHMAKING_TIME_MODES } from "../shared/config.js";
+import { MATCHMAKING_TIME_MODES, MATCHMAKING_SWEEP_INTERVAL_MS } from "../shared/config.js";
+import { applyInactivityRegrowth } from "./rating.js";
 
 // A plain http.Server sits in front of the WS server now, because
 // Google's OAuth redirect (GET /auth/google/callback) is a real browser
@@ -28,6 +29,43 @@ const httpServer = http.createServer(async (req, res) => {
 const wss = new WebSocketServer({ server: httpServer });
 const manager = new MatchManager();
 const queue = new MatchmakingQueue();
+
+// mu/sigma snapshot for matchmaking purposes, taken once at queue-join
+// time. Applies inactivity regrowth (a player back after a long break
+// should read as uncertain, not still pinned at their old converged
+// sigma) but deliberately skips it for guests (accountPlayer == null —
+// nothing to regrow) and does NOT re-apply it while queued; a queue wait
+// is seconds, not days, so it isn't worth recomputing per comparison.
+function ratingSnapshotFor(accountPlayer) {
+  if (!accountPlayer) return { mu: null, sigma: null };
+  return {
+    mu: accountPlayer.rating_mu,
+    sigma: applyInactivityRegrowth(accountPlayer.rating_sigma, accountPlayer.last_rated_game_at, Date.now()),
+  };
+}
+
+// Builds the match for a completed queue pairing and notifies both
+// sockets — the one path used by both an immediate on-join pairing and
+// a later sweep() pairing, so there's exactly one place that turns a
+// [entryA, entryB, resolvedTimeMode] tuple into a live match.
+function matchPair(a, b, resolvedTimeMode, rated) {
+  // Board preset is always "classic" for matchmaking today — see the
+  // comment atop matchmakingQueue.js.
+  const params = { mode: "classic", timeMode: resolvedTimeMode };
+  const { match, players } = manager.createMatchForPair(a, b, params, rated);
+  [a, b].forEach((entry, i) => {
+    entry.ws.send(
+      JSON.stringify({
+        type: MSG.QUEUE_MATCHED,
+        matchId: match.matchId,
+        inviteCode: match.inviteCode,
+        yourPlayerIndex: players[i].playerIndex,
+        sessionId: players[i].sessionId,
+        rated: match.rated,
+      }),
+    );
+  });
+}
 
 function heartbeat() {
   this.isAlive = true;
@@ -119,7 +157,11 @@ wss.on("connection", (ws, req) => {
           return;
         }
 
-        const entry = { nickname, accountPlayerId: ws.__accountPlayer?.id ?? null };
+        const entry = {
+          nickname,
+          accountPlayerId: ws.__accountPlayer?.id ?? null,
+          ...ratingSnapshotFor(ws.__accountPlayer),
+        };
         const pair = queue.join(ws, entry, rated, msg.timeMode);
         if (!pair) {
           ws.send(JSON.stringify({ type: MSG.QUEUED }));
@@ -127,22 +169,7 @@ wss.on("connection", (ws, req) => {
         }
 
         const [a, b, resolvedTimeMode] = pair;
-        // Board preset is always "classic" for matchmaking today — see
-        // the comment atop matchmakingQueue.js.
-        const params = { mode: "classic", timeMode: resolvedTimeMode };
-        const { match, players } = manager.createMatchForPair(a, b, params, rated);
-        [a, b].forEach((entry, i) => {
-          entry.ws.send(
-            JSON.stringify({
-              type: MSG.QUEUE_MATCHED,
-              matchId: match.matchId,
-              inviteCode: match.inviteCode,
-              yourPlayerIndex: players[i].playerIndex,
-              sessionId: players[i].sessionId,
-              rated: match.rated,
-            }),
-          );
-        });
+        matchPair(a, b, resolvedTimeMode, rated);
         return;
       }
 
@@ -242,5 +269,16 @@ const interval = setInterval(() => {
 }, 5000);
 
 wss.on("close", () => clearInterval(interval));
+
+// Re-checks waiting queue entries for pairings that have become
+// acceptable purely from elapsed wait time (widening windows — see
+// matchmakingQueue.js's sweep()), independent of anyone new joining.
+const sweepInterval = setInterval(() => {
+  for (const [a, b, resolvedTimeMode, rated] of queue.sweep()) {
+    matchPair(a, b, resolvedTimeMode, rated);
+  }
+}, MATCHMAKING_SWEEP_INTERVAL_MS);
+
+wss.on("close", () => clearInterval(sweepInterval));
 
 httpServer.listen(8080, "127.0.0.1", () => log("Server listening on :8080"));
