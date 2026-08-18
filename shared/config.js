@@ -111,6 +111,17 @@ export const MATCHMAKING_ANY_FALLBACK = "blitz";
 export const MATCHMAKING_WINDOW_BASE_DEVIATION = 0.12;
 export const MATCHMAKING_WINDOW_GROWTH_PER_SEC = 0.04;
 
+// A pairing between a known-rated player and a guest (no known rating)
+// has nothing comparable to score on the usual deviation-from-coinflip
+// scale, so it's given this fixed sentinel score instead — deliberately
+// worse than a genuinely good rated match, but better than a genuinely
+// bad one. 0.3 deviation corresponds to roughly an 80/20 predicted win
+// split: a known opponent worse than that (e.g. a ~90/10 mismatch) is
+// considered a worse pick than rolling the dice on an unrated stranger;
+// a known opponent better than that still wins out. Two guests pairing
+// with each other score 0 (best) — there's no asymmetry there to weigh.
+export const MATCHMAKING_UNKNOWN_OPPONENT_SCORE = 0.25;
+
 // How often the queue re-checks everyone still waiting for a now-widened
 // match, independent of new players joining — see matchmakingQueue.js's
 // sweep(). Cheap at any realistic queue size (see design discussion),

@@ -3,6 +3,7 @@ import {
   MATCHMAKING_ANY_FALLBACK,
   MATCHMAKING_WINDOW_BASE_DEVIATION,
   MATCHMAKING_WINDOW_GROWTH_PER_SEC,
+  MATCHMAKING_UNKNOWN_OPPONENT_SCORE,
 } from "../shared/config.js";
 import { winProbability } from "./rating.js";
 
@@ -18,8 +19,11 @@ const SPECIFIC_TIME_MODES = MATCHMAKING_TIME_MODES.filter((t) => t !== "any");
 // for the design). Entries carry `mu`/`sigma` when known (always for
 // rated — guests can't reach rated at all; for unrated whenever the
 // player is logged in) and `null` for guests. A `null` rating on either
-// side of a pairing means there's nothing to compare, so that pairing is
-// always accepted on rating grounds — guests behave like plain FIFO.
+// side of a pairing means there's nothing to compare on the usual scale,
+// so that pairing is always acceptable — but see _matchScore for how a
+// known-vs-guest pairing is still deprioritized behind a genuinely good
+// rated match, without needing separate gating logic. Two guests pair
+// with each other exactly like plain FIFO.
 //
 // Within a rated/unrated pool, each specific time mode has its own
 // waiting list. "any" is a separate flexible pool: an "any" waiter can
@@ -67,18 +71,26 @@ export class MatchmakingQueue {
       return false;
     }
     const dev = this._pairDeviation(a, b);
-    if (dev == null) return true; // guest involved — no rating signal, accept like plain FIFO
+    if (dev == null) return true; // guest involved on either side — nothing comparable, never block on it (see _matchScore for how it's deprioritized instead)
     // Accept once EITHER side's currently-widened tolerance covers the
     // gap — a long-waiting player should be able to pull in a fresh one
     // even though the fresh one's own tolerance hasn't widened yet.
     return dev <= Math.max(this._deviationFor(a, now), this._deviationFor(b, now));
   }
 
-  // Lower is a better match. A guest-involved pairing (no rating signal)
-  // sorts as the best possible score, so it never loses out to a distant
-  // rated candidate purely because of this scoring pass.
+  // Lower is a better match. Two known-rated entries score their real
+  // deviation-from-coinflip. Two guests (nothing comparable on either
+  // side) score 0 — an instant, best-case match. A known-vs-guest pair
+  // scores the fixed MATCHMAKING_UNKNOWN_OPPONENT_SCORE sentinel — see
+  // shared/config.js for why: this makes a rated match win out whenever
+  // one is actually good, while still letting a guest win out over a
+  // genuinely bad rated matchup, all without any separate gating logic.
   _matchScore(a, b) {
-    return this._pairDeviation(a, b) ?? 0;
+    const aKnown = a.mu != null;
+    const bKnown = b.mu != null;
+    if (aKnown && bKnown) return this._pairDeviation(a, b);
+    if (!aKnown && !bKnown) return 0;
+    return MATCHMAKING_UNKNOWN_OPPONENT_SCORE;
   }
 
   // --- flat candidate view of a pool, for both join() and sweep() ------

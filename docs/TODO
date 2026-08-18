@@ -1,9 +1,8 @@
-matchmaking
-prevent self mathcmaking
+is it worth? simplify rated vs unrated matchup in quick play: two queues, serch in another only if no good candidates in own queue
 
 include seed in games repository
 
-reject sound on move while not your turn
+    reject sound on move while not your turn
 
 engines to populate matchmaking queues
 
@@ -14,6 +13,7 @@ game history
 rating graph
 
 undo/redo history panel
+replay past games move by move
 
 ? history panel minimum height
 
