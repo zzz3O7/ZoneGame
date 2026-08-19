@@ -32,21 +32,6 @@ export function finalizeRatedGame(match) {
   const totalBoardPoints = match.game.totalBoardPoints;
   const remainingPossiblePoints = match.game.remainingPossiblePoints;
 
-  // Resignation is a deliberate concession — award whatever was still
-  // contestable to the winner, since a rational player doesn't resign a
-  // position they believe they're winning. Only score0/score1 (fed to
-  // margin below) get this adjustment; the raw board score stored in
-  // history stays the honest, unadjusted value. Timeout/abort do NOT get
-  // this treatment — a disconnect carries real uncertainty about who was
-  // ahead, which is exactly why the insufficient-material draw check
-  // exists upstream in match.js instead of an assumption like this one.
-  let marginScore0 = rawScore0,
-    marginScore1 = rawScore1;
-  if (endReason === "resign" && winnerIndex != null) {
-    if (winnerIndex === 0) marginScore0 += remainingPossiblePoints;
-    else marginScore1 += remainingPossiblePoints;
-  }
-
   const muBefore0 = player0.rating_mu;
   const muBefore1 = player1.rating_mu;
 
@@ -75,8 +60,10 @@ export function finalizeRatedGame(match) {
   // Every ending produces a margin now — normalized by the board's total
   // capacity, a truncated game naturally reads as a small, honest margin
   // rather than needing an endReason check to be excluded. This is
-  // margin's only remaining consumer.
-  const { modifier, margin } = computeMarginModifier(marginScore0, marginScore1, totalBoardPoints);
+  // margin's only remaining consumer. Resign no longer inflates this with
+  // the still-contestable points — margin reflects the board as it
+  // actually stood when the game ended, resign included.
+  const { modifier, margin } = computeMarginModifier(rawScore0, rawScore1, totalBoardPoints);
 
   const muAfter0 = muBefore0 + binary.muDeltaA * modifier;
   const muAfter1 = muBefore1 + binary.muDeltaB * modifier;
