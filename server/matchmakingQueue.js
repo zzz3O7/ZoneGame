@@ -72,10 +72,12 @@ export class MatchmakingQueue {
     }
     const dev = this._pairDeviation(a, b);
     if (dev == null) return true; // guest involved on either side — nothing comparable, never block on it (see _matchScore for how it's deprioritized instead)
-    // Accept once EITHER side's currently-widened tolerance covers the
-    // gap — a long-waiting player should be able to pull in a fresh one
-    // even though the fresh one's own tolerance hasn't widened yet.
-    return dev <= Math.max(this._deviationFor(a, now), this._deviationFor(b, now));
+    // Require BOTH sides' currently-widened tolerance to cover the gap —
+    // not just the more patient one. A long-waiting player who's willing
+    // to accept anyone shouldn't be able to snap up someone who joined a
+    // second ago into a match they'd never have agreed to on their own;
+    // a fresh joiner gets their own base tolerance's grace period first.
+    return dev <= Math.min(this._deviationFor(a, now), this._deviationFor(b, now));
   }
 
   // Lower is a better match. Two known-rated entries score their real
@@ -156,13 +158,11 @@ export class MatchmakingQueue {
         ? this._flatten(pool) // an "any" joiner can pair against literally anyone waiting
         : [
             ...pool.any.map((entry) => ({ entry, mode: null, remove: () => this._removeFrom(pool.any, entry) })),
-            ...pool.specific
-              .get(timeMode)
-              .map((entry) => ({
-                entry,
-                mode: timeMode,
-                remove: () => this._removeFrom(pool.specific.get(timeMode), entry),
-              })),
+            ...pool.specific.get(timeMode).map((entry) => ({
+              entry,
+              mode: timeMode,
+              remove: () => this._removeFrom(pool.specific.get(timeMode), entry),
+            })),
           ];
 
     const match = this._bestAgainst(selfDesc, candidates, now);

@@ -1,8 +1,7 @@
-is it worth? simplify rated vs unrated matchup in quick play: two queues, serch in another only if no good candidates in own queue
-
+visual indicator of the matchmaking window
 include seed in games repository
 
-    reject sound on move while not your turn
+    reject sound on move while not your turn (only multiplayer - currently silent)
 
 engines to populate matchmaking queues
 
