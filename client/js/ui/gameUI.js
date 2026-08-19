@@ -143,7 +143,10 @@ export class GameUI {
   }
 
   _submitPlacement(pieceType, shape, anchorRow, anchorCol) {
-    if (!this._isMyTurn()) return;
+    if (!this._isMyTurn()) {
+      this.sound.reject();
+      return;
+    }
 
     if (this.matchClient) {
       this.matchClient.sendMove(pieceType, shape, anchorRow, anchorCol);
@@ -162,7 +165,10 @@ export class GameUI {
   }
 
   _submitPass() {
-    if (!this._isMyTurn()) return;
+    if (!this._isMyTurn()) {
+      this.sound.reject();
+      return;
+    }
 
     if (this.matchClient) {
       this.matchClient.sendPass();

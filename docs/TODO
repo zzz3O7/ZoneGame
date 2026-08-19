@@ -1,7 +1,3 @@
-include seed in games repository
-
-    reject sound on move while not your turn (only multiplayer - currently silent)
-
 engines to populate matchmaking queues
 
 different timeouts on disconnect for different time control settings
