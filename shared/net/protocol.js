@@ -46,6 +46,14 @@ export const MSG = {
   // broadcast fires (and arrives client-side) before this message does.
   QUEUE_MATCHED: "queueMatched", // server -> each matched client
 
+  // Direct-debug PvE — bypasses the queue entirely, picks a bot by id,
+  // unrated, zero move delay. See docs/BOTS.md "direct_debug" origin.
+  // { botId, nickname? } -> server. nickname is required for guests,
+  // same rule as unrated JOIN_QUEUE.
+  PLAY_BOT_REQUEST: "playBotRequest", // client -> server
+  BOT_LIST_REQUEST: "botListRequest", // client -> server: asks for available bots to debug against
+  BOT_LIST: "botList", // server -> client: [{ id, nickname, rating }]
+
   // Sent personalized to each player right after a rated game's result is
   // persisted (see ratingService.finalizeRatedGame) — always arrives BEFORE
   // the game-ending message itself (MOVE_APPLIED's gameOver flag, or

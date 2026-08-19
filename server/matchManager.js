@@ -107,6 +107,35 @@ export class MatchManager {
     return { match, players: [p0, p1] };
   }
 
+  // Builds a PvE match directly — no invite-code round-trip, since a bot
+  // side never needs one. makeBotAgent(match) is called after the Match
+  // exists but before either player is added, so BotAgent can hold a
+  // real match reference from construction (see playerAgent.js — it
+  // reads match.game/match.status live, not a snapshot, so it needs the
+  // real thing before the _start() broadcast it reacts to even fires).
+  // Only the human is bound for reconnect — a bot never disconnects, so
+  // there's nothing for it to reconnect into.
+  createPvEMatch({
+    humanNickname,
+    humanAgent,
+    humanAccountPlayerId,
+    botNickname,
+    botAccountPlayerId,
+    makeBotAgent,
+    params,
+    rated,
+    origin,
+  }) {
+    const match = this._buildMatch(params, rated, "pve", origin);
+    const botAgent = makeBotAgent(match);
+    const human = match.addPlayer(humanNickname, humanAgent, humanAccountPlayerId);
+    const bot = match.addPlayer(botNickname, botAgent, botAccountPlayerId); // triggers _start()
+    this.matchesBySessionId.set(human.sessionId, match);
+    this.matchesBySessionId.set(bot.sessionId, match);
+    this.bindAgent(humanAgent, human.sessionId);
+    return { match, human, bot };
+  }
+
   removeMatch(matchId) {
     const match = this.matchesById.get(matchId);
     if (!match) return;

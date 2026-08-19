@@ -127,3 +127,9 @@ export const MATCHMAKING_UNKNOWN_OPPONENT_SCORE = 0.25;
 // sweep(). Cheap at any realistic queue size (see design discussion),
 // so this can stay aggressive.
 export const MATCHMAKING_SWEEP_INTERVAL_MS = 1000;
+
+// How long a queued player waits for a human opponent before falling
+// back to the closest-skill bot — see matchmakingQueue.js's
+// expireStale() and docs/BOTS.md point 5. Human pairing always gets
+// first chance; this is purely a "queue was empty" safety net.
+export const MATCHMAKING_BOT_FALLBACK_MS = 10000;

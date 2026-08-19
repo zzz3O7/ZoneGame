@@ -1,7 +1,7 @@
 import http from "http";
 import { WebSocketServer } from "ws";
 import { MatchManager } from "./matchManager.js";
-import { HumanAgent } from "./playerAgent.js";
+import { HumanAgent, BotAgent } from "./playerAgent.js";
 import { MSG } from "../shared/net/protocol.js";
 import { log, shortId } from "./logger.js";
 import { handleAuthRequest } from "./authRoutes.js";
@@ -9,8 +9,15 @@ import { serveStatic } from "./staticServer.js";
 import { readSessionCookie } from "./cookies.js";
 import { getSessionPlayer } from "./sessionStore.js";
 import { MatchmakingQueue } from "./matchmakingQueue.js";
-import { MATCHMAKING_TIME_MODES, MATCHMAKING_SWEEP_INTERVAL_MS } from "../shared/config.js";
+import {
+  MATCHMAKING_TIME_MODES,
+  MATCHMAKING_SWEEP_INTERVAL_MS,
+  MATCHMAKING_BOT_FALLBACK_MS,
+} from "../shared/config.js";
 import { applyInactivityRegrowth } from "./rating.js";
+import { randomBotMove } from "./bot/randomBot.js";
+import { listBotPlayers, pickClosestBot } from "./bot/botRepository.js";
+import { displayRating } from "./playerRepository.js";
 
 // A plain http.Server sits in front of the WS server now, because
 // Google's OAuth redirect (GET /auth/google/callback) is a real browser
@@ -72,6 +79,41 @@ function matchPair(a, b, resolvedTimeMode, rated) {
       }),
     );
   });
+}
+
+// Called once a queued entry has waited MATCHMAKING_BOT_FALLBACK_MS
+// with no human pairing found — see matchmakingQueue.js's expireStale()
+// and docs/BOTS.md point 5. Builds a PvE match against the closest
+// available bot, same QUEUE_MATCHED shape as a human pairing so the
+// client can't tell the difference from the message alone.
+function matchBotFallback(entry, resolvedTimeMode, rated) {
+  const bot = pickClosestBot(entry.mu);
+  if (!bot) {
+    log("Bot fallback triggered but no bot players exist yet — run server/scripts/seedBots.js");
+    return;
+  }
+  const params = { mode: "classic", timeMode: resolvedTimeMode };
+  const { match, human } = manager.createPvEMatch({
+    humanNickname: entry.nickname,
+    humanAgent: entry.ws.__agent,
+    humanAccountPlayerId: entry.accountPlayerId,
+    botNickname: bot.nickname,
+    botAccountPlayerId: bot.id,
+    makeBotAgent: (m) => new BotAgent(m, randomBotMove),
+    params,
+    rated,
+    origin: "matchmaking",
+  });
+  entry.ws.send(
+    JSON.stringify({
+      type: MSG.QUEUE_MATCHED,
+      matchId: match.matchId,
+      inviteCode: match.inviteCode,
+      yourPlayerIndex: human.playerIndex,
+      sessionId: human.sessionId,
+      rated: match.rated,
+    }),
+  );
 }
 
 function heartbeat() {
@@ -195,6 +237,49 @@ wss.on("connection", (ws, req) => {
         return;
       }
 
+      if (msg.type === MSG.BOT_LIST_REQUEST) {
+        const bots = listBotPlayers().map((b) => ({ id: b.id, nickname: b.nickname, rating: displayRating(b) }));
+        ws.send(JSON.stringify({ type: MSG.BOT_LIST, bots }));
+        return;
+      }
+
+      // Direct-debug PvE — bypasses the queue, always unrated, zero move
+      // delay on the bot's side. See docs/BOTS.md "direct_debug" origin.
+      if (msg.type === MSG.PLAY_BOT_REQUEST) {
+        const bots = listBotPlayers();
+        const bot = bots.find((b) => b.id === msg.botId);
+        if (!bot) {
+          ws.send(JSON.stringify({ type: MSG.ERROR, message: "Unknown bot" }));
+          return;
+        }
+        const nickname = ws.__accountPlayer?.nickname || msg.nickname;
+        if (!nickname) {
+          ws.send(JSON.stringify({ type: MSG.ERROR, message: "Nickname required" }));
+          return;
+        }
+        const params = { mode: "classic", timeMode: msg.timeMode || "any" };
+        const { match, human } = manager.createPvEMatch({
+          humanNickname: nickname,
+          humanAgent: ws.__agent,
+          humanAccountPlayerId: ws.__accountPlayer?.id ?? null,
+          botNickname: bot.nickname,
+          botAccountPlayerId: bot.id,
+          makeBotAgent: (m) => new BotAgent(m, randomBotMove),
+          params,
+          rated: false, // direct debug never affects rating — see docs/BOTS.md
+          origin: "direct_debug",
+        });
+        ws.send(
+          JSON.stringify({
+            type: MSG.MATCH_JOINED,
+            matchId: match.matchId,
+            yourPlayerIndex: human.playerIndex,
+            sessionId: human.sessionId,
+          }),
+        );
+        return;
+      }
+
       if (msg.type === MSG.MOVE_ATTEMPT) {
         const match = manager.findMatchByAgent(ws.__agent);
         if (!match) return;
@@ -290,8 +375,14 @@ wss.on("close", () => clearInterval(interval));
 // acceptable purely from elapsed wait time (widening windows — see
 // matchmakingQueue.js's sweep()), independent of anyone new joining.
 const sweepInterval = setInterval(() => {
-  for (const [a, b, resolvedTimeMode, rated] of queue.sweep()) {
+  const now = Date.now();
+  for (const [a, b, resolvedTimeMode, rated] of queue.sweep(now)) {
     matchPair(a, b, resolvedTimeMode, rated);
+  }
+  // Only entries still unmatched after the human-pairing sweep above age
+  // out here — human pairing always gets first chance.
+  for (const [entry, resolvedTimeMode, rated] of queue.expireStale(now, MATCHMAKING_BOT_FALLBACK_MS)) {
+    matchBotFallback(entry, resolvedTimeMode, rated);
   }
 }, MATCHMAKING_SWEEP_INTERVAL_MS);
 
