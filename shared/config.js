@@ -66,8 +66,8 @@ export const CUSTOM_LIMITS = {
 // paired with any of these.
 export const TIME_PRESETS = {
   none: { label: "No clock", initialMs: null, incrementMs: null },
-  bullet: { label: "Bullet · 2+0", initialMs: 120_000, incrementMs: 0 },
-  blitz: { label: "Blitz · 5+0", initialMs: 300_000, incrementMs: 0 },
+  bullet: { label: "Bullet · 3+1", initialMs: 180_000, incrementMs: 1000 },
+  blitz: { label: "Blitz · 5+3", initialMs: 300_000, incrementMs: 3000 },
   rapid: { label: "Rapid · 10+5", initialMs: 600_000, incrementMs: 5_000 },
   classical: { label: "Classical · 30+20", initialMs: 1_800_000, incrementMs: 20_000 },
 };
