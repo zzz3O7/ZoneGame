@@ -28,7 +28,11 @@ db.exec(`
     games_played INTEGER NOT NULL DEFAULT 0,
     -- Set on every rated game
     last_rated_game_at INTEGER,
-    created_at INTEGER NOT NULL
+    created_at INTEGER NOT NULL,
+    -- Bots are real rows here (real rating_mu/sigma, same rating pipeline
+    -- as any human) — this just flags them so player lists, leaderboards,
+    -- etc. can exclude them. See docs/BOTS.md.
+    is_bot INTEGER NOT NULL DEFAULT 0
   );
 
   -- Case-insensitive uniqueness: "Artem" and "artem" shouldn't both be
@@ -71,6 +75,13 @@ db.exec(`
     -- config) — see match.js's activeParams.
     params_json TEXT,
     started_at INTEGER NOT NULL,
-    ended_at INTEGER
+    ended_at INTEGER,
+    -- Who played (pvp/pve/eve) and how the match was entered
+    -- (matchmaking/direct_debug/self_play_scheduler) — two independent
+    -- questions, see docs/BOTS.md. origin gates rating impact:
+    -- direct_debug PvE never reaches this table at all (see
+    -- ratingService.js), so every row here is already "rated-eligible".
+    match_type TEXT NOT NULL DEFAULT 'pvp',
+    origin TEXT NOT NULL DEFAULT 'matchmaking'
   );
 `);

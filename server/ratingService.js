@@ -101,6 +101,8 @@ export function finalizeRatedGame(match) {
     params_json: JSON.stringify(match.activeParams),
     started_at: match._gameStartedAt ?? endedAt,
     ended_at: endedAt,
+    match_type: match.matchType,
+    origin: match.origin,
   });
 
   log(

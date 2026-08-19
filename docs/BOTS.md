@@ -49,8 +49,9 @@ How the match was entered. Drives side effects:
 - delay behavior (human-pacing timer on/off)
 - queue involvement
 - rating impact
+- bot display name
 
-### `player.is_bot` (or `is_fabricated`)
+### `player.is_bot`
 
 Lives on the player row, independent of any specific match. Needed to exclude bots
 from global player lists, "active humans" counts, etc. Bots are real rows in `players`

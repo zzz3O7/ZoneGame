@@ -1,6 +1,7 @@
 import http from "http";
 import { WebSocketServer } from "ws";
 import { MatchManager } from "./matchManager.js";
+import { HumanAgent } from "./playerAgent.js";
 import { MSG } from "../shared/net/protocol.js";
 import { log, shortId } from "./logger.js";
 import { handleAuthRequest } from "./authRoutes.js";
@@ -52,7 +53,13 @@ function matchPair(a, b, resolvedTimeMode, rated) {
   // Board preset is always "classic" for matchmaking today — see the
   // comment atop matchmakingQueue.js.
   const params = { mode: "classic", timeMode: resolvedTimeMode };
-  const { match, players } = manager.createMatchForPair(a, b, params, rated);
+  // Queue entries still carry a raw ws (see matchmakingQueue.js — not
+  // agent-based yet, only human players reach the queue today). Resolve
+  // each entry's already-bound agent here, at the boundary where
+  // matchManager takes over.
+  const agentA = { ...a, agent: a.ws.__agent };
+  const agentB = { ...b, agent: b.ws.__agent };
+  const { match, players } = manager.createMatchForPair(agentA, agentB, params, rated);
   [a, b].forEach((entry, i) => {
     entry.ws.send(
       JSON.stringify({
@@ -82,6 +89,10 @@ wss.on("connection", (ws, req) => {
   // connected with until they reconnect, which is fine for now.
   const sessionId = readSessionCookie(req);
   ws.__accountPlayer = sessionId ? getSessionPlayer(sessionId) : null;
+  // Built once per connection (including a "reconnect", which is just a
+  // fresh connection from the WS server's point of view) — every match.*
+  // call below goes through this agent, never the raw ws directly.
+  ws.__agent = new HumanAgent(ws);
 
   // prevent unhandled 'error' crashing whole process
   ws.on("error", (err) => {
@@ -99,7 +110,12 @@ wss.on("connection", (ws, req) => {
 
     try {
       if (msg.type === MSG.CREATE_MATCH) {
-        const { match, player } = manager.createMatch(msg.nickname, ws, msg.params, ws.__accountPlayer?.id ?? null);
+        const { match, player } = manager.createMatch(
+          msg.nickname,
+          ws.__agent,
+          msg.params,
+          ws.__accountPlayer?.id ?? null,
+        );
         ws.send(
           JSON.stringify({
             type: MSG.MATCH_CREATED,
@@ -113,7 +129,7 @@ wss.on("connection", (ws, req) => {
       }
 
       if (msg.type === MSG.JOIN_MATCH) {
-        const result = manager.joinMatch(msg.inviteCode, msg.nickname, ws, ws.__accountPlayer?.id ?? null);
+        const result = manager.joinMatch(msg.inviteCode, msg.nickname, ws.__agent, ws.__accountPlayer?.id ?? null);
         if (result.error) {
           ws.send(JSON.stringify({ type: MSG.ERROR, message: result.error }));
           return;
@@ -180,39 +196,39 @@ wss.on("connection", (ws, req) => {
       }
 
       if (msg.type === MSG.MOVE_ATTEMPT) {
-        const match = manager.findMatchByWs(ws);
+        const match = manager.findMatchByAgent(ws.__agent);
         if (!match) return;
-        match.attemptMove(ws, msg.pieceType, msg.shape, msg.anchorRow, msg.anchorCol);
+        match.attemptMove(ws.__agent, msg.pieceType, msg.shape, msg.anchorRow, msg.anchorCol);
         return;
       }
 
       if (msg.type === MSG.PASS_ATTEMPT) {
-        const match = manager.findMatchByWs(ws);
+        const match = manager.findMatchByAgent(ws.__agent);
         if (!match) return;
-        match.attemptPass(ws);
+        match.attemptPass(ws.__agent);
         return;
       }
 
       // Deliberate forfeit / leave — see Match.resign / Match.leave
       // for why these are handled differently from a mere disconnect.
       if (msg.type === MSG.RESIGN) {
-        const match = manager.findMatchByWs(ws);
+        const match = manager.findMatchByAgent(ws.__agent);
         if (!match) return;
-        match.resign(ws);
+        match.resign(ws.__agent);
         return;
       }
 
       if (msg.type === MSG.LEAVE_MATCH) {
-        const match = manager.findMatchByWs(ws);
+        const match = manager.findMatchByAgent(ws.__agent);
         if (!match) return;
-        match.leave(ws);
+        match.leave(ws.__agent);
         return;
       }
 
       if (msg.type === MSG.REMATCH_REQUEST) {
-        const match = manager.findMatchByWs(ws);
+        const match = manager.findMatchByAgent(ws.__agent);
         if (!match) return;
-        match.requestRematch(ws);
+        match.requestRematch(ws.__agent);
         return;
       }
 
@@ -225,13 +241,13 @@ wss.on("connection", (ws, req) => {
           ws.send(JSON.stringify({ type: MSG.RECONNECT_FAILED, reason: "Match not found" }));
           return;
         }
-        const syncState = match.reconnect(msg.sessionId, ws);
+        const syncState = match.reconnect(msg.sessionId, ws.__agent);
         if (!syncState) {
           log(`Reconnect failed: session no longer valid (matchId=${shortId(msg.matchId)})`);
           ws.send(JSON.stringify({ type: MSG.RECONNECT_FAILED, reason: "Session no longer valid" }));
           return;
         }
-        manager.bindWs(ws, msg.sessionId); // Match.reconnect() operates on the Match directly, so the manager needs telling separately that this new ws now belongs to this session
+        manager.bindAgent(ws.__agent, msg.sessionId); // Match.reconnect() operates on the Match directly, so the manager needs telling separately that this new agent now belongs to this session
         ws.send(JSON.stringify(syncState));
         return;
       }
@@ -239,9 +255,9 @@ wss.on("connection", (ws, req) => {
       // hash-mismatch resync — same payload shape as reconnect, but
       // this ws is already live and attached to the match.
       if (msg.type === MSG.REQUEST_RESYNC) {
-        const match = manager.findMatchByWs(ws);
+        const match = manager.findMatchByAgent(ws.__agent);
         if (!match) return;
-        const player = match.players.find((p) => p.ws === ws);
+        const player = match.players.find((p) => p.agent === ws.__agent);
         if (!player) return;
         log(`Match ${shortId(match.matchId)}: ${player.nickname} requested resync (hash mismatch)`);
         ws.send(JSON.stringify(match.buildSyncState(player)));
@@ -254,8 +270,8 @@ wss.on("connection", (ws, req) => {
 
   ws.on("close", () => {
     queue.leave(ws);
-    const match = manager.findMatchByWs(ws);
-    if (match) match.handleDisconnect(ws);
+    const match = manager.findMatchByAgent(ws.__agent);
+    if (match) match.handleDisconnect(ws.__agent);
   });
 });
 
