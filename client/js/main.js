@@ -6,14 +6,20 @@ import { Connection } from "./net/connection.js";
 import { MatchClient } from "./net/matchClient.js";
 import { Menu } from "./ui/menu.js";
 import { showBanner, hideBanner } from "./ui/banner.js";
-import { DISCONNECT_ABORT_MS, MODES, TIME_PRESETS } from "../../shared/config.js";
+import {
+  DISCONNECT_ABORT_MS,
+  MODES,
+  TIME_PRESETS,
+  MATCHMAKING_WINDOW_BASE_DEVIATION,
+  MATCHMAKING_WINDOW_GROWTH_PER_SEC,
+} from "../../shared/config.js";
 import { formatTimeControlLabel } from "../../shared/clock.js";
 import { sound } from "./audio/soundManager.js";
 import { applySettings } from "./settings.js";
 import { initSettingsPanel } from "./ui/settingsPanel.js";
 import { initRulesPanel } from "./ui/rulesPanel.js";
 import { initAccountWidget } from "./ui/accountWidget.js";
-import { applyRatingUpdate } from "./account.js";
+import { applyRatingUpdate, account } from "./account.js";
 
 applySettings(); // sound volumes + require-confirm body class, before anything can play/render
 
@@ -42,6 +48,7 @@ function showScreen(screen) {
   // Sign-in/out only makes sense before a match — also stops the widget
   // from sitting on top of the board once a game starts.
   document.getElementById("accountWidget").hidden = screen !== menuScreen;
+  if (screen !== waitingRoomScreen) stopSearchWindowIndicator();
 }
 
 // The page-load reconnect flow (below) shows/hides the menu directly
@@ -330,6 +337,7 @@ function startGame(game, matchClient = null) {
 // params here are always already resolved/clamped (see js/params.js) —
 // Menu never hands raw form input to these callbacks.
 function populateWaitingRoom(params, inviteCode) {
+  stopSearchWindowIndicator(); // no matchmaking window concept for an invite-code wait
   document.getElementById("waitTitle").textContent = "Waiting for opponent…";
   document.getElementById("waitSub").textContent = "Share this code with your opponent";
   document.getElementById("codeBoxRow").hidden = false;
@@ -355,6 +363,59 @@ function populateSearchingRoom(rated, timeMode) {
   document.getElementById("waitDominoValue").textContent = classic.startingDominoes;
   document.getElementById("waitTimeValue").textContent =
     timeMode === "any" ? "Any" : formatTimeControlLabel(TIME_PRESETS[timeMode]);
+  startSearchWindowIndicator();
+}
+
+// Live "who could I be matched against" indicator for the searching
+// screen — mirrors matchmakingQueue.js's own widening acceptance window
+// exactly (same shared constants), just rendered locally rather than
+// pushed from the server; nothing round-trips for this to tick.
+//
+// Only meaningful for a known-rated player (rated queue, or logged in
+// while queuing unrated) — a guest bypasses that window entirely on the
+// server (see matchmakingQueue.js's _acceptable), so showing them a
+// narrowing/widening range would misrepresent how they actually get
+// matched. They get a static "open to anyone" state instead.
+let searchWindowInterval = null;
+
+function startSearchWindowIndicator() {
+  const section = document.getElementById("waitWindowSection");
+  const valueEl = document.getElementById("waitWindowValue");
+  const fillEl = document.getElementById("waitWindowFill");
+  section.hidden = false;
+
+  if (!account.loggedIn) {
+    valueEl.textContent = "Open to anyone";
+    fillEl.style.left = "0%";
+    fillEl.style.width = "100%";
+    return;
+  }
+
+  const startedAt = Date.now();
+  const render = () => {
+    const waitedSec = (Date.now() - startedAt) / 1000;
+    const dev = Math.min(0.5, MATCHMAKING_WINDOW_BASE_DEVIATION + MATCHMAKING_WINDOW_GROWTH_PER_SEC * waitedSec);
+    if (dev >= 0.5) {
+      valueEl.textContent = "Any opponent";
+    } else {
+      const lo = Math.round((0.5 - dev) * 100);
+      const hi = Math.round((0.5 + dev) * 100);
+      valueEl.textContent = `${lo}%–${hi}%`;
+    }
+    fillEl.style.left = `${(0.5 - dev) * 100}%`;
+    fillEl.style.width = `${dev * 200}%`;
+  };
+
+  render();
+  searchWindowInterval = setInterval(render, 1000);
+}
+
+function stopSearchWindowIndicator() {
+  if (searchWindowInterval) {
+    clearInterval(searchWindowInterval);
+    searchWindowInterval = null;
+  }
+  document.getElementById("waitWindowSection").hidden = true;
 }
 
 // Page-load reconnect. Checked once, before Menu even shows the

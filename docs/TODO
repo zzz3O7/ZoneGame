@@ -1,4 +1,3 @@
-visual indicator of the matchmaking window
 include seed in games repository
 
     reject sound on move while not your turn (only multiplayer - currently silent)

@@ -108,8 +108,8 @@ export const MATCHMAKING_ANY_FALLBACK = "blitz";
 // 0.5) after roughly 10 seconds of waiting — this project is still in
 // development, so fast pairing matters more than pairing precision.
 // Tune directly if real play feels off once there's actual queue traffic.
-export const MATCHMAKING_WINDOW_BASE_DEVIATION = 0.12;
-export const MATCHMAKING_WINDOW_GROWTH_PER_SEC = 0.04;
+export const MATCHMAKING_WINDOW_BASE_DEVIATION = 0.1;
+export const MATCHMAKING_WINDOW_GROWTH_PER_SEC = 0.01;
 
 // A pairing between a known-rated player and a guest (no known rating)
 // has nothing comparable to score on the usual deviation-from-coinflip

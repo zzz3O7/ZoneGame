@@ -447,6 +447,15 @@
           <div class="wait-info__row">
             <span class="label">Time control</span><span class="value" id="waitTimeValue"></span>
           </div>
+          <div id="waitWindowSection" hidden>
+            <div class="wait-info__row">
+              <span class="label">Opponent range</span><span class="value" id="waitWindowValue"></span>
+            </div>
+            <div class="range-bar" title="Predicted win rate range for opponents you could be matched against">
+              <div class="range-bar__center"></div>
+              <div class="range-bar__fill" id="waitWindowFill"></div>
+            </div>
+          </div>
         </div>
 
         <button class="btn btn--ghost" id="btnCancelWait" style="width: 100%">Cancel</button>

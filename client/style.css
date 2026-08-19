@@ -1359,6 +1359,34 @@ body.require-confirm .piece-selector--touch {
   color: var(--color-text-secondary);
 }
 
+.range-bar {
+  position: relative;
+  width: 100%;
+  height: 6px;
+  margin-top: 2px;
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+}
+.range-bar__center {
+  position: absolute;
+  top: -2px;
+  bottom: -2px;
+  left: 50%;
+  width: 1px;
+  background: var(--color-border-soft);
+}
+.range-bar__fill {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  background: var(--color-accent);
+  border-radius: var(--radius-sm);
+  transition:
+    left 0.3s linear,
+    width 0.3s linear;
+}
+
 /* ===================== GAME END POPUP ===================== */
 .endcard {
   width: 100%;
