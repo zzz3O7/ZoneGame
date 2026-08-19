@@ -8,7 +8,7 @@ const insertGame = db.prepare(`
     mu_after_0, sigma_after_0,
     mu_before_1, sigma_before_1,
     mu_after_1, sigma_after_1,
-    params_json, started_at, ended_at
+    seed, params_json, started_at, ended_at
   ) VALUES (
     @player0_id, @player1_id, @winner,
     @score_0, @score_1, @end_reason, @margin, @remaining_possible_points, @total_board_points,
@@ -16,7 +16,7 @@ const insertGame = db.prepare(`
     @mu_after_0, @sigma_after_0,
     @mu_before_1, @sigma_before_1,
     @mu_after_1, @sigma_after_1,
-    @params_json, @started_at, @ended_at
+    @seed, @params_json, @started_at, @ended_at
   )
 `);
 

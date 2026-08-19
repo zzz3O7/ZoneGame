@@ -61,6 +61,14 @@ db.exec(`
     mu_after_0 REAL, sigma_after_0 REAL,
     mu_before_1 REAL, sigma_before_1 REAL,
     mu_after_1 REAL, sigma_after_1 REAL,
+    -- Board-generation seed for this specific game (see shared/engine/
+    -- rng.js) — pulled out as its own column since it's the one field a
+    -- future replay/explore feature would actually look up games by,
+    -- even though it's also present inside params_json below.
+    seed INTEGER,
+    -- The exact params a fresh Game needs to reproduce this game's board
+    -- (includes seed and startingPlayerIndex, not just the pre-game
+    -- config) — see match.js's activeParams.
     params_json TEXT,
     started_at INTEGER NOT NULL,
     ended_at INTEGER

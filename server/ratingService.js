@@ -106,7 +106,12 @@ export function finalizeRatedGame(match) {
     sigma_before_1: sigmaBefore1,
     mu_after_1: muAfter1,
     sigma_after_1: sigmaAfter1,
-    params_json: JSON.stringify(match.params),
+    // match.params is the pre-game config and never carries a seed —
+    // the actual per-game seed (and startingPlayerIndex) only exist on
+    // activeParams once the game has started, which it always has by
+    // the time a game can finish. See db.js's `seed` column comment.
+    seed: match.activeParams.seed,
+    params_json: JSON.stringify(match.activeParams),
     started_at: match._gameStartedAt ?? endedAt,
     ended_at: endedAt,
   });
