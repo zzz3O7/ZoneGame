@@ -43,6 +43,15 @@ let opponentDisconnectTimer = null; // drives the live countdown text in the opp
 let bannerAutoHideTimer = null; // was a bare setTimeout in handleOpponentReconnected — could fire late and clobber a newer, more urgent banner it knows nothing about
 let reconnectInProgress = false; // guards handleConnectionLost against running twice at once (e.g. a move attempted mid-reconnect can independently trigger onConnectionLost again)
 
+// The Bots tab needs a connection just to list bots, before any match
+// exists — kept deliberately separate from currentConnection/
+// currentMatchClient so browsing the tab can never clobber an unrelated
+// in-progress flow. Promoted into the real thing only once Play is
+// actually clicked (see onPlayBot below).
+let botsConnection = null;
+let botsMatchClient = null;
+let botsListLoaded = false;
+
 function showScreen(screen) {
   [menuScreen, waitingRoomScreen, gameScreen].forEach((s) => (s.hidden = s !== screen));
   // Sign-in/out only makes sense before a match — also stops the widget
@@ -79,6 +88,18 @@ function resetMatchState() {
   hideBanner();
 }
 
+// Called at the start of every OTHER menu flow (Create/Join/Quick
+// Play/Ranked) — if the person browsed the Bots tab first but picked
+// one of these instead, that list-only connection would otherwise sit
+// open, unused, until page unload.
+function closeDanglingBotsConnection() {
+  if (!botsConnection) return;
+  botsConnection.close();
+  botsConnection = null;
+  botsMatchClient = null;
+  botsListLoaded = false;
+}
+
 // Leaving on purpose (back to menu, cancel waiting room, giving up on a
 // reconnect) — tells the server we're actually leaving (a mid-game leave
 // counts as a resign — see Match.leave), then tears everything down and
@@ -107,8 +128,8 @@ function handleJoinError(message) {
   });
 }
 
-function setupMatchClient(conn) {
-  const matchClient = new MatchClient(conn);
+function setupMatchClient(conn, existingMatchClient = null) {
+  const matchClient = existingMatchClient ?? new MatchClient(conn);
   currentMatchClient = matchClient;
   matchClient.onMatchStart = (game) => {
     sound.matchStart();
@@ -465,12 +486,14 @@ function attemptPageLoadReconnect(storedSession) {
 
 const menu = new Menu({
   onStartLocal: (params) => {
+    closeDanglingBotsConnection();
     sound.matchStart();
     lastLocalParams = params;
     startGame(new Game(params));
   },
 
   onCreateMatch: async (nickname, params) => {
+    closeDanglingBotsConnection();
     const conn = new Connection(wsUrl());
     currentConnection = conn;
     try {
@@ -493,6 +516,7 @@ const menu = new Menu({
   },
 
   onJoinMatch: async (nickname, code) => {
+    closeDanglingBotsConnection();
     const conn = new Connection(wsUrl());
     currentConnection = conn;
     try {
@@ -511,6 +535,7 @@ const menu = new Menu({
   },
 
   onJoinQueue: async (rated, timeMode, nickname) => {
+    closeDanglingBotsConnection();
     const conn = new Connection(wsUrl());
     currentConnection = conn;
     try {
@@ -530,6 +555,49 @@ const menu = new Menu({
       showScreen(waitingRoomScreen);
     };
     matchClient.joinQueue(rated, timeMode, nickname);
+  },
+
+  onRequestBotList: async () => {
+    if (botsListLoaded) return; // already fetched this menu-session; renderBotList already has it
+    const conn = new Connection(wsUrl());
+    botsConnection = conn;
+    try {
+      await conn.connect();
+    } catch {
+      botsConnection = null;
+      menu.botsListError("Couldn't reach the server.");
+      return;
+    }
+
+    // Deliberately NOT setupMatchClient() here — that assigns
+    // currentConnection/currentMatchClient, which would be wrong before
+    // any match actually exists. Only onBotList/onError are wired.
+    const matchClient = new MatchClient(conn);
+    botsMatchClient = matchClient;
+    matchClient.onBotList = (bots) => {
+      botsListLoaded = true;
+      menu.renderBotList(bots);
+    };
+    matchClient.onError = (message) => {
+      botsListLoaded = false;
+      botsConnection = null;
+      botsMatchClient = null;
+      conn.close();
+      menu.botsListError(message);
+    };
+    matchClient.requestBotList();
+  },
+
+  onPlayBot: (botId, nickname, timeMode) => {
+    if (!botsConnection || !botsMatchClient) return; // shouldn't happen — Play is disabled until a list loads
+    sound.matchStart();
+    const conn = botsConnection;
+    const matchClient = setupMatchClient(conn, botsMatchClient); // promotes it: wires full match handling, assigns currentConnection/currentMatchClient
+    currentConnection = conn;
+    botsConnection = null;
+    botsMatchClient = null;
+    botsListLoaded = false; // next Bots-tab visit fetches fresh, since this connection is spoken for now
+    matchClient.playBot(botId, nickname, timeMode);
   },
 });
 

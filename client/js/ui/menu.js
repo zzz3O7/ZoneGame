@@ -13,15 +13,19 @@ const NICKNAME_KEY = "zonegame.nickname";
 // tabs. Emits fully-resolved params objects via callbacks — never hands raw
 // input values to the caller.
 export class Menu {
-  constructor({ onStartLocal, onCreateMatch, onJoinMatch, onJoinQueue, onLeaveQueue }) {
+  constructor({ onStartLocal, onCreateMatch, onJoinMatch, onJoinQueue, onLeaveQueue, onPlayBot, onRequestBotList }) {
     this.onStartLocal = onStartLocal;
     this.onCreateMatch = onCreateMatch;
     this.onJoinMatch = onJoinMatch;
     this.onJoinQueue = onJoinQueue;
     this.onLeaveQueue = onLeaveQueue;
+    this.onPlayBot = onPlayBot;
+    this.onRequestBotList = onRequestBotList;
 
     this.qpTimeMode = "blitz";
     this.rankedTimeMode = "blitz";
+    this.botsTimeMode = "none";
+    this.selectedBotId = null;
 
     // Local and Create each get their own independent mode/time-control
     // picker — same shape, same defaults, but a Custom board on one
@@ -134,6 +138,12 @@ export class Menu {
       rankedTimeCards: [...document.querySelectorAll("#rankedTimeGrid .mode-card")],
       rankedStatus: document.getElementById("rankedStatus"),
       btnRanked: document.getElementById("btnRanked"),
+
+      botsListGrid: document.getElementById("botsListGrid"),
+      botsStatus: document.getElementById("botsStatus"),
+      botsTimeCards: [...document.querySelectorAll("#botsTimeGrid .mode-card")],
+      nicknameBots: document.getElementById("nicknameBotsInput"),
+      btnPlayBot: document.getElementById("btnPlayBot"),
     };
   }
 
@@ -177,6 +187,41 @@ export class Menu {
     this.els.tabs.forEach((tab) => tab.classList.toggle("active", tab.dataset.tab === tabId));
     this.els.panels.forEach((panel) => panel.classList.toggle("active", panel.id === tabId));
     this.clearJoinCode(); // stale code from a previous attempt shouldn't linger once you've navigated away
+    if (tabId === "tabBots") this.onRequestBotList?.();
+  }
+
+  // Called once per bots-tab visit that actually gets a response (see
+  // main.js's botsListLoaded guard — this itself is safe to call more
+  // than once, it just re-renders). Empty list is a distinct state from
+  // "still loading" (see the initial "Loading bots…" text in HTML).
+  renderBotList(bots) {
+    this.selectedBotId = null;
+    this.els.btnPlayBot.disabled = true;
+    this.els.botsListGrid.innerHTML = "";
+
+    if (bots.length === 0) {
+      this.els.botsStatus.textContent = "No bots available yet — run server/scripts/seedBots.js.";
+      return;
+    }
+    this.els.botsStatus.textContent = "";
+
+    for (const bot of bots) {
+      const card = document.createElement("div");
+      card.className = "mode-card";
+      card.dataset.botId = bot.id;
+      card.innerHTML = `<div class="mode-card__name">${bot.nickname}</div><div class="mode-card__desc">Rating ${bot.rating}</div>`;
+      card.addEventListener("click", () => {
+        sound.uiClick();
+        this.selectedBotId = bot.id;
+        [...this.els.botsListGrid.children].forEach((c) => c.classList.toggle("selected", c === card));
+        this.els.btnPlayBot.disabled = false;
+      });
+      this.els.botsListGrid.appendChild(card);
+    }
+  }
+
+  botsListError(message) {
+    this.els.botsStatus.textContent = message || "Couldn't load bots.";
   }
 
   // A logged-in account's nickname is the identity used everywhere —
@@ -186,7 +231,7 @@ export class Menu {
   // Logging out (or being logged in with no nickname yet) unlocks them
   // and falls back to whatever was last saved locally.
   _syncNicknameFields() {
-    const fields = [this.els.nicknameCreate, this.els.nicknameJoin, this.els.nicknameQuickPlay];
+    const fields = [this.els.nicknameCreate, this.els.nicknameJoin, this.els.nicknameQuickPlay, this.els.nicknameBots];
     const locked = account.loggedIn && Boolean(account.nickname);
     if (locked) {
       fields.forEach((input) => {
@@ -216,6 +261,7 @@ export class Menu {
       this.els.nicknameCreate.value = saved;
       this.els.nicknameJoin.value = saved;
       this.els.nicknameQuickPlay.value = saved;
+      this.els.nicknameBots.value = saved;
     }
   }
 
@@ -250,17 +296,26 @@ export class Menu {
     this.els.nicknameCreate.addEventListener("input", () => {
       this.els.nicknameJoin.value = this.els.nicknameCreate.value;
       this.els.nicknameQuickPlay.value = this.els.nicknameCreate.value;
+      this.els.nicknameBots.value = this.els.nicknameCreate.value;
       this._saveNickname(this.els.nicknameCreate.value.trim());
     });
     this.els.nicknameJoin.addEventListener("input", () => {
       this.els.nicknameCreate.value = this.els.nicknameJoin.value;
       this.els.nicknameQuickPlay.value = this.els.nicknameJoin.value;
+      this.els.nicknameBots.value = this.els.nicknameJoin.value;
       this._saveNickname(this.els.nicknameJoin.value.trim());
     });
     this.els.nicknameQuickPlay.addEventListener("input", () => {
       this.els.nicknameCreate.value = this.els.nicknameQuickPlay.value;
       this.els.nicknameJoin.value = this.els.nicknameQuickPlay.value;
+      this.els.nicknameBots.value = this.els.nicknameQuickPlay.value;
       this._saveNickname(this.els.nicknameQuickPlay.value.trim());
+    });
+    this.els.nicknameBots.addEventListener("input", () => {
+      this.els.nicknameCreate.value = this.els.nicknameBots.value;
+      this.els.nicknameJoin.value = this.els.nicknameBots.value;
+      this.els.nicknameQuickPlay.value = this.els.nicknameBots.value;
+      this._saveNickname(this.els.nicknameBots.value.trim());
     });
 
     this.els.btnCreate.addEventListener("click", () => {
@@ -315,6 +370,22 @@ export class Menu {
       }
       sound.uiConfirm();
       this.onJoinQueue(true, this.rankedTimeMode, null);
+    });
+
+    this.els.botsTimeCards.forEach((card) => {
+      card.addEventListener("click", () => {
+        sound.uiClick();
+        this.botsTimeMode = card.dataset.timeMode;
+        this.els.botsTimeCards.forEach((c) => c.classList.toggle("selected", c === card));
+      });
+    });
+
+    this.els.btnPlayBot.addEventListener("click", () => {
+      if (!this.selectedBotId) return;
+      const nickname = this.els.nicknameBots.value.trim() || "Player";
+      this._saveNickname(nickname);
+      sound.uiConfirm();
+      this.onPlayBot(this.selectedBotId, nickname, this.botsTimeMode);
     });
   }
 }
