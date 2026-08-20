@@ -81,7 +81,17 @@ export class Match {
       this.lastStartingPlayerIndex === null ? (Math.random() < 0.5 ? 0 : 1) : 1 - this.lastStartingPlayerIndex;
     this.lastStartingPlayerIndex = startingPlayerIndex;
 
-    const finalParams = { ...this.params, seed: Date.now(), startingPlayerIndex };
+    // this.params is the original, never-mutated config from
+    // construction — reading the seed from there (not regenerating
+    // unconditionally) means an explicitly-specified seed stays fixed
+    // across every game this Match plays, rematches included: request a
+    // rematch and you get the exact same board again, not a fresh one.
+    // No seed specified (the common case — always true for classic mode,
+    // since resolveParams never attaches one there) still generates a
+    // fresh one on every _start() call, rematches included, same as
+    // before.
+    const seed = this.params.seed ?? Date.now();
+    const finalParams = { ...this.params, seed, startingPlayerIndex };
     this.activeParams = finalParams; // exact params to replay from, seed included
     this.game = new Game(finalParams);
     this.actions = []; // fresh log for this game (matters once rematch reuses this Match)

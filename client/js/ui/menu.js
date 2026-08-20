@@ -1,4 +1,4 @@
-import { CUSTOM_DEFAULTS, TIME_CUSTOM_DEFAULTS } from "../../../shared/config.js";
+import { CUSTOM_DEFAULTS, TIME_CUSTOM_DEFAULTS, TIME_PRESETS } from "../../../shared/config.js";
 import { resolveParams } from "../../../shared/params.js";
 import { sound } from "../audio/soundManager.js";
 import { account, onAccountChange } from "../account.js";
@@ -24,23 +24,25 @@ export class Menu {
 
     this.qpTimeMode = "blitz";
     this.rankedTimeMode = "blitz";
-    this.botsTimeMode = "none";
     this.selectedBotId = null;
 
-    // Local and Create each get their own independent mode/time-control
+    // Local, Create, and Bots each get their own independent mode/time-control
     // picker — same shape, same defaults, but a Custom board on one
-    // shouldn't affect the other. See _makeBoardSection.
+    // shouldn't affect the others. See _makeBoardSection.
     this.localSection = this._makeBoardSection("local");
-    this.createSection = this._makeBoardSection("create");
+    this.createSection = this._makeBoardSection("create", () => this._renderCreateRatedToggle());
+    this.botsSection = this._makeBoardSection("bots");
 
     this._cacheDom();
     this._restoreNickname();
     this._bindEvents();
 
     this._renderRankedTab();
+    this._renderCreateRatedToggle();
     this._syncNicknameFields();
     onAccountChange(() => {
       this._renderRankedTab();
+      this._renderCreateRatedToggle();
       this._syncNicknameFields();
     });
   }
@@ -49,7 +51,7 @@ export class Menu {
   // Create each have one, with a shared `${prefix}` ID convention —
   // e.g. "localModeCardClassic" / "createModeCardClassic"). Returns
   // { buildParams() } — everything else is private to the closure.
-  _makeBoardSection(prefix) {
+  _makeBoardSection(prefix, onChange = () => {}) {
     const els = {
       modeClassic: document.getElementById(`${prefix}ModeCardClassic`),
       modeCustom: document.getElementById(`${prefix}ModeCardCustom`),
@@ -83,6 +85,7 @@ export class Menu {
       els.modeClassic.classList.add("selected");
       els.modeCustom.classList.remove("selected");
       els.paramsPanel.classList.add("collapsed");
+      onChange();
     });
     els.modeCustom.addEventListener("click", () => {
       sound.uiClick();
@@ -90,6 +93,7 @@ export class Menu {
       els.modeCustom.classList.add("selected");
       els.modeClassic.classList.remove("selected");
       els.paramsPanel.classList.remove("collapsed");
+      onChange();
     });
     els.timeCards.forEach((card) => {
       card.addEventListener("click", () => {
@@ -97,6 +101,7 @@ export class Menu {
         state.timeMode = card.dataset.timeMode;
         els.timeCards.forEach((c) => c.classList.toggle("selected", c === card));
         els.timeCustomPanel.classList.toggle("collapsed", card.dataset.timeMode !== "custom");
+        onChange();
       });
     });
 
@@ -115,6 +120,14 @@ export class Menu {
           timeInitialMs: Number(els.timeInitial.value) * 60_000,
           timeIncrementMs: Number(els.timeIncrement.value) * 1000,
         }),
+      // Rated play needs a recognized, actually-timed preset on both
+      // axes — see server/index.js's CREATE_MATCH handler, which
+      // enforces this same rule authoritatively (this is purely so the
+      // UI can reflect it without a round trip). TIME_PRESETS.none is a
+      // real, truthy entry (the no-clock sentinel) — has to be excluded
+      // explicitly, a plain truthiness check would wrongly treat "no
+      // clock" as a recognized preset.
+      isRatable: () => state.mode === "classic" && state.timeMode !== "none" && Boolean(TIME_PRESETS[state.timeMode]),
     };
   }
 
@@ -130,6 +143,8 @@ export class Menu {
       nicknameCreate: document.getElementById("nicknameCreateInput"),
       nicknameJoin: document.getElementById("nicknameJoinInput"),
       joinCode: document.getElementById("joinCodeInput"),
+      createRatedToggle: document.getElementById("createRatedToggle"),
+      createRatedHint: document.getElementById("createRatedHint"),
 
       nicknameQuickPlay: document.getElementById("nicknameQuickPlayInput"),
       qpTimeCards: [...document.querySelectorAll("#qpTimeGrid .mode-card")],
@@ -141,7 +156,6 @@ export class Menu {
 
       botsListGrid: document.getElementById("botsListGrid"),
       botsStatus: document.getElementById("botsStatus"),
-      botsTimeCards: [...document.querySelectorAll("#botsTimeGrid .mode-card")],
       nicknameBots: document.getElementById("nicknameBotsInput"),
       btnPlayBot: document.getElementById("btnPlayBot"),
     };
@@ -180,6 +194,42 @@ export class Menu {
       this.els.rankedStatus.textContent = `Playing as ${account.nickname} · Rating ${account.rating}`;
       this.els.btnRanked.textContent = "Find match";
     }
+  }
+
+  // A Create match can be marked rated same as ranked matchmaking — but
+  // needs a real account on both sides (ratingService.finalizeRatedGame)
+  // AND a recognized board/time preset (server enforces this
+  // authoritatively; see CREATE_MATCH in index.js). Either gap disables
+  // the switch and forces it off, with a hint explaining which one.
+  _renderCreateRatedToggle() {
+    const accountEligible = account.loggedIn && Boolean(account.nickname);
+    const paramsEligible = this.createSection.isRatable();
+    const eligible = accountEligible && paramsEligible;
+
+    this.els.createRatedToggle.disabled = !eligible;
+    if (!eligible) this.els.createRatedToggle.checked = false;
+
+    if (!accountEligible) {
+      this.els.createRatedHint.hidden = false;
+      this.els.createRatedHint.textContent = "Sign in with a nickname to create a rated match.";
+    } else if (!paramsEligible) {
+      this.els.createRatedHint.hidden = false;
+      this.els.createRatedHint.textContent = "Rated matches require the Classic board and a preset time control.";
+    } else {
+      this.els.createRatedHint.hidden = true;
+    }
+  }
+
+  // Called from main.js's showScreen() whenever the menu becomes visible
+  // again (e.g. leaving a finished/left match). If Bots happens to be
+  // the already-active tab, no click ever fires _selectTab again, so
+  // nothing would otherwise re-trigger a reconnect — leaving Play
+  // pointing at a connection main.js already consumed the moment the
+  // previous bot match started. See main.js's onRequestBotList guard
+  // (botsListLoaded) for why this is safe to call unconditionally.
+  refreshBotsTabIfActive() {
+    const botsPanel = this.els.panels.find((p) => p.id === "tabBots");
+    if (botsPanel?.classList.contains("active")) this.onRequestBotList?.();
   }
 
   _selectTab(tabId) {
@@ -322,7 +372,8 @@ export class Menu {
       sound.uiConfirm();
       const nickname = this.els.nicknameCreate.value.trim() || "Player";
       this._saveNickname(nickname); // belt-and-suspenders alongside the input listener (e.g. an autofilled value that never fired "input")
-      this.onCreateMatch(nickname, this.createSection.buildParams());
+      const rated = !this.els.createRatedToggle.disabled && this.els.createRatedToggle.checked;
+      this.onCreateMatch(nickname, this.createSection.buildParams(), rated);
     });
 
     this.els.btnJoin.addEventListener("click", () => {
@@ -372,20 +423,12 @@ export class Menu {
       this.onJoinQueue(true, this.rankedTimeMode, null);
     });
 
-    this.els.botsTimeCards.forEach((card) => {
-      card.addEventListener("click", () => {
-        sound.uiClick();
-        this.botsTimeMode = card.dataset.timeMode;
-        this.els.botsTimeCards.forEach((c) => c.classList.toggle("selected", c === card));
-      });
-    });
-
     this.els.btnPlayBot.addEventListener("click", () => {
       if (!this.selectedBotId) return;
       const nickname = this.els.nicknameBots.value.trim() || "Player";
       this._saveNickname(nickname);
       sound.uiConfirm();
-      this.onPlayBot(this.selectedBotId, nickname, this.botsTimeMode);
+      this.onPlayBot(this.selectedBotId, nickname, this.botsSection.buildParams());
     });
   }
 }

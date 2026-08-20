@@ -1275,6 +1275,67 @@ body.require-confirm .piece-selector--touch {
   align-items: center;
   text-align: center;
 }
+.wait-actions-row {
+  width: 100%;
+  display: flex;
+  gap: 10px;
+}
+.wait-actions-row[hidden] {
+  display: none;
+}
+.wait-actions-row .btn {
+  flex: 1;
+}
+
+.switch-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 6px 0;
+}
+.switch {
+  position: relative;
+  display: inline-block;
+  width: 42px;
+  height: 24px;
+  flex-shrink: 0;
+}
+.switch input {
+  position: absolute;
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+.switch__slider {
+  position: absolute;
+  inset: 0;
+  background: var(--color-border);
+  border-radius: 999px;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+.switch__slider::before {
+  content: "";
+  position: absolute;
+  width: 18px;
+  height: 18px;
+  left: 3px;
+  top: 3px;
+  background: #fff;
+  border-radius: 50%;
+  transition: transform 0.15s ease;
+}
+.switch input:checked + .switch__slider {
+  background: var(--color-accent);
+}
+.switch input:checked + .switch__slider::before {
+  transform: translateX(18px);
+}
+.switch input:disabled + .switch__slider {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
 .waitcard__spinner {
   width: 32px;
   height: 32px;

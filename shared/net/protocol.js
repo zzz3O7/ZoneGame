@@ -54,6 +54,13 @@ export const MSG = {
   BOT_LIST_REQUEST: "botListRequest", // client -> server: asks for available bots to debug against
   BOT_LIST: "botList", // server -> client: [{ id, nickname, rating }]
 
+  // Lets a joiner see a match's board/time params and decide before
+  // actually seating themselves — no server-side "decline" exists by
+  // design: declining just means never sending JOIN_MATCH, and the
+  // creator's match keeps waiting exactly as if no one had looked.
+  MATCH_PREVIEW_REQUEST: "matchPreviewRequest", // client -> server: { inviteCode }
+  MATCH_PREVIEW: "matchPreview", // server -> client: { inviteCode, params, rated, creatorNickname }
+
   // Sent personalized to each player right after a rated game's result is
   // persisted (see ratingService.finalizeRatedGame) — always arrives BEFORE
   // the game-ending message itself (MOVE_APPLIED's gameOver flag, or

@@ -120,6 +120,13 @@ function heartbeat() {
   this.isAlive = true;
 }
 
+// Rated is restricted to recognized, actually-timed presets — same set
+// matchmaking already uses by construction. TIME_PRESETS.none is a real
+// (truthy) entry — "no clock" is itself a recognized preset for normal
+// play, just not a comparable one for rating purposes, so it needs an
+// explicit exclusion here rather than a plain truthiness check.
+const RATED_TIME_MODES = MATCHMAKING_TIME_MODES.filter((m) => m !== "any");
+
 wss.on("connection", (ws, req) => {
   ws.isAlive = true;
   ws.on("pong", heartbeat);
@@ -152,11 +159,42 @@ wss.on("connection", (ws, req) => {
 
     try {
       if (msg.type === MSG.CREATE_MATCH) {
+        const rated = Boolean(msg.rated);
+
+        // Rated is restricted to recognized presets — same reasoning as
+        // matchmaking already enforces by construction (it always sends
+        // { mode: "classic", timeMode: <a real preset> }). An arbitrary
+        // custom board or custom/no clock would mean a rated game isn't
+        // comparable to any other rated game, which breaks the rating
+        // system's core assumption now and blocks ever splitting ratings
+        // per-mode later (see docs/BOTS.md-adjacent plans for that).
+        if (rated && (msg.params?.mode !== "classic" || !RATED_TIME_MODES.includes(msg.params?.timeMode))) {
+          ws.send(
+            JSON.stringify({
+              type: MSG.ERROR,
+              message: "Rated matches require the Classic board and a preset time control",
+            }),
+          );
+          return;
+        }
+        if (rated && !ws.__accountPlayer) {
+          ws.send(JSON.stringify({ type: MSG.ERROR, message: "Log in to create a rated match" }));
+          return;
+        }
+        if (rated && !ws.__accountPlayer.nickname) {
+          ws.send(JSON.stringify({ type: MSG.ERROR, message: "Set a nickname before creating a rated match" }));
+          return;
+        }
+
+        // Same rule as JOIN_QUEUE: rated always uses the account's own
+        // nickname, never a client-supplied one.
+        const nickname = rated ? ws.__accountPlayer.nickname : msg.nickname;
         const { match, player } = manager.createMatch(
-          msg.nickname,
+          nickname,
           ws.__agent,
           msg.params,
           ws.__accountPlayer?.id ?? null,
+          rated,
         );
         ws.send(
           JSON.stringify({
@@ -165,13 +203,56 @@ wss.on("connection", (ws, req) => {
             inviteCode: match.inviteCode,
             yourPlayerIndex: player.playerIndex,
             sessionId: player.sessionId,
+            rated: match.rated,
+          }),
+        );
+        return;
+      }
+
+      // Read-only peek before actually joining — see docs on
+      // MATCH_PREVIEW_REQUEST in protocol.js. Deliberately doesn't touch
+      // manager/match state at all; the real join still happens via the
+      // normal JOIN_MATCH handler above once the client sends it.
+      if (msg.type === MSG.MATCH_PREVIEW_REQUEST) {
+        const target = manager.matchesByCode.get(msg.inviteCode);
+        if (!target) {
+          ws.send(JSON.stringify({ type: MSG.ERROR, message: "Match not found" }));
+          return;
+        }
+        if (target.isFull()) {
+          ws.send(JSON.stringify({ type: MSG.ERROR, message: "Match already full" }));
+          return;
+        }
+        ws.send(
+          JSON.stringify({
+            type: MSG.MATCH_PREVIEW,
+            inviteCode: msg.inviteCode,
+            params: target.params, // pre-seed config only — activeParams/seed doesn't exist until _start()
+            rated: target.rated,
+            creatorNickname: target.players[0]?.nickname ?? "Player",
           }),
         );
         return;
       }
 
       if (msg.type === MSG.JOIN_MATCH) {
-        const result = manager.joinMatch(msg.inviteCode, msg.nickname, ws.__agent, ws.__accountPlayer?.id ?? null);
+        // Peeked before joining so the login check (and nickname source)
+        // can depend on whether the match being joined is rated — the
+        // creator decided that at CREATE_MATCH time, the joiner just has
+        // to meet the same bar. matchesByCode is plain manager state
+        // (direct access, no separate lookup method needed for a peek).
+        const target = manager.matchesByCode.get(msg.inviteCode);
+        if (target?.rated && !ws.__accountPlayer) {
+          ws.send(JSON.stringify({ type: MSG.ERROR, message: "Log in to join a rated match" }));
+          return;
+        }
+        if (target?.rated && !ws.__accountPlayer.nickname) {
+          ws.send(JSON.stringify({ type: MSG.ERROR, message: "Set a nickname before joining a rated match" }));
+          return;
+        }
+        const nickname = target?.rated ? ws.__accountPlayer.nickname : msg.nickname;
+
+        const result = manager.joinMatch(msg.inviteCode, nickname, ws.__agent, ws.__accountPlayer?.id ?? null);
         if (result.error) {
           ws.send(JSON.stringify({ type: MSG.ERROR, message: result.error }));
           return;
@@ -257,7 +338,10 @@ wss.on("connection", (ws, req) => {
           ws.send(JSON.stringify({ type: MSG.ERROR, message: "Nickname required" }));
           return;
         }
-        const params = { mode: "classic", timeMode: msg.timeMode || "any" };
+        // Same trust model as CREATE_MATCH — Match's constructor runs
+        // resolveParams() on whatever's handed to it, so a tampered/stale
+        // client params object can't produce an out-of-range board or clock.
+        const params = msg.params ?? { mode: "classic", timeMode: "none" };
         const { match, human } = manager.createPvEMatch({
           humanNickname: nickname,
           humanAgent: ws.__agent,

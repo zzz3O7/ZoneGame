@@ -72,8 +72,13 @@ export class MatchManager {
     return match;
   }
 
-  createMatch(nickname, agent, params, accountPlayerId = null) {
-    const match = this._buildMatch(params, false); // invite-code play is always unrated
+  // rated defaults to false (guest-friendly invite-code play, the common
+  // case) — the caller (index.js) is responsible for having already
+  // verified accountPlayerId is real whenever it passes rated=true; see
+  // that handler's login/nickname checks. Only the creator's side is
+  // gated here — the joiner is checked separately in joinMatch below.
+  createMatch(nickname, agent, params, accountPlayerId = null, rated = false) {
+    const match = this._buildMatch(params, rated);
     const player = match.addPlayer(nickname, agent, accountPlayerId);
     this.matchesBySessionId.set(player.sessionId, match);
     this.bindAgent(agent, player.sessionId);
@@ -84,6 +89,21 @@ export class MatchManager {
     const match = this.matchesByCode.get(inviteCode);
     if (!match) return { error: "Match not found" };
     if (match.isFull()) return { error: "Match already full" };
+    // Defensive — index.js already checks this before calling in, using
+    // the same rule finalizeRatedGame relies on (every rated match needs
+    // a real account on both sides). Kept here too since this method's
+    // contract shouldn't quietly depend on a caller upholding it elsewhere.
+    if (match.rated && accountPlayerId == null) return { error: "Log in to join a rated match" };
+    // Same identity check matchmakingQueue.js already applies for queued
+    // pairing (see its _acceptable()) — an invite code is the other way
+    // the same account could end up playing itself for rated points.
+    // Two guests are both accountPlayerId === null, which must NOT count
+    // as "same identity" (isFull() above already blocks a genuine
+    // guest-vs-guest double-join anyway, so this only ever fires for a
+    // real account matching itself).
+    if (match.rated && accountPlayerId != null && match.players[0].accountPlayerId === accountPlayerId) {
+      return { error: "You can't join your own rated match" };
+    }
 
     const player = match.addPlayer(nickname, agent, accountPlayerId);
     this.matchesBySessionId.set(player.sessionId, match);

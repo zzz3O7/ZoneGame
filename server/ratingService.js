@@ -7,9 +7,10 @@ import { MSG } from "../shared/net/protocol.js";
 // Called once, right after a rated match's status/endInfo have already
 // been set to a final result (see Match._logMatchEnd — this fires from
 // every game-ending path: no-moves, resign, timeout, abort). Guests
-// can't reach a rated match at all (enforced at queue-join time), so
-// both players should always have an accountPlayerId here — the checks
-// below are defensive, not expected to trigger in normal play.
+// can't reach a rated match at all (enforced at queue-join time, and at
+// CREATE_MATCH/JOIN_MATCH time for invite-code play — see index.js),
+// so both players should always have an accountPlayerId here — the
+// checks below are defensive, not expected to trigger in normal play.
 export function finalizeRatedGame(match) {
   const [p0, p1] = match.players;
   if (p0.accountPlayerId == null || p1.accountPlayerId == null) {
