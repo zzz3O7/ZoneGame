@@ -272,22 +272,89 @@ column type changes or drops — those still need a real one-off migration
 
 ---
 
-## Phase 2 — Position evaluation & engine (dedicated session, not started)
+## Phase 2 — Position evaluation & engine (in progress, one tier at a time)
 
-- [ ] Engine architecture — what a "strength dial" means (search depth? eval noise?
-      move-ordering randomness at weak tiers?)
-- [ ] Performance / concurrency model decided together with the engine, not bolted on
-      later — worker threads vs main event loop, per-move time budget
-- [ ] Multiple strength tiers built on top of the same evaluator
+Design discussion landed on a two-layer engine, driven by the actual structure
+of the game rather than generic minimax:
 
-**Starting point for this session**: `randomBotMove(game, playerIndex)` in
-`server/bot/randomBot.js` is the only thing that needs replacing/extending —
-its signature (`(game, playerIndex) -> move | null`) is exactly what
-`BotAgent` expects via its injected `chooseMove`. `Rules.allLegalPlacements()`
-already exists as the move-enumeration primitive a real evaluator would score
-against. `botThinkDelayMs()` currently has no concept of "how long did the
-engine actually take to think" — worth deciding whether real search time
-replaces the artificial random delay, or layers with it.
+- **Zones are impartial combinatorial games** (Conway/Berlekamp-Conway-Guy
+  sense) — same move options for both players, strict local alternation,
+  last player to move wins. In isolation, a zone's outcome is exactly solvable
+  via backward induction/retrograde search over its occupancy state
+  (realistic zones are small enough — ~30-50 cells, ~10 real moves deep once
+  dead space is excluded — for this to be tractable, especially once the open
+  area fragments into disconnected sub-regions, which lets the solver
+  decompose via Sprague-Grundy and combine components by Grundy-XOR instead
+  of searching the joint state space). The domino budget (capped at 2 per
+  player match-wide) parameterizes a zone's solve rather than needing general
+  resource-game machinery — enumerate the ≤9 `(dominoes-available-to-mover,
+  dominoes-available-to-opponent)` combinations per zone state.
+- **The global game is not a classical free disjunctive sum** — a zone locks
+  a player out until `localTurn` comes back around to them (no "playing the
+  same component twice while the opponent ignores it"), and the shared
+  domino pool is the one real cross-zone coupling. This is why "traditional"
+  score/material position evaluation doesn't work here — a zone one move from
+  closing can matter more than raw point totals.
+- **Playtesting surfaced real strategies that this framework explains rather
+  than special-cases**: splitting a zone into two matching sub-regions to
+  force a Tweedledum-Tweedledee mirroring win (exact search finds this for
+  free — it *is* optimal play, no hand-coded pattern needed, though
+  wall-avoiding placement — never touching a wall on your move — is worth
+  keeping as an explicit move-ordering/weak-tier heuristic since it's what
+  sets the split up in the first place); a zone that's already a guaranteed
+  win for you is worth leaving open one step from closing rather than cashing
+  it in immediately, since it's a free move-in-reserve for exactly the turn
+  you'd otherwise have to pass or spend a domino on; opening the board's
+  biggest zone is a tempo liability, not an advantage, since the opponent can
+  simply never engage it and force you to run out of moves elsewhere first.
+  This all lives at the global-coordinator layer, not the per-zone solver.
+- **Zone creation uses the same solver, not a separate heuristic** — creating
+  a zone is itself the zone's first move (anchor + flood fill happen
+  together), so "where should I open a zone" is "solver-evaluate the
+  resulting position for every candidate anchor/shape via `Zone.preview()`,
+  prefer ones that come back as a guaranteed win."
+
+**Tier ladder** (each one a real, shippable bot — "improve slightly every
+time" rather than landing the full solver before anything ships):
+
+1. `random-01` — uniform random. Shipped, Phase 1.
+2. `no-waste-01` — uniform random, but never spends a domino unless every
+   other piece type has zero legal placements. Shipped. See
+   `server/bot/noWasteBot.js`.
+3. Exact per-zone solver, greedy zone selection — no cross-zone tempo
+   reasoning yet. Not started.
+4. Tempo-aware coordinator — solver reports a "does this zone currently
+   guarantee me an always-available move" flag; coordinator prefers holding
+   near-won zones open and weighs new-zone tempo exposure, not just size.
+   Not started.
+5. Full endgame search — solve the whole remaining position exactly once
+   few enough cells/zones remain. Not started.
+
+Depth/noise variants within a tier (e.g. capped search depth, weighted-random
+move selection instead of always-best) are additional dial settings on top of
+this ladder, not separate tiers of their own.
+
+**Adding a new tier**: write the `(game, playerIndex) -> move | null`
+function, register it in `server/bot/botRegistry.js`'s
+`CHOOSE_MOVE_BY_KEY`, add a `{ key, nickname }` entry to
+`server/scripts/seedBots.js`, run the seed script. A bot player row's
+`botKey` is recovered from its `google_sub` (`bot:${botKey}`) via
+`botKeyFromRow()` in `botRepository.js` — this is how `index.js` picks the
+right `chooseMove` for whichever bot row `pickClosestBot()`/`PLAY_BOT_REQUEST`
+resolved to, without hardcoding a single bot everywhere the way Phase 1 did.
+
+Performance/concurrency: staying on the main event loop for now (no worker
+threads) — exact zone solving is only expensive for wide-open zones, which is
+exactly where tier 3+ should fall back to a depth/state cap rather than fully
+solving anyway. Revisit if real numbers ever show main-thread blocking.
+
+`botThinkDelayMs()` still has no concept of real search time. Direction
+agreed: weak tiers scale delay with legal move count (already true today via
+the random pacing); smarter tiers should scale with move *complexity* —
+proposed as the eval spread between the best and second-best candidate move
+(decisive vs. close call) rather than raw search node count, since it mirrors
+how a real player actually hesitates. Not implemented yet — no tier has a
+real eval to take a spread from until tier 3 lands.
 
 ## Phase 3 — Population health (not started)
 

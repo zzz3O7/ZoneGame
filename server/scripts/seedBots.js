@@ -6,9 +6,12 @@
 
 import { findOrCreateBotPlayer } from "../bot/botRepository.js";
 
-// Phase 1: one bottom-tier bot, debug-readable name. More tiers arrive
-// with Phase 2's evaluator (docs/BOTS.md) — add entries here as they do.
-const BOTS = [{ key: "random-01", nickname: "Bot_Random_01" }];
+// Phase 2 tiers land one at a time (docs/BOTS.md) — add an entry here
+// (and a matching key in server/bot/botRegistry.js) as each one ships.
+const BOTS = [
+  { key: "random-01", nickname: "Bot_Random_01" },
+  { key: "no-waste-01", nickname: "Bot_NoWaste_01" },
+];
 
 for (const { key, nickname } of BOTS) {
   const bot = findOrCreateBotPlayer(key, nickname);

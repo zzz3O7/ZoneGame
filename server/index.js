@@ -15,8 +15,8 @@ import {
   MATCHMAKING_BOT_FALLBACK_MS,
 } from "../shared/config.js";
 import { applyInactivityRegrowth } from "./rating.js";
-import { randomBotMove } from "./bot/randomBot.js";
-import { listBotPlayers, pickClosestBot } from "./bot/botRepository.js";
+import { chooseMoveForBotKey } from "./bot/botRegistry.js";
+import { listBotPlayers, pickClosestBot, botKeyFromRow } from "./bot/botRepository.js";
 import { displayRating } from "./playerRepository.js";
 
 // A plain http.Server sits in front of the WS server now, because
@@ -105,7 +105,7 @@ function matchBotFallback(entry, resolvedTimeMode, rated, remove) {
     humanAccountPlayerId: entry.accountPlayerId,
     botNickname: bot.nickname,
     botAccountPlayerId: bot.id,
-    makeBotAgent: (m) => new BotAgent(m, randomBotMove),
+    makeBotAgent: (m) => new BotAgent(m, chooseMoveForBotKey(botKeyFromRow(bot))),
     params,
     rated,
     origin: "matchmaking",
@@ -354,7 +354,7 @@ wss.on("connection", (ws, req) => {
           humanAccountPlayerId: ws.__accountPlayer?.id ?? null,
           botNickname: bot.nickname,
           botAccountPlayerId: bot.id,
-          makeBotAgent: (m) => new BotAgent(m, randomBotMove),
+          makeBotAgent: (m) => new BotAgent(m, chooseMoveForBotKey(botKeyFromRow(bot))),
           params,
           rated: false, // direct debug never affects rating — see docs/BOTS.md
           origin: "direct_debug",

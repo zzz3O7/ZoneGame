@@ -1,10 +1,10 @@
-dont waste dominoes (other bots)
+dont logout on server restart
 
 scale thinking time with possible moves (for simple bots)
 and with move "complexity" for smarter bots
 same parameter "complexity" just for simple bots it is possible move count
 
-built in admin tools (to see and/or edit all past matches, ongoing matches, players, connections, bots, logs for everything, etc)
+build admin tools (to see and/or edit all past matches, ongoing matches, players, connections, bots, logs for everything, etc)
 
 different timeouts on disconnect for different time control settings
 
