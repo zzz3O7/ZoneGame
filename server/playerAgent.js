@@ -12,6 +12,7 @@
 
 import { MSG } from "../shared/net/protocol.js";
 import { botThinkDelayMs } from "./bot/botTiming.js";
+import { BOT_LEAVE_MIN_MS, BOT_LEAVE_RANGE_MS } from "./bot/botConfig.js";
 
 // Wraps a live WebSocket. Guards against a closed/null socket the same
 // way the old inline _sendTo helper did.
@@ -44,14 +45,54 @@ export class BotAgent {
     this.match = match;
     this.chooseMove = chooseMove;
     this._thinkTimer = null;
+    this._afterGameTimer = null;
   }
 
   send(msg) {
-    if (msg.type === MSG.MATCH_START || msg.type === MSG.MOVE_APPLIED) {
-      this._maybeThink();
-    } else if (msg.type === MSG.MATCH_ENDED || msg.type === MSG.OPPONENT_LEFT) {
-      clearTimeout(this._thinkTimer);
+    switch (msg.type) {
+      case MSG.MATCH_START:
+        this._maybeThink();
+        break;
+      case MSG.MOVE_APPLIED:
+        // A natural end (no-moves) signals through here, not a separate
+        // MATCH_ENDED — see protocol.js's comment on MATCH_ENDED.
+        if (msg.gameOver) this._onGameOver();
+        else this._maybeThink();
+        break;
+      case MSG.MATCH_ENDED:
+        // Covers resign/timeout/abort — the endings that don't route
+        // through MOVE_APPLIED.
+        clearTimeout(this._thinkTimer);
+        this._onGameOver();
+        break;
+      case MSG.OPPONENT_LEFT:
+        clearTimeout(this._thinkTimer);
+        clearTimeout(this._afterGameTimer);
+        break;
+      case MSG.OPPONENT_WANTS_REMATCH:
+        // direct_debug: always accept, immediately — that's the point
+        // of debug mode, rapid iteration against the same opponent. Any
+        // other origin ignores this; _onGameOver's own timer leaves
+        // regardless of what gets requested in the meantime.
+        if (this.match.origin === "direct_debug") this.match.requestRematch(this);
+        break;
     }
+  }
+
+  // direct_debug always accepts a prompt rematch (see
+  // OPPONENT_WANTS_REMATCH) and otherwise just sits there — it doesn't
+  // need to time itself out anymore, Match's own post-game idle timer
+  // (MATCH_POST_GAME_IDLE_MS) now bounds "nobody ever rematches"
+  // uniformly for every match, bot or not. Every other origin still
+  // leaves after a short human-ish pause: neither vanishing the instant
+  // the game ends nor sitting there for minutes reads as a real player.
+  _onGameOver() {
+    clearTimeout(this._thinkTimer);
+    clearTimeout(this._afterGameTimer);
+    if (this.match.origin === "direct_debug") return;
+
+    const delay = BOT_LEAVE_MIN_MS + Math.random() * BOT_LEAVE_RANGE_MS;
+    this._afterGameTimer = setTimeout(() => this.match.leave(this), delay);
   }
 
   _maybeThink() {

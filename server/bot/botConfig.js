@@ -3,8 +3,8 @@
 // Human-ish pacing before a bot submits its move. Uniform random in
 // [BOT_THINK_MIN_MS, BOT_THINK_MIN_MS + BOT_THINK_RANGE_MS), before any
 // clock-safety clamping (see botTiming.js).
-export const BOT_THINK_MIN_MS = 100;
-export const BOT_THINK_RANGE_MS = 100;
+export const BOT_THINK_MIN_MS = 1000;
+export const BOT_THINK_RANGE_MS = 9000;
 
 // Time-control safety: a bot should never lose on time because of its
 // own artificial delay, so it never spends more than this fraction of
@@ -12,3 +12,10 @@ export const BOT_THINK_RANGE_MS = 100;
 // at least this much in reserve.
 export const BOT_MIN_BANK_MS = 1000;
 export const BOT_MAX_THINK_FRACTION = 0.5;
+
+// How long a bot waits after a (non-debug) match ends before leaving.
+// Neither vanishing the instant the game ends nor sitting there
+// indefinitely reads as a real player — a short randomized pause does.
+// See BotAgent._onGameOver in playerAgent.js.
+export const BOT_LEAVE_MIN_MS = 1000;
+export const BOT_LEAVE_RANGE_MS = 9000;

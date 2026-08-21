@@ -46,6 +46,15 @@ export const DISCONNECT_ABORT_MS = 60_000;
 // rematch before giving up and telling the first requester it fizzled.
 export const REMATCH_TIMEOUT_MS = 20_000;
 
+// How long a finished match stays alive waiting for a rematch that
+// never comes, before the server gives up and closes it — same idea as
+// DISCONNECT_ABORT_MS, just for the "game ended, nobody's disconnected,
+// nobody's asked for a rematch either" case, which nothing else times
+// out (a tab left open on the endcard would otherwise hold the match in
+// memory indefinitely). Applies uniformly to every match regardless of
+// who's playing — PvP, PvE, EvE all use the same rule.
+export const MATCH_POST_GAME_IDLE_MS = 5 * 60_000;
+
 // Fixed presets. Adding a new mode later = one more entry here, nothing else changes.
 export const MODES = {
   classic: { label: "Classic", boardSize: 20, zoneRadius: 4, startingDominoes: 2 },

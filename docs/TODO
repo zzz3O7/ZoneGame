@@ -1,12 +1,10 @@
+built in admin tools (to see and/or edit all matches, players, bots, logs, etc)
+
 engines to populate matchmaking queues
 
-remove accept/decline buttons from "create" waiting screen
-add seed display to all waiting screens ("random" if no seed specified)
 bots need to always accept rematches in debug mode 
     (in standart ranked they need to always leave the match
      after its end and some random time 1-5 sec)
-play bot doesn't work after previous bot match (need to change tabs for bots' tab connection to restore)
-    ranked switch in game creation (not checkbox) block if params don't allow ranked (custom)    
 
 different timeouts on disconnect for different time control settings
 

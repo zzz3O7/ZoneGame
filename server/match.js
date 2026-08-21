@@ -3,7 +3,7 @@ import { Game } from "../shared/engine/game.js";
 import { Clock } from "../shared/clock.js";
 import { resolveParams } from "../shared/params.js";
 import { MSG } from "../shared/net/protocol.js";
-import { DISCONNECT_ABORT_MS, REMATCH_TIMEOUT_MS } from "../shared/config.js";
+import { DISCONNECT_ABORT_MS, REMATCH_TIMEOUT_MS, MATCH_POST_GAME_IDLE_MS } from "../shared/config.js";
 import { log, shortId, formatDuration } from "./logger.js";
 import { getPlayerById, displayRating } from "./playerRepository.js";
 
@@ -38,6 +38,7 @@ export class Match {
     this._abortTimer = null;
     this._rematchTimer = null;
     this._flagTimer = null;
+    this._postGameIdleTimer = null;
     this.rematchRequestedBy = new Set(); // playerIndex values that have asked for a rematch
     this.lastStartingPlayerIndex = null; // who moved first in the most recent game — null until the first game starts
     this._gameCount = 0; // incremented in _start() — first game vs rematch, for logging
@@ -97,6 +98,7 @@ export class Match {
     this.actions = []; // fresh log for this game (matters once rematch reuses this Match)
     this.endInfo = null;
     clearTimeout(this._rematchTimer); // a fresh game means any pending rematch request is moot
+    clearTimeout(this._postGameIdleTimer); // ...and any pending "nobody rematched in time" cleanup is moot too
     this.rematchRequestedBy.clear();
 
     // (re)build the clock fresh for every game, including rematches.
@@ -146,7 +148,34 @@ export class Match {
     log(
       `Match ${shortId(this.matchId)} ended: reason=${reason} winner=${winnerName} score=${scores} duration=${duration}`,
     );
+    // "aborted" already tears the match down immediately elsewhere — only
+    // "over" (rematch still theoretically possible) needs a bound on how
+    // long it waits for one.
+    if (this.status === "over") this._armPostGameIdleTimer();
     this._onGameEnd?.(reason);
+  }
+
+  _armPostGameIdleTimer() {
+    clearTimeout(this._postGameIdleTimer);
+    this._postGameIdleTimer = setTimeout(() => this._onPostGameIdle(), MATCH_POST_GAME_IDLE_MS);
+  }
+
+  // Nobody disconnected, nobody requested a rematch, the window just
+  // ran out — reuses OPPONENT_LEFT rather than a new message type since
+  // the effect on the remaining side is identical either way: no
+  // rematch is coming, go back to the menu. Applies uniformly whether
+  // the opponent was human or a bot (see docs/BOTS.md — this replaced a
+  // bot-specific idle timer that did the same thing less generally).
+  _onPostGameIdle() {
+    if (this.status !== "over") return; // already handled via another path (rematch started, left, aborted) — this firing is now moot
+    // Unlike leave()/_onAbortTimeout(), nobody necessarily triggered
+    // this — both players could still be fully connected, just neither
+    // has acted. broadcast() reaches whoever's actually still there
+    // (agent-null for anyone who did disconnect is already a no-op via
+    // _sendTo), rather than guessing at a single "remaining" side.
+    this.broadcast({ type: MSG.OPPONENT_LEFT });
+    clearTimeout(this._rematchTimer);
+    this._onClose?.();
   }
 
   // (re)arms the flag-fall timer for whoever the clock says is
@@ -428,6 +457,7 @@ export class Match {
       // Game already concluded on its own merits — just let the other
       // player know no rematch is coming, no result to change.
       clearTimeout(this._rematchTimer); // nothing left to rematch
+      clearTimeout(this._postGameIdleTimer); // this IS the "nobody came back" outcome, just reached via disconnect rather than idling out — nothing left to time out further
       if (remaining) this._sendTo(remaining.agent, { type: MSG.OPPONENT_LEFT });
       this._onClose?.();
       return;
@@ -529,6 +559,7 @@ export class Match {
     // on). Nothing about the outcome changes; let a still-present opponent
     // know no rematch is coming, then close it out for good.
     clearTimeout(this._rematchTimer);
+    clearTimeout(this._postGameIdleTimer);
     const opponent = this.players.find((p) => p !== player);
     if (opponent?.connected) {
       this._sendTo(opponent.agent, { type: MSG.OPPONENT_LEFT });
