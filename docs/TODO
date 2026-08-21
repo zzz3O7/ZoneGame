@@ -1,10 +1,10 @@
-built in admin tools (to see and/or edit all matches, players, bots, logs, etc)
+dont waste dominoes (other bots)
 
-engines to populate matchmaking queues
+scale thinking time with possible moves (for simple bots)
+and with move "complexity" for smarter bots
+same parameter "complexity" just for simple bots it is possible move count
 
-bots need to always accept rematches in debug mode 
-    (in standart ranked they need to always leave the match
-     after its end and some random time 1-5 sec)
+built in admin tools (to see and/or edit all past matches, ongoing matches, players, connections, bots, logs for everything, etc)
 
 different timeouts on disconnect for different time control settings
 

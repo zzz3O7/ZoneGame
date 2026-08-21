@@ -85,3 +85,23 @@ db.exec(`
     origin TEXT NOT NULL DEFAULT 'matchmaking'
   );
 `);
+
+// CREATE TABLE IF NOT EXISTS above only helps a brand-new database — an
+// existing zonegame.db (the VPS's real one, in particular) already had
+// `players`/`games` tables before is_bot/match_type/origin existed, and
+// that CREATE statement is a no-op against a table that's already
+// there. Each ALTER TABLE below adds exactly one column and is safe to
+// run every single boot: SQLite throws "duplicate column name" once the
+// column's already present, which is exactly the steady-state case
+// after the first run, so it's caught and ignored rather than guarded
+// with a fragile "does this column exist" check beforehand.
+function addColumnIfMissing(table, columnDef) {
+  try {
+    db.exec(`ALTER TABLE ${table} ADD COLUMN ${columnDef}`);
+  } catch (err) {
+    if (!/duplicate column name/i.test(err.message)) throw err;
+  }
+}
+addColumnIfMissing("players", "is_bot INTEGER NOT NULL DEFAULT 0");
+addColumnIfMissing("games", "match_type TEXT NOT NULL DEFAULT 'pvp'");
+addColumnIfMissing("games", "origin TEXT NOT NULL DEFAULT 'matchmaking'");

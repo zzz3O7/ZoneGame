@@ -86,12 +86,18 @@ function matchPair(a, b, resolvedTimeMode, rated) {
 // and docs/BOTS.md point 5. Builds a PvE match against the closest
 // available bot, same QUEUE_MATCHED shape as a human pairing so the
 // client can't tell the difference from the message alone.
-function matchBotFallback(entry, resolvedTimeMode, rated) {
+function matchBotFallback(entry, resolvedTimeMode, rated, remove) {
   const bot = pickClosestBot(entry.mu);
   if (!bot) {
-    log("Bot fallback triggered but no bot players exist yet — run server/scripts/seedBots.js");
+    // No bots seeded yet (server/scripts/seedBots.js never run, or the
+    // pool's empty for some other reason) — leave the entry queued
+    // exactly as it was rather than dropping it. It keeps getting a
+    // fair shot at a human pair via the normal sweep() widening window,
+    // and gets re-checked here again on the next tick once a bot
+    // actually exists to fall back to.
     return;
   }
+  remove(); // only now, since a fallback is actually about to happen
   const params = { mode: "classic", timeMode: resolvedTimeMode };
   const { match, human } = manager.createPvEMatch({
     humanNickname: entry.nickname,
@@ -465,8 +471,8 @@ const sweepInterval = setInterval(() => {
   }
   // Only entries still unmatched after the human-pairing sweep above age
   // out here — human pairing always gets first chance.
-  for (const [entry, resolvedTimeMode, rated] of queue.expireStale(now, MATCHMAKING_BOT_FALLBACK_MS)) {
-    matchBotFallback(entry, resolvedTimeMode, rated);
+  for (const [entry, resolvedTimeMode, rated, remove] of queue.expireStale(now, MATCHMAKING_BOT_FALLBACK_MS)) {
+    matchBotFallback(entry, resolvedTimeMode, rated, remove);
   }
 }, MATCHMAKING_SWEEP_INTERVAL_MS);
 
