@@ -46,6 +46,15 @@ export const DISCONNECT_ABORT_MS = 60_000;
 // rematch before giving up and telling the first requester it fizzled.
 export const REMATCH_TIMEOUT_MS = 20_000;
 
+// How long a finished match stays alive waiting for a rematch that
+// never comes, before the server gives up and closes it — same idea as
+// DISCONNECT_ABORT_MS, just for the "game ended, nobody's disconnected,
+// nobody's asked for a rematch either" case, which nothing else times
+// out (a tab left open on the endcard would otherwise hold the match in
+// memory indefinitely). Applies uniformly to every match regardless of
+// who's playing — PvP, PvE, EvE all use the same rule.
+export const MATCH_POST_GAME_IDLE_MS = 5 * 60_000;
+
 // Fixed presets. Adding a new mode later = one more entry here, nothing else changes.
 export const MODES = {
   classic: { label: "Classic", boardSize: 20, zoneRadius: 4, startingDominoes: 2 },
@@ -127,3 +136,9 @@ export const MATCHMAKING_UNKNOWN_OPPONENT_SCORE = 0.25;
 // sweep(). Cheap at any realistic queue size (see design discussion),
 // so this can stay aggressive.
 export const MATCHMAKING_SWEEP_INTERVAL_MS = 1000;
+
+// How long a queued player waits for a human opponent before falling
+// back to the closest-skill bot — see matchmakingQueue.js's
+// expireStale() and docs/BOTS.md point 5. Human pairing always gets
+// first chance; this is purely a "queue was empty" safety net.
+export const MATCHMAKING_BOT_FALLBACK_MS = 10000;

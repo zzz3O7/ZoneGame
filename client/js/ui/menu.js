@@ -1,4 +1,4 @@
-import { CUSTOM_DEFAULTS, TIME_CUSTOM_DEFAULTS } from "../../../shared/config.js";
+import { CUSTOM_DEFAULTS, TIME_CUSTOM_DEFAULTS, TIME_PRESETS } from "../../../shared/config.js";
 import { resolveParams } from "../../../shared/params.js";
 import { sound } from "../audio/soundManager.js";
 import { account, onAccountChange } from "../account.js";
@@ -13,30 +13,36 @@ const NICKNAME_KEY = "zonegame.nickname";
 // tabs. Emits fully-resolved params objects via callbacks — never hands raw
 // input values to the caller.
 export class Menu {
-  constructor({ onStartLocal, onCreateMatch, onJoinMatch, onJoinQueue, onLeaveQueue }) {
+  constructor({ onStartLocal, onCreateMatch, onJoinMatch, onJoinQueue, onLeaveQueue, onPlayBot, onRequestBotList }) {
     this.onStartLocal = onStartLocal;
     this.onCreateMatch = onCreateMatch;
     this.onJoinMatch = onJoinMatch;
     this.onJoinQueue = onJoinQueue;
     this.onLeaveQueue = onLeaveQueue;
+    this.onPlayBot = onPlayBot;
+    this.onRequestBotList = onRequestBotList;
 
     this.qpTimeMode = "blitz";
     this.rankedTimeMode = "blitz";
+    this.selectedBotId = null;
 
-    // Local and Create each get their own independent mode/time-control
+    // Local, Create, and Bots each get their own independent mode/time-control
     // picker — same shape, same defaults, but a Custom board on one
-    // shouldn't affect the other. See _makeBoardSection.
+    // shouldn't affect the others. See _makeBoardSection.
     this.localSection = this._makeBoardSection("local");
-    this.createSection = this._makeBoardSection("create");
+    this.createSection = this._makeBoardSection("create", () => this._renderCreateRatedToggle());
+    this.botsSection = this._makeBoardSection("bots");
 
     this._cacheDom();
     this._restoreNickname();
     this._bindEvents();
 
     this._renderRankedTab();
+    this._renderCreateRatedToggle();
     this._syncNicknameFields();
     onAccountChange(() => {
       this._renderRankedTab();
+      this._renderCreateRatedToggle();
       this._syncNicknameFields();
     });
   }
@@ -45,7 +51,7 @@ export class Menu {
   // Create each have one, with a shared `${prefix}` ID convention —
   // e.g. "localModeCardClassic" / "createModeCardClassic"). Returns
   // { buildParams() } — everything else is private to the closure.
-  _makeBoardSection(prefix) {
+  _makeBoardSection(prefix, onChange = () => {}) {
     const els = {
       modeClassic: document.getElementById(`${prefix}ModeCardClassic`),
       modeCustom: document.getElementById(`${prefix}ModeCardCustom`),
@@ -79,6 +85,7 @@ export class Menu {
       els.modeClassic.classList.add("selected");
       els.modeCustom.classList.remove("selected");
       els.paramsPanel.classList.add("collapsed");
+      onChange();
     });
     els.modeCustom.addEventListener("click", () => {
       sound.uiClick();
@@ -86,6 +93,7 @@ export class Menu {
       els.modeCustom.classList.add("selected");
       els.modeClassic.classList.remove("selected");
       els.paramsPanel.classList.remove("collapsed");
+      onChange();
     });
     els.timeCards.forEach((card) => {
       card.addEventListener("click", () => {
@@ -93,6 +101,7 @@ export class Menu {
         state.timeMode = card.dataset.timeMode;
         els.timeCards.forEach((c) => c.classList.toggle("selected", c === card));
         els.timeCustomPanel.classList.toggle("collapsed", card.dataset.timeMode !== "custom");
+        onChange();
       });
     });
 
@@ -111,6 +120,14 @@ export class Menu {
           timeInitialMs: Number(els.timeInitial.value) * 60_000,
           timeIncrementMs: Number(els.timeIncrement.value) * 1000,
         }),
+      // Rated play needs a recognized, actually-timed preset on both
+      // axes — see server/index.js's CREATE_MATCH handler, which
+      // enforces this same rule authoritatively (this is purely so the
+      // UI can reflect it without a round trip). TIME_PRESETS.none is a
+      // real, truthy entry (the no-clock sentinel) — has to be excluded
+      // explicitly, a plain truthiness check would wrongly treat "no
+      // clock" as a recognized preset.
+      isRatable: () => state.mode === "classic" && state.timeMode !== "none" && Boolean(TIME_PRESETS[state.timeMode]),
     };
   }
 
@@ -126,6 +143,8 @@ export class Menu {
       nicknameCreate: document.getElementById("nicknameCreateInput"),
       nicknameJoin: document.getElementById("nicknameJoinInput"),
       joinCode: document.getElementById("joinCodeInput"),
+      createRatedToggle: document.getElementById("createRatedToggle"),
+      createRatedHint: document.getElementById("createRatedHint"),
 
       nicknameQuickPlay: document.getElementById("nicknameQuickPlayInput"),
       qpTimeCards: [...document.querySelectorAll("#qpTimeGrid .mode-card")],
@@ -134,6 +153,11 @@ export class Menu {
       rankedTimeCards: [...document.querySelectorAll("#rankedTimeGrid .mode-card")],
       rankedStatus: document.getElementById("rankedStatus"),
       btnRanked: document.getElementById("btnRanked"),
+
+      botsListGrid: document.getElementById("botsListGrid"),
+      botsStatus: document.getElementById("botsStatus"),
+      nicknameBots: document.getElementById("nicknameBotsInput"),
+      btnPlayBot: document.getElementById("btnPlayBot"),
     };
   }
 
@@ -172,11 +196,82 @@ export class Menu {
     }
   }
 
+  // A Create match can be marked rated same as ranked matchmaking — but
+  // needs a real account on both sides (ratingService.finalizeRatedGame)
+  // AND a recognized board/time preset (server enforces this
+  // authoritatively; see CREATE_MATCH in index.js). Either gap disables
+  // the switch and forces it off, with a hint explaining which one.
+  _renderCreateRatedToggle() {
+    const accountEligible = account.loggedIn && Boolean(account.nickname);
+    const paramsEligible = this.createSection.isRatable();
+    const eligible = accountEligible && paramsEligible;
+
+    this.els.createRatedToggle.disabled = !eligible;
+    if (!eligible) this.els.createRatedToggle.checked = false;
+
+    if (!accountEligible) {
+      this.els.createRatedHint.hidden = false;
+      this.els.createRatedHint.textContent = "Sign in with a nickname to create a rated match.";
+    } else if (!paramsEligible) {
+      this.els.createRatedHint.hidden = false;
+      this.els.createRatedHint.textContent = "Rated matches require the Classic board and a preset time control.";
+    } else {
+      this.els.createRatedHint.hidden = true;
+    }
+  }
+
+  // Called from main.js's showScreen() whenever the menu becomes visible
+  // again (e.g. leaving a finished/left match). If Bots happens to be
+  // the already-active tab, no click ever fires _selectTab again, so
+  // nothing would otherwise re-trigger a reconnect — leaving Play
+  // pointing at a connection main.js already consumed the moment the
+  // previous bot match started. See main.js's onRequestBotList guard
+  // (botsListLoaded) for why this is safe to call unconditionally.
+  refreshBotsTabIfActive() {
+    const botsPanel = this.els.panels.find((p) => p.id === "tabBots");
+    if (botsPanel?.classList.contains("active")) this.onRequestBotList?.();
+  }
+
   _selectTab(tabId) {
     sound.uiClick();
     this.els.tabs.forEach((tab) => tab.classList.toggle("active", tab.dataset.tab === tabId));
     this.els.panels.forEach((panel) => panel.classList.toggle("active", panel.id === tabId));
     this.clearJoinCode(); // stale code from a previous attempt shouldn't linger once you've navigated away
+    if (tabId === "tabBots") this.onRequestBotList?.();
+  }
+
+  // Called once per bots-tab visit that actually gets a response (see
+  // main.js's botsListLoaded guard — this itself is safe to call more
+  // than once, it just re-renders). Empty list is a distinct state from
+  // "still loading" (see the initial "Loading bots…" text in HTML).
+  renderBotList(bots) {
+    this.selectedBotId = null;
+    this.els.btnPlayBot.disabled = true;
+    this.els.botsListGrid.innerHTML = "";
+
+    if (bots.length === 0) {
+      this.els.botsStatus.textContent = "No bots available yet — run server/scripts/seedBots.js.";
+      return;
+    }
+    this.els.botsStatus.textContent = "";
+
+    for (const bot of bots) {
+      const card = document.createElement("div");
+      card.className = "mode-card";
+      card.dataset.botId = bot.id;
+      card.innerHTML = `<div class="mode-card__name">${bot.nickname}</div><div class="mode-card__desc">Rating ${bot.rating}</div>`;
+      card.addEventListener("click", () => {
+        sound.uiClick();
+        this.selectedBotId = bot.id;
+        [...this.els.botsListGrid.children].forEach((c) => c.classList.toggle("selected", c === card));
+        this.els.btnPlayBot.disabled = false;
+      });
+      this.els.botsListGrid.appendChild(card);
+    }
+  }
+
+  botsListError(message) {
+    this.els.botsStatus.textContent = message || "Couldn't load bots.";
   }
 
   // A logged-in account's nickname is the identity used everywhere —
@@ -186,7 +281,7 @@ export class Menu {
   // Logging out (or being logged in with no nickname yet) unlocks them
   // and falls back to whatever was last saved locally.
   _syncNicknameFields() {
-    const fields = [this.els.nicknameCreate, this.els.nicknameJoin, this.els.nicknameQuickPlay];
+    const fields = [this.els.nicknameCreate, this.els.nicknameJoin, this.els.nicknameQuickPlay, this.els.nicknameBots];
     const locked = account.loggedIn && Boolean(account.nickname);
     if (locked) {
       fields.forEach((input) => {
@@ -216,6 +311,7 @@ export class Menu {
       this.els.nicknameCreate.value = saved;
       this.els.nicknameJoin.value = saved;
       this.els.nicknameQuickPlay.value = saved;
+      this.els.nicknameBots.value = saved;
     }
   }
 
@@ -250,24 +346,34 @@ export class Menu {
     this.els.nicknameCreate.addEventListener("input", () => {
       this.els.nicknameJoin.value = this.els.nicknameCreate.value;
       this.els.nicknameQuickPlay.value = this.els.nicknameCreate.value;
+      this.els.nicknameBots.value = this.els.nicknameCreate.value;
       this._saveNickname(this.els.nicknameCreate.value.trim());
     });
     this.els.nicknameJoin.addEventListener("input", () => {
       this.els.nicknameCreate.value = this.els.nicknameJoin.value;
       this.els.nicknameQuickPlay.value = this.els.nicknameJoin.value;
+      this.els.nicknameBots.value = this.els.nicknameJoin.value;
       this._saveNickname(this.els.nicknameJoin.value.trim());
     });
     this.els.nicknameQuickPlay.addEventListener("input", () => {
       this.els.nicknameCreate.value = this.els.nicknameQuickPlay.value;
       this.els.nicknameJoin.value = this.els.nicknameQuickPlay.value;
+      this.els.nicknameBots.value = this.els.nicknameQuickPlay.value;
       this._saveNickname(this.els.nicknameQuickPlay.value.trim());
+    });
+    this.els.nicknameBots.addEventListener("input", () => {
+      this.els.nicknameCreate.value = this.els.nicknameBots.value;
+      this.els.nicknameJoin.value = this.els.nicknameBots.value;
+      this.els.nicknameQuickPlay.value = this.els.nicknameBots.value;
+      this._saveNickname(this.els.nicknameBots.value.trim());
     });
 
     this.els.btnCreate.addEventListener("click", () => {
       sound.uiConfirm();
       const nickname = this.els.nicknameCreate.value.trim() || "Player";
       this._saveNickname(nickname); // belt-and-suspenders alongside the input listener (e.g. an autofilled value that never fired "input")
-      this.onCreateMatch(nickname, this.createSection.buildParams());
+      const rated = !this.els.createRatedToggle.disabled && this.els.createRatedToggle.checked;
+      this.onCreateMatch(nickname, this.createSection.buildParams(), rated);
     });
 
     this.els.btnJoin.addEventListener("click", () => {
@@ -315,6 +421,14 @@ export class Menu {
       }
       sound.uiConfirm();
       this.onJoinQueue(true, this.rankedTimeMode, null);
+    });
+
+    this.els.btnPlayBot.addEventListener("click", () => {
+      if (!this.selectedBotId) return;
+      const nickname = this.els.nicknameBots.value.trim() || "Player";
+      this._saveNickname(nickname);
+      sound.uiConfirm();
+      this.onPlayBot(this.selectedBotId, nickname, this.botsSection.buildParams());
     });
   }
 }

@@ -43,12 +43,58 @@ let opponentDisconnectTimer = null; // drives the live countdown text in the opp
 let bannerAutoHideTimer = null; // was a bare setTimeout in handleOpponentReconnected — could fire late and clobber a newer, more urgent banner it knows nothing about
 let reconnectInProgress = false; // guards handleConnectionLost against running twice at once (e.g. a move attempted mid-reconnect can independently trigger onConnectionLost again)
 
+// The Bots tab needs a connection just to list bots, before any match
+// exists — kept deliberately separate from currentConnection/
+// currentMatchClient so browsing the tab can never clobber an unrelated
+// in-progress flow. Promoted into the real thing only once Play is
+// actually clicked (see onPlayBot below).
+let botsConnection = null;
+let botsMatchClient = null;
+let botsListLoaded = false;
+
+// Same pattern as the Bots tab, one step further: JOIN_MATCH used to
+// fire immediately on submit. Now it previews first (see
+// MATCH_PREVIEW_REQUEST) and only actually joins once Accept is
+// clicked — so this connection stays uncommitted in exactly the same
+// way until that happens. Declining never talks to the server at all;
+// the creator's match just keeps waiting, same as if no one had looked.
+let joinPreviewConnection = null;
+let joinPreviewMatchClient = null;
+let joinPreviewInviteCode = null;
+let joinPreviewNickname = null;
+
+// Called at the start of every OTHER menu flow (Create/Quick
+// Play/Ranked/Local, or opening a different browsing connection) — any
+// not-yet-committed bots-list or join-preview connection would
+// otherwise sit open, unused, until page unload.
+function closeDanglingBrowsingConnections() {
+  if (botsConnection) {
+    botsConnection.close();
+    botsConnection = null;
+    botsMatchClient = null;
+    botsListLoaded = false;
+  }
+  if (joinPreviewConnection) {
+    joinPreviewConnection.close();
+    joinPreviewConnection = null;
+    joinPreviewMatchClient = null;
+    joinPreviewInviteCode = null;
+    joinPreviewNickname = null;
+  }
+}
+
 function showScreen(screen) {
   [menuScreen, waitingRoomScreen, gameScreen].forEach((s) => (s.hidden = s !== screen));
   // Sign-in/out only makes sense before a match — also stops the widget
   // from sitting on top of the board once a game starts.
   document.getElementById("accountWidget").hidden = screen !== menuScreen;
   if (screen !== waitingRoomScreen) stopSearchWindowIndicator();
+  // Returning to the menu with Bots already the active tab won't fire a
+  // fresh tab-select (nothing was actually clicked) — but a bots-list
+  // connection from before a completed/left match was already consumed
+  // the moment Play was clicked (see onPlayBot). Without this, Play
+  // silently does nothing until the person switches tabs away and back.
+  if (screen === menuScreen) menu.refreshBotsTabIfActive();
 }
 
 // The page-load reconnect flow (below) shows/hides the menu directly
@@ -107,8 +153,8 @@ function handleJoinError(message) {
   });
 }
 
-function setupMatchClient(conn) {
-  const matchClient = new MatchClient(conn);
+function setupMatchClient(conn, existingMatchClient = null) {
+  const matchClient = existingMatchClient ?? new MatchClient(conn);
   currentMatchClient = matchClient;
   matchClient.onMatchStart = (game) => {
     sound.matchStart();
@@ -163,7 +209,7 @@ function setupMatchClient(conn) {
 // correctly on its own.
 function routeSyncedState(matchClient, game, syncMsg) {
   if (syncMsg.status === "waiting") {
-    populateWaitingRoom(matchClient.params ?? {}, matchClient.inviteCode);
+    populateWaitingRoom(matchClient.params ?? {}, matchClient.inviteCode, matchClient.rated);
     showScreen(waitingRoomScreen);
     return;
   }
@@ -336,10 +382,15 @@ function startGame(game, matchClient = null) {
 
 // params here are always already resolved/clamped (see js/params.js) —
 // Menu never hands raw form input to these callbacks.
-function populateWaitingRoom(params, inviteCode) {
+function populateWaitingRoom(params, inviteCode, rated = false) {
   stopSearchWindowIndicator(); // no matchmaking window concept for an invite-code wait
+  document.getElementById("waitSpinner").hidden = false;
+  document.getElementById("waitActionsCancel").hidden = false;
+  document.getElementById("waitActionsJoinPreview").hidden = true;
   document.getElementById("waitTitle").textContent = "Waiting for opponent…";
-  document.getElementById("waitSub").textContent = "Share this code with your opponent";
+  document.getElementById("waitSub").textContent = rated
+    ? "Share this code with your opponent · Rated match"
+    : "Share this code with your opponent";
   document.getElementById("codeBoxRow").hidden = false;
   document.getElementById("inviteCodeDisplay").textContent = inviteCode;
   document.getElementById("waitModeValue").textContent = params.mode === "classic" ? "Classic" : "Custom";
@@ -347,12 +398,41 @@ function populateWaitingRoom(params, inviteCode) {
   document.getElementById("waitZoneRadiusValue").textContent = params.zoneRadius;
   document.getElementById("waitDominoValue").textContent = params.startingDominoes;
   document.getElementById("waitTimeValue").textContent = formatTimeControlLabel(params.timeControl);
+  document.getElementById("waitSeedValue").textContent = params.seed || "random";
+}
+
+// Lets a joiner see the board/time params (and who they'd be playing,
+// and whether it's rated) before actually seating themselves — see
+// MATCH_PREVIEW_REQUEST. Reuses the same screen/markup as
+// populateWaitingRoom, just swaps the spinner+Cancel footer for
+// Accept/Decline and hides the invite-code box (they already typed it
+// to get here).
+function populateJoinPreview(params, rated, creatorNickname) {
+  stopSearchWindowIndicator();
+  document.getElementById("waitSpinner").hidden = true;
+  document.getElementById("waitActionsCancel").hidden = true;
+  document.getElementById("waitActionsJoinPreview").hidden = false;
+  document.getElementById("waitTitle").textContent = "Match found";
+  document.getElementById("waitSub").textContent = rated
+    ? `${creatorNickname}'s match · Rated`
+    : `${creatorNickname}'s match`;
+  document.getElementById("codeBoxRow").hidden = true;
+  document.getElementById("waitModeValue").textContent = params.mode === "classic" ? "Classic" : "Custom";
+  document.getElementById("waitBoardValue").textContent = `${params.boardSize} x ${params.boardSize}`;
+  document.getElementById("waitZoneRadiusValue").textContent = params.zoneRadius;
+  document.getElementById("waitDominoValue").textContent = params.startingDominoes;
+  document.getElementById("waitTimeValue").textContent = formatTimeControlLabel(params.timeControl);
+  document.getElementById("waitSeedValue").textContent = params.seed || "random";
+  document.getElementById("waitWindowSection").hidden = true;
 }
 
 // Matchmaking's "waiting" state reuses the same screen/markup as the
 // invite-code wait — just no code to show, and the board/time details
 // are known upfront (always Classic) rather than read back from params.
 function populateSearchingRoom(rated, timeMode) {
+  document.getElementById("waitSpinner").hidden = false;
+  document.getElementById("waitActionsCancel").hidden = false;
+  document.getElementById("waitActionsJoinPreview").hidden = true;
   document.getElementById("waitTitle").textContent = "Searching for opponent…";
   document.getElementById("waitSub").textContent = rated ? "Ranked matchmaking" : "Quick play matchmaking";
   document.getElementById("codeBoxRow").hidden = true;
@@ -363,6 +443,7 @@ function populateSearchingRoom(rated, timeMode) {
   document.getElementById("waitDominoValue").textContent = classic.startingDominoes;
   document.getElementById("waitTimeValue").textContent =
     timeMode === "any" ? "Any" : formatTimeControlLabel(TIME_PRESETS[timeMode]);
+  document.getElementById("waitSeedValue").textContent = "random"; // matchmaking always uses Classic — resolveParams never attaches a seed to it
   startSearchWindowIndicator();
 }
 
@@ -465,12 +546,14 @@ function attemptPageLoadReconnect(storedSession) {
 
 const menu = new Menu({
   onStartLocal: (params) => {
+    closeDanglingBrowsingConnections();
     sound.matchStart();
     lastLocalParams = params;
     startGame(new Game(params));
   },
 
-  onCreateMatch: async (nickname, params) => {
+  onCreateMatch: async (nickname, params, rated) => {
+    closeDanglingBrowsingConnections();
     const conn = new Connection(wsUrl());
     currentConnection = conn;
     try {
@@ -486,19 +569,18 @@ const menu = new Menu({
 
     const matchClient = setupMatchClient(conn);
     matchClient.onCreated = (inviteCode) => {
-      populateWaitingRoom(params, inviteCode);
+      populateWaitingRoom(params, inviteCode, matchClient.rated);
       showScreen(waitingRoomScreen);
     };
-    matchClient.createMatch(nickname, params);
+    matchClient.createMatch(nickname, params, rated);
   },
 
   onJoinMatch: async (nickname, code) => {
+    closeDanglingBrowsingConnections();
     const conn = new Connection(wsUrl());
-    currentConnection = conn;
     try {
       await conn.connect();
     } catch {
-      currentConnection = null;
       showBanner("Couldn't reach the server. Check your connection and try again.", {
         kind: "danger",
         actions: [{ label: "Dismiss", onClick: hideBanner }],
@@ -506,11 +588,31 @@ const menu = new Menu({
       return;
     }
 
-    const matchClient = setupMatchClient(conn);
-    matchClient.joinMatch(code, nickname);
+    // Not setupMatchClient() yet — same reasoning as the Bots list:
+    // nothing should touch currentConnection/currentMatchClient until
+    // the person actually accepts what they're previewing.
+    const matchClient = new MatchClient(conn);
+    joinPreviewConnection = conn;
+    joinPreviewMatchClient = matchClient;
+    joinPreviewInviteCode = code;
+    joinPreviewNickname = nickname;
+    matchClient.onPreview = (preview) => {
+      populateJoinPreview(preview.params, preview.rated, preview.creatorNickname);
+      showScreen(waitingRoomScreen);
+    };
+    matchClient.onError = (message) => {
+      joinPreviewConnection = null;
+      joinPreviewMatchClient = null;
+      joinPreviewInviteCode = null;
+      joinPreviewNickname = null;
+      conn.close();
+      showBanner(message, { kind: "danger", actions: [{ label: "Dismiss", onClick: hideBanner }] });
+    };
+    matchClient.requestPreview(code);
   },
 
   onJoinQueue: async (rated, timeMode, nickname) => {
+    closeDanglingBrowsingConnections();
     const conn = new Connection(wsUrl());
     currentConnection = conn;
     try {
@@ -530,6 +632,50 @@ const menu = new Menu({
       showScreen(waitingRoomScreen);
     };
     matchClient.joinQueue(rated, timeMode, nickname);
+  },
+
+  onRequestBotList: async () => {
+    if (botsListLoaded) return; // already fetched this menu-session; renderBotList already has it
+    closeDanglingBrowsingConnections(); // a dangling join-preview from the Join tab shouldn't linger once Bots is opened instead
+    const conn = new Connection(wsUrl());
+    botsConnection = conn;
+    try {
+      await conn.connect();
+    } catch {
+      botsConnection = null;
+      menu.botsListError("Couldn't reach the server.");
+      return;
+    }
+
+    // Deliberately NOT setupMatchClient() here — that assigns
+    // currentConnection/currentMatchClient, which would be wrong before
+    // any match actually exists. Only onBotList/onError are wired.
+    const matchClient = new MatchClient(conn);
+    botsMatchClient = matchClient;
+    matchClient.onBotList = (bots) => {
+      botsListLoaded = true;
+      menu.renderBotList(bots);
+    };
+    matchClient.onError = (message) => {
+      botsListLoaded = false;
+      botsConnection = null;
+      botsMatchClient = null;
+      conn.close();
+      menu.botsListError(message);
+    };
+    matchClient.requestBotList();
+  },
+
+  onPlayBot: (botId, nickname, params) => {
+    if (!botsConnection || !botsMatchClient) return; // shouldn't happen — Play is disabled until a list loads
+    sound.matchStart();
+    const conn = botsConnection;
+    const matchClient = setupMatchClient(conn, botsMatchClient); // promotes it: wires full match handling, assigns currentConnection/currentMatchClient
+    currentConnection = conn;
+    botsConnection = null;
+    botsMatchClient = null;
+    botsListLoaded = false; // next Bots-tab visit fetches fresh, since this connection is spoken for now
+    matchClient.playBot(botId, nickname, params);
   },
 });
 
@@ -561,6 +707,34 @@ document.getElementById("btnCancelWait").addEventListener("click", () => {
   // — no need to track which one got us here.
   currentMatchClient?.leaveQueue();
   leaveCurrentMatch();
+  menu.clearJoinCode();
+  showScreen(menuScreen);
+});
+
+document.getElementById("btnAcceptJoin").addEventListener("click", () => {
+  if (!joinPreviewConnection || !joinPreviewMatchClient) return;
+  sound.matchStart();
+  const conn = joinPreviewConnection;
+  const matchClient = setupMatchClient(conn, joinPreviewMatchClient); // promotes it: wires full match handling, assigns currentConnection/currentMatchClient
+  currentConnection = conn;
+  const { inviteCode, nickname } = { inviteCode: joinPreviewInviteCode, nickname: joinPreviewNickname };
+  joinPreviewConnection = null;
+  joinPreviewMatchClient = null;
+  joinPreviewInviteCode = null;
+  joinPreviewNickname = null;
+  matchClient.joinMatch(inviteCode, nickname);
+});
+
+document.getElementById("btnDeclineJoin").addEventListener("click", () => {
+  sound.uiBack();
+  // No message to the server by design — the creator's match just keeps
+  // waiting for someone else, exactly as if this connection never
+  // previewed it at all. Closing the socket is the only cleanup needed.
+  joinPreviewConnection?.close();
+  joinPreviewConnection = null;
+  joinPreviewMatchClient = null;
+  joinPreviewInviteCode = null;
+  joinPreviewNickname = null;
   menu.clearJoinCode();
   showScreen(menuScreen);
 });

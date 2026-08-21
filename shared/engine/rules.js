@@ -54,4 +54,28 @@ export class Rules {
     }
     return false;
   }
+
+  // All legal (pieceType, shape, anchorRow, anchorCol) placements for
+  // this player, board-wide. Same scan as canPlayerMove but collects
+  // instead of early-exiting. Nothing on the client needs this today
+  // (drag-preview highlighting only ever checks one candidate shape at a
+  // time via canPlaceHere) — this exists for bot move selection, and
+  // doubles as the base a future move-evaluator would score.
+  static allLegalPlacements(board, zones, player) {
+    const availableTypes = player.availableTypes();
+    const moves = [];
+    for (let r = 0; r < board.rows; r++) {
+      for (let c = 0; c < board.cols; c++) {
+        if (!board.isFloor(r, c)) continue;
+        for (const type of availableTypes) {
+          for (const shape of SHAPE_VARIANTS[type]) {
+            if (Rules.canPlaceHere(board, zones, player, type, shape, r, c)) {
+              moves.push({ pieceType: type, shape, anchorRow: r, anchorCol: c });
+            }
+          }
+        }
+      }
+    }
+    return moves;
+  }
 }

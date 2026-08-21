@@ -224,4 +224,31 @@ export class MatchmakingQueue {
       }
     }
   }
+
+  // Pulls out (and removes) any waiting entry that's been queued at
+  // least maxWaitMs — regardless of whether sweep() could find it a
+  // human pair. This is the seam the bot-fallback lock hangs off (see
+  // docs/BOTS.md point 5): human pairing gets a fair shot first via
+  // sweep(), and only an entry still unmatched after that ages out here.
+  // Deliberately separate from sweep()'s pairing logic — this function
+  // only reports staleness, the caller decides what a stale entry means.
+  // Returns [entry, resolvedTimeMode, rated, remove] tuples;
+  // resolvedTimeMode falls back to MATCHMAKING_ANY_FALLBACK for an
+  // "any" waiter, same as a real any-vs-any pairing would. remove is
+  // NOT called automatically — the caller only calls it once it's
+  // actually going to do something with this entry (e.g. found a bot to
+  // fall back to); if there's nothing to fall back to yet, the entry
+  // needs to stay queued rather than vanish silently.
+  expireStale(now, maxWaitMs) {
+    const results = [];
+    for (const rated of [true, false]) {
+      const pool = this._poolFor(rated);
+      for (const { entry, mode, remove } of this._flatten(pool)) {
+        if (now - entry.joinedAt >= maxWaitMs) {
+          results.push([entry, mode || MATCHMAKING_ANY_FALLBACK, rated, remove]);
+        }
+      }
+    }
+    return results;
+  }
 }

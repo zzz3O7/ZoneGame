@@ -3,20 +3,31 @@ import { Game } from "../shared/engine/game.js";
 import { Clock } from "../shared/clock.js";
 import { resolveParams } from "../shared/params.js";
 import { MSG } from "../shared/net/protocol.js";
-import { DISCONNECT_ABORT_MS, REMATCH_TIMEOUT_MS } from "../shared/config.js";
+import { DISCONNECT_ABORT_MS, REMATCH_TIMEOUT_MS, MATCH_POST_GAME_IDLE_MS } from "../shared/config.js";
 import { log, shortId, formatDuration } from "./logger.js";
 import { getPlayerById, displayRating } from "./playerRepository.js";
 
 export class Match {
-  constructor(matchId, inviteCode, rawParams, onClose, onGameEnd = null, rated = false) {
+  constructor(
+    matchId,
+    inviteCode,
+    rawParams,
+    onClose,
+    onGameEnd = null,
+    rated = false,
+    matchType = "pvp",
+    origin = "matchmaking",
+  ) {
     this.matchId = matchId;
     this.inviteCode = inviteCode;
-    this.players = []; // { nickname, playerIndex, ws, sessionId, connected, accountPlayerId }
+    this.players = []; // { nickname, playerIndex, agent, sessionId, connected, accountPlayerId }
     // waiting: <2 players. active: game in progress. over: game ended
     // normally (rematch or leave still possible). aborted: a disconnect
     // grace period expired — terminal, about to be removed.
     this.status = "waiting";
     this.rated = rated; // set once at creation, never toggled mid-match
+    this.matchType = matchType; // 'pvp' | 'pve' | 'eve' — who's playing, see docs/BOTS.md
+    this.origin = origin; // 'matchmaking' | 'direct_debug' | 'self_play_scheduler' — how the match was entered; gates rating impact
     this.game = null;
     this.activeParams = null; // the actual (seeded) params the current Game was built with — needed to replay it identically on reconnect
     this.actions = []; // ordered log of applied actions, replayable through a fresh Game — this IS the reconnect/resync payload
@@ -27,6 +38,7 @@ export class Match {
     this._abortTimer = null;
     this._rematchTimer = null;
     this._flagTimer = null;
+    this._postGameIdleTimer = null;
     this.rematchRequestedBy = new Set(); // playerIndex values that have asked for a rematch
     this.lastStartingPlayerIndex = null; // who moved first in the most recent game — null until the first game starts
     this._gameCount = 0; // incremented in _start() — first game vs rematch, for logging
@@ -39,14 +51,15 @@ export class Match {
     this.params = resolveParams(rawParams?.mode, rawParams);
   }
 
-  // sessionId is the durable player identity — a ws is just whichever
-  // socket currently happens to be attached to that identity, and it's
-  // expected to change across reconnects/refreshes. Never key player state
-  // off ws itself for anything meant to survive a reconnect.
-  addPlayer(nickname, ws, accountPlayerId = null) {
+  // sessionId is the durable player identity — agent is just whichever
+  // channel currently happens to be attached to that identity, and for a
+  // human it's expected to change across reconnects/refreshes (a bot's
+  // agent never changes, since a bot never disconnects). Never key player
+  // state off agent itself for anything meant to survive a reconnect.
+  addPlayer(nickname, agent, accountPlayerId = null) {
     const playerIndex = this.players.length;
     const sessionId = randomUUID();
-    const player = { nickname, playerIndex, ws, sessionId, connected: true, accountPlayerId };
+    const player = { nickname, playerIndex, agent, sessionId, connected: true, accountPlayerId };
     this.players.push(player);
     if (this.players.length === 2) this._start();
     return player;
@@ -69,12 +82,23 @@ export class Match {
       this.lastStartingPlayerIndex === null ? (Math.random() < 0.5 ? 0 : 1) : 1 - this.lastStartingPlayerIndex;
     this.lastStartingPlayerIndex = startingPlayerIndex;
 
-    const finalParams = { ...this.params, seed: Date.now(), startingPlayerIndex };
+    // this.params is the original, never-mutated config from
+    // construction — reading the seed from there (not regenerating
+    // unconditionally) means an explicitly-specified seed stays fixed
+    // across every game this Match plays, rematches included: request a
+    // rematch and you get the exact same board again, not a fresh one.
+    // No seed specified (the common case — always true for classic mode,
+    // since resolveParams never attaches one there) still generates a
+    // fresh one on every _start() call, rematches included, same as
+    // before.
+    const seed = this.params.seed ?? Date.now();
+    const finalParams = { ...this.params, seed, startingPlayerIndex };
     this.activeParams = finalParams; // exact params to replay from, seed included
     this.game = new Game(finalParams);
     this.actions = []; // fresh log for this game (matters once rematch reuses this Match)
     this.endInfo = null;
     clearTimeout(this._rematchTimer); // a fresh game means any pending rematch request is moot
+    clearTimeout(this._postGameIdleTimer); // ...and any pending "nobody rematched in time" cleanup is moot too
     this.rematchRequestedBy.clear();
 
     // (re)build the clock fresh for every game, including rematches.
@@ -124,7 +148,34 @@ export class Match {
     log(
       `Match ${shortId(this.matchId)} ended: reason=${reason} winner=${winnerName} score=${scores} duration=${duration}`,
     );
+    // "aborted" already tears the match down immediately elsewhere — only
+    // "over" (rematch still theoretically possible) needs a bound on how
+    // long it waits for one.
+    if (this.status === "over") this._armPostGameIdleTimer();
     this._onGameEnd?.(reason);
+  }
+
+  _armPostGameIdleTimer() {
+    clearTimeout(this._postGameIdleTimer);
+    this._postGameIdleTimer = setTimeout(() => this._onPostGameIdle(), MATCH_POST_GAME_IDLE_MS);
+  }
+
+  // Nobody disconnected, nobody requested a rematch, the window just
+  // ran out — reuses OPPONENT_LEFT rather than a new message type since
+  // the effect on the remaining side is identical either way: no
+  // rematch is coming, go back to the menu. Applies uniformly whether
+  // the opponent was human or a bot (see docs/BOTS.md — this replaced a
+  // bot-specific idle timer that did the same thing less generally).
+  _onPostGameIdle() {
+    if (this.status !== "over") return; // already handled via another path (rematch started, left, aborted) — this firing is now moot
+    // Unlike leave()/_onAbortTimeout(), nobody necessarily triggered
+    // this — both players could still be fully connected, just neither
+    // has acted. broadcast() reaches whoever's actually still there
+    // (agent-null for anyone who did disconnect is already a no-op via
+    // _sendTo), rather than guessing at a single "remaining" side.
+    this.broadcast({ type: MSG.OPPONENT_LEFT });
+    clearTimeout(this._rematchTimer);
+    this._onClose?.();
   }
 
   // (re)arms the flag-fall timer for whoever the clock says is
@@ -182,13 +233,13 @@ export class Match {
     return myScore >= oppScore + this.game.remainingPossiblePoints;
   }
 
-  attemptMove(ws, pieceType, shape, anchorRow, anchorCol) {
+  attemptMove(agent, pieceType, shape, anchorRow, anchorCol) {
     if (this.status !== "active") return;
 
-    const player = this.players.find((p) => p.ws === ws);
+    const player = this.players.find((p) => p.agent === agent);
     if (!player) return;
     if (player.playerIndex !== this.game.currentPlayerIndex) {
-      this._sendTo(ws, { type: MSG.MOVE_REJECTED, reason: "Not your turn" });
+      this._sendTo(agent, { type: MSG.MOVE_REJECTED, reason: "Not your turn" });
       return;
     }
 
@@ -205,7 +256,7 @@ export class Match {
 
     const applied = this.game.attemptPlacement(pieceType, shape, anchorRow, anchorCol);
     if (!applied) {
-      this._sendTo(ws, { type: MSG.MOVE_REJECTED, reason: "Illegal move" });
+      this._sendTo(agent, { type: MSG.MOVE_REJECTED, reason: "Illegal move" });
       return;
     }
 
@@ -230,13 +281,13 @@ export class Match {
     });
   }
 
-  attemptPass(ws) {
+  attemptPass(agent) {
     if (this.status !== "active") return;
 
-    const player = this.players.find((p) => p.ws === ws);
+    const player = this.players.find((p) => p.agent === agent);
     if (!player) return;
     if (player.playerIndex !== this.game.currentPlayerIndex) {
-      this._sendTo(ws, { type: MSG.MOVE_REJECTED, reason: "Not your turn" });
+      this._sendTo(agent, { type: MSG.MOVE_REJECTED, reason: "Not your turn" });
       return;
     }
 
@@ -249,7 +300,7 @@ export class Match {
 
     const applied = this.game.pass();
     if (!applied) {
-      this._sendTo(ws, { type: MSG.MOVE_REJECTED, reason: "Cannot pass, you have a move" });
+      this._sendTo(agent, { type: MSG.MOVE_REJECTED, reason: "Cannot pass, you have a move" });
       return;
     }
 
@@ -290,12 +341,16 @@ export class Match {
     }
   }
 
-  handleDisconnect(ws) {
-    const player = this.players.find((p) => p.ws === ws);
-    if (!player) return; // already superseded by a reconnect, or unknown socket
+  // Only ever called for a human agent — index.js wires this to a real
+  // ws's 'close' event, and nothing calls it for a BotAgent, so a bot
+  // simply never goes through this path and reads as permanently
+  // connected. No isBot branch needed here as a result.
+  handleDisconnect(agent) {
+    const player = this.players.find((p) => p.agent === agent);
+    if (!player) return; // already superseded by a reconnect, or unknown agent
 
     player.connected = false;
-    player.ws = null;
+    player.agent = null;
     player.disconnectedAt = Date.now();
 
     if (this.status === "aborted") return; // already terminal, nothing left to do
@@ -303,7 +358,7 @@ export class Match {
     const opponent = this.players.find((p) => p !== player);
 
     if (opponent?.connected && this.status === "active") {
-      this._sendTo(opponent.ws, {
+      this._sendTo(opponent.agent, {
         type: MSG.OPPONENT_DISCONNECTED,
         playerIndex: player.playerIndex,
         abortInMs: DISCONNECT_ABORT_MS,
@@ -322,10 +377,10 @@ export class Match {
   }
 
   // Called for RECONNECT_ATTEMPT — sessionId is the durable identity,
-  // ws is whatever fresh socket just connected. Returns the SYNC_STATE
-  // payload to send back, or null if this session can't reconnect here
-  // (unknown, or the match is already terminal).
-  reconnect(sessionId, ws) {
+  // agent wraps whatever fresh socket just connected. Returns the
+  // SYNC_STATE payload to send back, or null if this session can't
+  // reconnect here (unknown, or the match is already terminal).
+  reconnect(sessionId, agent) {
     if (this.status === "aborted") return null;
 
     const player = this.findPlayerBySessionId(sessionId);
@@ -333,13 +388,13 @@ export class Match {
 
     clearTimeout(this._abortTimer);
     const goneMs = player.disconnectedAt ? Date.now() - player.disconnectedAt : null;
-    player.ws = ws;
+    player.agent = agent;
     player.connected = true;
     player.disconnectedAt = null;
 
     const opponent = this.players.find((p) => p !== player);
     if (opponent?.connected) {
-      this._sendTo(opponent.ws, { type: MSG.OPPONENT_RECONNECTED, playerIndex: player.playerIndex });
+      this._sendTo(opponent.agent, { type: MSG.OPPONENT_RECONNECTED, playerIndex: player.playerIndex });
     }
     if (goneMs != null) {
       log(`Match ${shortId(this.matchId)}: ${player.nickname} reconnected after ${formatDuration(goneMs)}`);
@@ -402,7 +457,8 @@ export class Match {
       // Game already concluded on its own merits — just let the other
       // player know no rematch is coming, no result to change.
       clearTimeout(this._rematchTimer); // nothing left to rematch
-      if (remaining) this._sendTo(remaining.ws, { type: MSG.OPPONENT_LEFT });
+      clearTimeout(this._postGameIdleTimer); // this IS the "nobody came back" outcome, just reached via disconnect rather than idling out — nothing left to time out further
+      if (remaining) this._sendTo(remaining.agent, { type: MSG.OPPONENT_LEFT });
       this._onClose?.();
       return;
     }
@@ -433,7 +489,7 @@ export class Match {
     if (this.clock) this.clock.freeze(now);
 
     if (remaining) {
-      this._sendTo(remaining.ws, {
+      this._sendTo(remaining.agent, {
         type: MSG.MATCH_ENDED,
         reason: "abort",
         winnerIndex,
@@ -447,9 +503,9 @@ export class Match {
   // Match stays alive afterward (status "over", same as a natural end) since
   // this is an active decision by an engaged player, not an abandonment —
   // no reason to assume nobody's coming back for a rematch.
-  resign(ws) {
+  resign(agent) {
     if (this.status !== "active") return;
-    const player = this.players.find((p) => p.ws === ws);
+    const player = this.players.find((p) => p.agent === agent);
     if (!player) return;
     const opponent = this.players.find((p) => p !== player);
 
@@ -477,12 +533,12 @@ export class Match {
   // losing position), or leaving after the game already ended. Unlike a
   // mere disconnect, this is deliberate: no ambiguity to wait out, so it
   // always ends in immediate cleanup rather than a grace period.
-  leave(ws) {
-    const player = this.players.find((p) => p.ws === ws);
+  leave(agent) {
+    const player = this.players.find((p) => p.agent === agent);
     if (!player) return;
 
     if (this.status === "active") {
-      this.resign(ws);
+      this.resign(agent);
       // Deliberately not closing here: an active opponent might still be
       // sitting on the resulting endcard wanting a rematch — the match
       // should live on exactly as it would after a natural game end, not be
@@ -503,9 +559,10 @@ export class Match {
     // on). Nothing about the outcome changes; let a still-present opponent
     // know no rematch is coming, then close it out for good.
     clearTimeout(this._rematchTimer);
+    clearTimeout(this._postGameIdleTimer);
     const opponent = this.players.find((p) => p !== player);
     if (opponent?.connected) {
-      this._sendTo(opponent.ws, { type: MSG.OPPONENT_LEFT });
+      this._sendTo(opponent.agent, { type: MSG.OPPONENT_LEFT });
     }
     this._onClose?.();
   }
@@ -516,9 +573,9 @@ export class Match {
   // matchId/players — see the alternating-first-mover logic there). Not
   // clicking rematch and clicking "back to menu" are effectively the same
   // thing (see leave()), so there's no real "decline" message to send.
-  requestRematch(ws) {
+  requestRematch(agent) {
     if (this.status !== "over") return; // only a naturally-completed game can be rematched — not mid-game, not a forfeit/abort
-    const player = this.players.find((p) => p.ws === ws);
+    const player = this.players.find((p) => p.agent === agent);
     if (!player) return;
 
     this.rematchRequestedBy.add(player.playerIndex);
@@ -531,7 +588,7 @@ export class Match {
 
     const opponent = this.players.find((p) => p !== player);
     if (opponent?.connected) {
-      this._sendTo(opponent.ws, { type: MSG.OPPONENT_WANTS_REMATCH });
+      this._sendTo(opponent.agent, { type: MSG.OPPONENT_WANTS_REMATCH });
     }
 
     clearTimeout(this._rematchTimer);
@@ -548,25 +605,22 @@ export class Match {
     this.broadcast({ type: MSG.REMATCH_CANCELLED, reason: "timeout" });
   }
 
-  // Guarded single-socket send, used by reject paths
-  _sendTo(ws, msg) {
-    if (!ws || ws.readyState !== ws.OPEN) return;
-    try {
-      ws.send(JSON.stringify(msg));
-    } catch (err) {
-      console.error("send failed:", err.message);
-    }
+  // Null-safe single-agent send (a disconnected human's agent is null —
+  // see handleDisconnect). The actual send-and-guard logic now lives on
+  // the agent itself (HumanAgent/BotAgent in playerAgent.js).
+  _sendTo(agent, msg) {
+    agent?.send(msg);
   }
 
   broadcast(msg) {
     for (const p of this.players) {
-      this._sendTo(p.ws, msg);
+      this._sendTo(p.agent, msg);
     }
   }
 
   broadcastPersonalized(buildMsg) {
     for (const p of this.players) {
-      this._sendTo(p.ws, buildMsg(p));
+      this._sendTo(p.agent, buildMsg(p));
     }
   }
 }

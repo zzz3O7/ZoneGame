@@ -35,6 +35,8 @@ export class MatchClient {
     this.onQueueCancelled = null; // () => void
     this.onQueueMatched = null; // ({ rated }) => void — fires alongside (order not guaranteed vs) onMatchStart
     this.onRatingUpdate = null; // (update) => void — see this.ratingUpdate; always arrives before the game-ending message, so consumers should just let it stash and be picked up by that message's own render, not force one themselves
+    this.onBotList = null; // (bots) => void — [{ id, nickname, rating }]
+    this.onPreview = null; // (preview) => void — { inviteCode, params, rated, creatorNickname }, see requestPreview
 
     this._bind(connection);
   }
@@ -59,6 +61,8 @@ export class MatchClient {
     connection.on(MSG.QUEUE_CANCELLED, () => this.onQueueCancelled?.());
     connection.on(MSG.QUEUE_MATCHED, (msg) => this._handleQueueMatched(msg));
     connection.on(MSG.RATING_UPDATE, (msg) => this._handleRatingUpdate(msg));
+    connection.on(MSG.BOT_LIST, (msg) => this.onBotList?.(msg.bots));
+    connection.on(MSG.MATCH_PREVIEW, (msg) => this.onPreview?.(msg));
     connection.on(MSG.ERROR, (msg) => this.onError?.(msg.message));
     connection.on("__close", () => {
       if (!connection.intentionalClose) this.onConnectionLost?.();
@@ -85,8 +89,12 @@ export class MatchClient {
     this.connection.send({ type: MSG.REQUEST_RESYNC });
   }
 
-  createMatch(nickname, params) {
-    this.connection.send({ type: MSG.CREATE_MATCH, nickname, params });
+  // rated is false for the vast majority of invite-code play — see
+  // Menu's createRatedToggle; only reaches the server as true when the
+  // creator is signed in with a nickname (server re-validates this
+  // regardless, see index.js's CREATE_MATCH handler).
+  createMatch(nickname, params, rated = false) {
+    this.connection.send({ type: MSG.CREATE_MATCH, nickname, params, rated });
   }
 
   joinMatch(inviteCode, nickname) {
@@ -102,6 +110,23 @@ export class MatchClient {
 
   leaveQueue() {
     this.connection.send({ type: MSG.LEAVE_QUEUE });
+  }
+
+  requestBotList() {
+    this.connection.send({ type: MSG.BOT_LIST_REQUEST });
+  }
+
+  requestPreview(inviteCode) {
+    this.connection.send({ type: MSG.MATCH_PREVIEW_REQUEST, inviteCode });
+  }
+
+  // Direct-debug PvE — bypasses the queue, always unrated, zero move
+  // delay on the bot's side (see docs/BOTS.md "direct_debug" origin).
+  // nickname is ignored server-side if signed in, same rule as joinQueue.
+  // params is a fully-resolved board+time config (see Menu's
+  // botsSection), same shape createMatch/joinMatch already send.
+  playBot(botId, nickname, params) {
+    this.connection.send({ type: MSG.PLAY_BOT_REQUEST, botId, nickname, params });
   }
 
   isMyTurn() {
@@ -154,6 +179,7 @@ export class MatchClient {
     this.inviteCode = msg.inviteCode;
     this.myPlayerIndex = msg.yourPlayerIndex;
     this.sessionId = msg.sessionId;
+    this.rated = Boolean(msg.rated);
     this._saveSession();
     this.onCreated?.(this.inviteCode);
   }

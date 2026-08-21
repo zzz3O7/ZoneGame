@@ -154,6 +154,7 @@
 
         <div class="tabs">
           <div class="tab active" data-tab="tabLocal">Local</div>
+          <div class="tab" data-tab="tabBots">Bots</div>
           <div class="tab" data-tab="tabCreate">Create</div>
           <div class="tab" data-tab="tabJoin">Join</div>
           <div class="tab" data-tab="tabQuickPlay">Quick play</div>
@@ -161,7 +162,7 @@
         </div>
 
         <div class="tab-panel active" id="tabLocal">
-          <div class="section-label">Mode</div>
+          <div class="section-label">Board</div>
           <div class="mode-grid">
             <div class="mode-card selected" id="localModeCardClassic">
               <div class="mode-card__name">Classic</div>
@@ -250,7 +251,7 @@
         </div>
 
         <div class="tab-panel" id="tabCreate">
-          <div class="section-label">Mode</div>
+          <div class="section-label">Board</div>
           <div class="mode-grid">
             <div class="mode-card selected" id="createModeCardClassic">
               <div class="mode-card__name">Classic</div>
@@ -336,6 +337,14 @@
           </div>
 
           <input class="field" type="text" id="nicknameCreateInput" placeholder="Nickname" />
+          <div class="switch-row" id="createRatedRow">
+            <label for="createRatedToggle">Rated match</label>
+            <label class="switch">
+              <input type="checkbox" id="createRatedToggle" />
+              <span class="switch__slider"></span>
+            </label>
+          </div>
+          <div class="param-hint" id="createRatedHint" hidden>Sign in with a nickname to create a rated match.</div>
           <button class="btn btn--primary" id="btnCreateMatch">Create match</button>
         </div>
 
@@ -416,11 +425,106 @@
           <div class="ranked-status" id="rankedStatus"></div>
           <button class="btn btn--primary" id="btnRanked">Find match</button>
         </div>
+
+        <div class="tab-panel" id="tabBots">
+          <div class="section-label">Bot</div>
+          <div class="mode-grid" id="botsListGrid"></div>
+          <div class="ranked-status" id="botsStatus">Loading bots…</div>
+
+          <div class="section-label">Board</div>
+          <div class="mode-grid">
+            <div class="mode-card selected" id="botsModeCardClassic">
+              <div class="mode-card__name">Classic</div>
+              <div class="mode-card__desc">20 x 20 board · zone radius 4 · 2 dominoes each</div>
+            </div>
+            <div class="mode-card" id="botsModeCardCustom">
+              <div class="mode-card__name">Custom</div>
+              <div class="mode-card__desc">Set your own board size, zone radius, dominoes, seed</div>
+            </div>
+          </div>
+
+          <div class="params collapsed" id="botsParamsPanel">
+            <div class="param-row">
+              <label for="botsParamBoardSize">Board size</label>
+              <div class="param-slider">
+                <input type="range" id="botsParamBoardSize" min="8" max="40" step="1" />
+                <span class="param-slider__value" id="botsParamBoardSizeValue"></span>
+              </div>
+            </div>
+            <div class="param-row">
+              <label for="botsParamZoneRadius">Zone radius</label>
+              <div class="param-slider">
+                <input type="range" id="botsParamZoneRadius" min="3" max="10" step="1" />
+                <span class="param-slider__value" id="botsParamZoneRadiusValue"></span>
+              </div>
+            </div>
+            <div class="param-row">
+              <label for="botsParamStartingDominoes">Starting dominoes</label>
+              <div class="param-slider">
+                <input type="range" id="botsParamStartingDominoes" min="0" max="10" step="1" />
+                <span class="param-slider__value" id="botsParamStartingDominoesValue"></span>
+              </div>
+            </div>
+            <div class="param-row">
+              <label for="botsParamSeed">Seed</label>
+              <input type="text" class="field param-seed" id="botsParamSeed" placeholder="random" />
+            </div>
+            <div class="param-hint">Leave seed blank for a random cave.</div>
+          </div>
+
+          <div class="section-label">Time control</div>
+          <div class="mode-grid mode-grid--time" id="botsTimeGrid">
+            <div class="mode-card selected" data-time-mode="none">
+              <div class="mode-card__name">No clock</div>
+            </div>
+            <div class="mode-card" data-time-mode="bullet">
+              <div class="mode-card__name">Bullet</div>
+              <div class="mode-card__desc">3+1</div>
+            </div>
+            <div class="mode-card" data-time-mode="blitz">
+              <div class="mode-card__name">Blitz</div>
+              <div class="mode-card__desc">5+3</div>
+            </div>
+            <div class="mode-card" data-time-mode="rapid">
+              <div class="mode-card__name">Rapid</div>
+              <div class="mode-card__desc">10+5</div>
+            </div>
+            <div class="mode-card" data-time-mode="classical">
+              <div class="mode-card__name">Classical</div>
+              <div class="mode-card__desc">30+20</div>
+            </div>
+            <div class="mode-card" data-time-mode="custom">
+              <div class="mode-card__name">Custom</div>
+              <div class="mode-card__desc">Set your own</div>
+            </div>
+          </div>
+
+          <div class="params collapsed" id="botsTimeCustomPanel">
+            <div class="param-row">
+              <label for="botsParamTimeInitial">Starting time (minutes)</label>
+              <div class="param-slider">
+                <input type="range" id="botsParamTimeInitial" min="1" max="60" step="1" />
+                <span class="param-slider__value" id="botsParamTimeInitialValue"></span>
+              </div>
+            </div>
+            <div class="param-row">
+              <label for="botsParamTimeIncrement">Increment (seconds)</label>
+              <div class="param-slider">
+                <input type="range" id="botsParamTimeIncrement" min="0" max="60" step="1" />
+                <span class="param-slider__value" id="botsParamTimeIncrementValue"></span>
+              </div>
+            </div>
+          </div>
+
+          <input class="field" type="text" id="nicknameBotsInput" placeholder="Nickname" />
+          <div class="param-hint">Debug mode — always unrated, no move delay from the bot.</div>
+          <button class="btn btn--primary" id="btnPlayBot" disabled>Play bot</button>
+        </div>
       </div>
     </div>
     <div id="waitingRoomScreen" hidden>
       <div class="waitcard">
-        <div class="waitcard__spinner"></div>
+        <div class="waitcard__spinner" id="waitSpinner"></div>
         <div>
           <div class="waitcard__title" id="waitTitle">Waiting for opponent…</div>
           <div class="waitcard__sub" id="waitSub">Share this code with your opponent</div>
@@ -447,6 +551,9 @@
           <div class="wait-info__row">
             <span class="label">Time control</span><span class="value" id="waitTimeValue"></span>
           </div>
+          <div class="wait-info__row">
+            <span class="label">Seed</span><span class="value" id="waitSeedValue"></span>
+          </div>
           <div id="waitWindowSection" hidden>
             <div class="wait-info__row">
               <span class="label">Opponent range</span><span class="value" id="waitWindowValue"></span>
@@ -458,7 +565,13 @@
           </div>
         </div>
 
-        <button class="btn btn--ghost" id="btnCancelWait" style="width: 100%">Cancel</button>
+        <div id="waitActionsCancel">
+          <button class="btn btn--ghost" id="btnCancelWait" style="width: 100%">Cancel</button>
+        </div>
+        <div id="waitActionsJoinPreview" class="wait-actions-row" hidden>
+          <button class="btn btn--ghost" id="btnDeclineJoin">Decline</button>
+          <button class="btn btn--primary" id="btnAcceptJoin">Accept</button>
+        </div>
       </div>
     </div>
 
