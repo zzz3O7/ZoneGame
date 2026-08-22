@@ -393,46 +393,156 @@ large, *fully open, never-fragmented* blob within `maxBlobSize` (a
 fully-open 25-cell square took 2.5s in testing) — exactly the case
 `maxBlobSize` exists to reject rather than attempt.
 
-### Tier 3 — the coordinator
+### Tier 3 — the coordinator, now a configurable bot family
 
-`tier3BotMove` (`server/bot/tier3Bot.js`) priority order (confirmed in
-design chat):
+`createSolverGreedyBot(config)` (`server/bot/tier3Bot.js`) builds a
+`chooseMove` function from a config object, so the same core algorithm can
+produce a whole family of bots that differ only in their tie-break
+preferences — not a single fixed bot. `tier3BotMove` (still exported, still
+`"solver-greedy-01"` in `botRegistry.js`) is just `createSolverGreedyBot()`
+with defaults matching the original behavior.
+
+**Every ordering decision, and which ones are dials vs. fixed rules** (see
+`DEFAULT_CONFIG`'s own comment in the source for the numbered list):
+
+1. Among multiple winnable *active* zones — `zoneSelection.winnableActive`
+   (default `"random"`).
+2. Among multiple winnable zone-*creation* candidates — **fixed** `"biggest"`
+   (not exposed; paired with #4, see below).
+3. Among multiple uncertain creation candidates — `zoneSelection.creationUncertain`
+   (default `"random"`).
+4. Among multiple lost creation candidates — **fixed** `"smallest"` (not
+   exposed). #2 and #4 are kept as one fixed rule rather than two
+   independent dials on purpose — a big *won* zone is a bonus, a big *lost*
+   zone is a tempo trap you shouldn't have handed the opponent in the first
+   place (see the design chat on strategy #2), so decoupling them would let
+   a config accidentally prefer creating big zones even when losing them.
+5. Among multiple uncertain active zones — `zoneSelection.uncertainActive`
+   (default `"random"`).
+6. Among multiple lost active zones — `zoneSelection.lostActive` (default
+   `"random"`).
+7. Among multiple domino-fallback targets — `zoneSelection.dominoFallback`
+   (default `"biggest"`).
+8. Which winning move to play within an already-winnable zone — no dial.
+   Any winning move is equivalent under the current domino-free model, so
+   whichever `findWinningMove()` happens to return stands. Will matter once
+   the solver can compare remaining domino-shaped spots between candidate
+   winning lines — not yet.
+9. Which move to try first in an uncertain/lost zone — `avoidLosingMove`
+   (`{ enabled, maxTries }`, default `{ enabled: true, maxTries: 15 }`). See
+   below.
+
+Selection strategies 1/3/5/6/7 each independently take `"random"`,
+`"smallest"`, or `"biggest"` (by zone/candidate cost) via a shared
+`selectByStrategy` helper — a config can mix strategies across decisions
+freely (e.g. random for active zones, biggest for creation).
+
+**Decision 9 — `pickMoveAvoidingLoss`**: within a chosen uncertain/lost
+zone, tries up to `maxTries` of its real legal moves in random order,
+solving the resulting position each time. If any move outright **wins**
+(the opponent, now mover, provably loses), it's taken immediately — this
+isn't just loss-avoidance, it can genuinely find a win the top-level zone
+classification missed, since a zone is only "uncertain" because its *full*
+open-cell mask was too large to solve, but one specific move can
+shrink/fragment it into something the solver resolves cleanly. If no
+winning move turns up in the sample, a move that's at least still
+"uncertain" is preferred over a provable loss; if every sampled move is a
+provable loss, the last one tried is returned regardless — still strictly
+better than passing.
+
+**Priority order** (fixed across the whole family — only the tie-breaks
+within each step are configurable):
 
 1. An active zone (bot's own local turn) already provably winnable — play a
-   winning move there (random among winnable zones if more than one).
+   winning move there.
 2. Otherwise, try to **create** a zone — prefer a provably winnable one
-   (biggest cost first), then any uncertain one, then the smallest provably
-   lost one. Note the inversion here versus step 1: creating a zone hands
-   the very next local turn to the *opponent* (`Zone.create` sets
+   (biggest first), then any uncertain one, then the smallest provably lost
+   one. Note the inversion here versus step 1: creating a zone hands the
+   very next local turn to the *opponent* (`Zone.create` sets
    `localTurn = 1 - creator`), so "good to create" means solving the
    resulting position with the **opponent** as mover and wanting them to
    lose — the solver's win/loss sense is deliberately flipped for this case.
    `Zone.floodFill`'s result depends only on the anchor cell and radius, not
    the piece shape placed there, so evaluation only needs one flood-fill per
    distinct candidate anchor, reused across every shape variant anchored
-   there — this matters a lot on an open board where otherwise the number of
-   (shape, anchor) combinations to flood-fill would be much larger.
-3. Otherwise, an uncertain active zone — random non-domino move.
-4. Otherwise, a lost active zone — random non-domino move (still better
+   there.
+3. Otherwise, an uncertain active zone **that currently has a real
+   non-domino move available** — see the bug fix below for why this
+   qualifier matters.
+4. Otherwise, a lost active zone with a real move available (still better
    than passing or spending a domino).
-5. Otherwise, dominoes are the only moves left anywhere — play one in the
-   most valuable (highest-cost) available zone.
+5. Otherwise, dominoes are the only moves left anywhere — either in an
+   existing active zone, or by **creating** a brand-new one (see the second
+   bug fix below).
 6. Otherwise, no legal move exists at all anywhere — pass. Confirmed this is
    the only condition under which the coordinator should ever pass, per the
    rules (a pass is never a strategic choice this bot makes).
 
-**Verified**: a full self-play game runs to completion with zero illegal
-moves and zero incorrect passes (checked programmatically — every non-null
-move re-validated against `Rules.canPlaceHere`, every pass confirmed against
-`canCurrentPlayerMove()`). In a 10-seed batch, tier 3 beat tier 2 (`no-waste`)
-9/10 as P0 and 10/10 as P1 — not a first-move-advantage artifact, since it
-wins convincingly from *both* seats.
+#### Two real bugs found and fixed during this refactor
+
+**Bug 1 — zone selected before checking it has a move.** Steps 3 and 4 used
+to pick a *single* zone at random from the whole uncertain/lost bucket
+*before* checking whether that specific zone currently has a non-domino
+move — and a "lost" zone can legitimately have zero moves at all (that's
+often *why* it's lost, e.g. a single leftover dead cell). If the unlucky
+zone got picked, the code fell straight through to the domino fallback even
+when a *different* zone in the very same bucket had a perfectly good move
+sitting there. Fixed by filtering every zone in a bucket down to those with
+a real move available *before* applying any selection strategy, not after.
+
+**Bug 2 — dominoes can create zones too, and nothing accounted for it.**
+`Rules.canPlaceHere` has no restriction against a domino placement creating
+a brand-new zone — the only domino-specific check is the domino-budget
+test. `zoneCreationCandidates` deliberately excludes dominoes (by design —
+dominoes are supposed to be the absolute last resort), and the domino
+fallback step only ever scanned *existing* zones, never unzoned floor. So
+if the *only* legal moves left anywhere were dominoes opening brand-new
+zones, the bot found nothing in either place and incorrectly passed, even
+though `canCurrentPlayerMove()` correctly reported a move existed. Fixed
+with a new `dominoCreationCandidates` (parallel to the non-domino version,
+but for dominoes specifically, cost-ranked only — no win/loss
+classification needed since this only runs once every better option is
+exhausted).
+
+**How these were found**: introducing per-decision configurability
+surfaced a *third*, unrelated bug (see below) whose live diagnostics led
+directly to bug 2. Bug 1 was identified by code inspection while designing
+the fix for bug 2's neighbors, and structurally can't recur now (the fix
+filters before selecting, not after) — a live reproduction of the exact
+scenario originally reported in play was not obtained (150-game batch
+search came up empty), so if it resurfaces, the exact game/seed/move number
+would help pin it down further.
+
+**Bug 3 (introduced and fixed within this same session) — wrong config
+shape passed to `pickMoveAvoidingLoss`.** The call site passed the whole
+`cfg` object, but the function destructures `{ maxBlobSize, maxTries }`
+directly from its options argument — `maxTries` actually lives at
+`cfg.avoidLosingMove.maxTries`, not `cfg.maxTries`. `Math.min(undefined,
+moves.length)` → `NaN` → `.slice(0, NaN)` silently produces an **empty
+array** (per spec, `NaN` as a slice argument coerces to `0`), so the
+sampling loop never ran and the function returned `null` despite having
+real moves available — even under the *default* config, since
+`avoidLosingMove.enabled` defaults to `true`. This explains both a stuck
+game (500-move cap hit, zero score) and a dip in measured win rate found
+while re-testing after the refactor. Fixed by passing
+`{ maxBlobSize: cfg.maxBlobSize, maxTries: cfg.avoidLosingMove.maxTries }`
+explicitly at both call sites.
+
+**Verified after all three fixes**: 60 self-play games across three
+batches (10 games with an aggressive all-`"smallest"` custom config
+exercising the exact previously-stuck scenarios, a 30-seed default-config
+sweep, and a 10-seed P0/P1 seat-swap check) — zero illegal moves, zero
+incorrect passes (every pass cross-checked against
+`canCurrentPlayerMove()`), every game reaches completion. Win rate against
+tier 2 (`no-waste`) is now 30/30 in the sweep and 10/10 in both seats —
+higher than the previously-reported 19/20, consistent with
+`pickMoveAvoidingLoss` actually running now instead of silently no-oping.
 
 **Known limitation, motivating tier 4**: tier-3-vs-tier-3 self-play shows a
-real, substantial *second-mover* advantage (P1 won 7/10 in testing, several
-by wide margins). This isn't a bug — it's the direct, expected consequence
-of the coordinator having no cross-zone tempo reasoning yet. It's greedy
-zone-by-zone and has no notion of your strategies #2 (never engage the
+real, substantial *second-mover* advantage (P1 won 7/10 in earlier testing,
+several by wide margins). This isn't a bug — it's the direct, expected
+consequence of the coordinator having no cross-zone tempo reasoning yet.
+It's greedy zone-by-zone and has no notion of strategy #2 (never engage the
 opponent's biggest zone, starve them into passing/spending a domino instead)
 or #3 (leave an already-won zone open one move from closing, as banked
 tempo) — exactly what tier 4 needs to add.

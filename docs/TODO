@@ -1,7 +1,5 @@
 create rated doesn't work (I think its because of the time modes)
 
-tier 3 DONT WASTE DOMINOES even on fully random move
-
 dont logout on server restart
 
 zone solver should return all possible forced endings (wins and maybe losses)
