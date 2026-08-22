@@ -1,15 +1,28 @@
 import { randomUUID } from "crypto";
+import { db } from "./db.js";
 import { getPlayerById } from "./playerRepository.js";
+import { MAX_AGE_SECONDS } from "./cookies.js";
 
-// Sessions are intentionally in-memory only: losing them on a server
-// restart just means players need to log in again, no data loss, and
-// it avoids needing a sessions table + expiry/cleanup logic in SQLite
-// for what's a purely transient mapping.
-const sessions = new Map(); // sessionId -> playerId
+// Sessions are persisted in SQLite (same DB as players/games) rather than
+// an in-memory Map: an in-memory store meant every dev restart silently
+// logged everyone out even though their cookie was still valid and still
+// sitting in their browser — the cookie pointed at a session the server
+// no longer remembered. Persisting this mapping means a restart doesn't
+// lose it. expires_at mirrors the cookie's own Max-Age (MAX_AGE_SECONDS)
+// so a session row never outlives the cookie that references it.
+const insertSession = db.prepare(`INSERT INTO sessions (id, player_id, created_at, expires_at) VALUES (?, ?, ?, ?)`);
+const getSession = db.prepare(`SELECT player_id, expires_at FROM sessions WHERE id = ?`);
+const deleteSession = db.prepare(`DELETE FROM sessions WHERE id = ?`);
+const deleteExpiredSessions = db.prepare(`DELETE FROM sessions WHERE expires_at < ?`);
 
 export function createSession(playerId) {
+  // Opportunistic cleanup rather than a scheduled job — cheap indexed
+  // delete, and login is already a low-frequency, non-hot-path action.
+  deleteExpiredSessions.run(Date.now());
+
   const sessionId = randomUUID();
-  sessions.set(sessionId, playerId);
+  const now = Date.now();
+  insertSession.run(sessionId, playerId, now, now + MAX_AGE_SECONDS * 1000);
   return sessionId;
 }
 
@@ -17,11 +30,15 @@ export function createSession(playerId) {
 // it on the session, so a nickname/rating change is reflected on the
 // player's very next request instead of only after their next login.
 export function getSessionPlayer(sessionId) {
-  const playerId = sessions.get(sessionId);
-  if (playerId == null) return null;
-  return getPlayerById(playerId);
+  const row = getSession.get(sessionId);
+  if (!row) return null;
+  if (row.expires_at < Date.now()) {
+    deleteSession.run(sessionId);
+    return null;
+  }
+  return getPlayerById(row.player_id);
 }
 
 export function destroySession(sessionId) {
-  sessions.delete(sessionId);
+  deleteSession.run(sessionId);
 }
