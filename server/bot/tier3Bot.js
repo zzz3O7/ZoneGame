@@ -26,6 +26,23 @@ const NON_DOMINO_TYPES = ["tromino", "tetromino"];
 //      spots between candidate winning lines — not yet.
 //   9. which move to try first in an uncertain/lost zone — see
 //      pickMoveAvoidingLoss's avoidLosingMove config.
+//
+// STRENGTH DIALS: two of the above aren't just tie-break preferences —
+// they trade real playing strength for compute, the same way a search
+// depth limit would in a traditional engine:
+//   - maxBlobSize: how large a connected, unfragmented region the
+//     solver will fully search before giving up and calling it
+//     "uncertain". Higher = solves more positions exactly = stronger,
+//     at real cost (see zoneSolver.js's own performance notes — this is
+//     the one with a genuine exponential wall, not just a linear cost).
+//   - avoidLosingMove.maxTries: how many of a zone's real candidate
+//     moves get solved-and-checked in pickMoveAvoidingLoss before
+//     giving up and taking whatever was last tried. Higher = more
+//     likely to find a hidden win the top-level classification missed,
+//     or at least dodge a move that hands the opponent a provable win
+//     = stronger, at a compute cost that's linear in maxTries (each try
+//     is one more ZoneSolver construction+solve on the post-move
+//     state) rather than exponential.
 const DEFAULT_CONFIG = {
   maxBlobSize: 12,
   zoneSelection: {

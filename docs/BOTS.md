@@ -450,6 +450,20 @@ winning move turns up in the sample, a move that's at least still
 provable loss, the last one tried is returned regardless — still strictly
 better than passing.
 
+**Strength dials**: `maxBlobSize` and `avoidLosingMove.maxTries` aren't
+just tie-break preferences like the `zoneSelection` options above — both
+trade real playing strength for compute, the same role a search-depth limit
+plays in a traditional engine. `maxBlobSize` controls how large an
+unfragmented region the solver will fully search before giving up
+("uncertain") — higher is strictly stronger (solves more positions
+exactly) but hits a genuine exponential wall (see `zoneSolver.js`'s own
+performance notes). `avoidLosingMove.maxTries` controls how many of a
+zone's real candidate moves get checked before giving up and taking
+whatever was tried last — higher is stronger (more likely to find a hidden
+win or dodge a provable loss) at a cost that's linear, not exponential,
+in `maxTries`. Both are natural levers for building weaker/stronger
+variants within this bot family, alongside the `zoneSelection` tie-breaks.
+
 **Priority order** (fixed across the whole family — only the tie-breaks
 within each step are configurable):
 
