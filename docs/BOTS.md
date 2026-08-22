@@ -567,6 +567,35 @@ fill) took ~880ms in testing; every subsequent move stayed well under that.
 One-time cost, not a per-move problem, but worth knowing about when
 `botThinkDelayMs()` pacing is revisited.
 
+### The solver-greedy bot family
+
+Four named configs of `createSolverGreedyBot` are registered
+(`server/bot/botRegistry.js`), from weakest to strongest:
+
+- **`solver-greedy-weak-01`** — all `zoneSelection` random, `dominoFallback`
+  "biggest", `avoidLosingMove` **disabled** entirely. The weakest realistic
+  variant — never spends the extra solves to catch a hidden win or dodge a
+  loss.
+- **`solver-greedy-01`** — the default config (identical zone preferences to
+  `weak-01`, but with `avoidLosingMove` on, `maxTries: 15`). Kept as its own
+  entry since it already existed before this family was built out.
+- **`solver-greedy-strong-01`** — prefers the *smallest* winnable/creation/
+  uncertain target (bank easy wins fast, don't let an uncertain zone grow
+  before dealing with it) but the *biggest* lost zone (a lost zone is
+  already a sunk cost — better to extract whatever tempo/board-presence
+  value is left in it before it closes). `avoidLosingMove` at default
+  (on, 15 tries).
+- **`solver-greedy-strong-02`** — `strong-01`'s zone preferences, with both
+  strength dials pushed further: `maxBlobSize` 12 → 18, `avoidLosingMove.
+  maxTries` 15 → 30. Checked the exponential wall before committing to 18:
+  a fully-open, unfragmented 18-cell blob (the actual worst case) solves in
+  47ms, comfortably within budget.
+
+**Verified**: each of the three new variants (10-seed batches) — zero
+illegal moves, zero incorrect passes, every game completes, all beat
+`no-waste` 10/10. Strength ordering is real, not just a label: `strong-02`
+beat `weak-01` 20/20 across both seats head-to-head.
+
 **Adding a new tier**: write the `(game, playerIndex) -> move | null`
 function, register it in `server/bot/botRegistry.js`'s
 `CHOOSE_MOVE_BY_KEY`, add a `{ key, nickname }` entry to

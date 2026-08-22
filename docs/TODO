@@ -1,5 +1,8 @@
 next bot: first try to create a winning zone, only then move to exitsing ones
 
+a button to hide/show end screen to see the board after the game
+
+better bot naming
 bot logging
 
 zone solver should return all possible forced endings (wins and maybe losses)
