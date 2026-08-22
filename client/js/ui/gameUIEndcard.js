@@ -33,7 +33,11 @@ export class EndcardController {
 
     if (!ui.game.gameOver) {
       overlay.hidden = true;
-      if (peekBtn) peekBtn.hidden = true;
+      if (peekBtn) {
+        peekBtn.hidden = true;
+        peekBtn.setAttribute("aria-pressed", "false");
+        peekBtn.title = "Hide end screen to see the board";
+      }
       return;
     }
     // Peek button only makes sense once there's an endcard to hide/show —

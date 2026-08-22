@@ -63,11 +63,11 @@ export class Renderer {
     this.staticCanvas.classList.toggle("board--waiting", waiting);
   }
 
-  renderStatic(board, zones, viewerIndex, entries) {
+  renderStatic(board, zones, viewerIndex, entries, gameOver) {
     const ctx = this.staticCtx;
     ctx.clearRect(0, 0, this.staticCanvas.width, this.staticCanvas.height);
     this._drawBoard(ctx, board);
-    this._drawZones(ctx, zones, viewerIndex);
+    this._drawZones(ctx, zones, viewerIndex, gameOver);
     this._drawZoneBorders(ctx, zones);
     this._drawPieces(ctx, entries);
   }
@@ -132,13 +132,27 @@ export class Renderer {
     }
   }
 
-  _drawZones(ctx, zones, viewerIndex) {
+  _drawZones(ctx, zones, viewerIndex, gameOver) {
     for (const zone of zones) {
-      const color = !zone.active
-        ? THEME.inactiveZone
-        : zone.localTurn === viewerIndex
-          ? THEME.availibleZone
-          : THEME.unavailibleZone;
+      let color;
+      if (gameOver) {
+        // Post-game reveal: no ordering of moves left to show, only who
+        // ended up with what — so turn-availability (available/
+        // unavailable) has nothing left to mean here, whether or not a
+        // given zone actually got contested to a close.
+        if (!zone.active) {
+          const winnerIndex = 1 - zone.localTurn;
+          color = winnerIndex === viewerIndex ? THEME.zoneWonSelf : THEME.zoneWonOpponent;
+        } else {
+          color = THEME.inactiveZone;
+        }
+      } else {
+        color = !zone.active
+          ? THEME.inactiveZone
+          : zone.localTurn === viewerIndex
+            ? THEME.availibleZone
+            : THEME.unavailibleZone;
+      }
 
       ctx.fillStyle = color;
       for (const key of zone.cellSet) {

@@ -36,8 +36,12 @@ export class RenderSync {
   // hover/rotate/flip/selection.
   syncStaticCanvas() {
     const { ui } = this;
-    const viewerIndex = ui.matchClient ? ui.matchClient.myPlayerIndex : ui.game.currentPlayerIndex;
-    ui.renderer.renderStatic(ui.game.board, ui.game.zones, viewerIndex, ui.game.history.all());
+    const viewerIndex = ui.matchClient
+      ? ui.matchClient.myPlayerIndex
+      : ui.game.gameOver
+        ? 0
+        : ui.game.currentPlayerIndex;
+    ui.renderer.renderStatic(ui.game.board, ui.game.zones, viewerIndex, ui.game.history.all(), ui.game.gameOver);
   }
 
   // Cheap path for pointer movement (hover/clearHover). Only touches what

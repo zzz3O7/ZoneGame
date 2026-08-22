@@ -15,6 +15,8 @@ export const THEME = {
   availibleZone: "rgba(126,166,102,0.22)",
   unavailibleZone: "rgba(184,89,63,0.22)",
   inactiveZone: "rgba(92,101,112,0.2)",
+  zoneWonSelf: "rgba(79,143,196,0.4)",
+  zoneWonOpponent: "rgba(184,89,63,0.4)",
   zoneBorders: "#7d8896", // bright on purpose: must hold up over any zone fill
   zoneBordersHighlight: "#dee0e2", // hover state, distinct from the border above
   moveHighlight: "#3fbfc9",
