@@ -3,6 +3,8 @@ next bot: first try to create a winning zone, only then move to exitsing ones
 better bot naming
 bot logging
 
+comments cleanup
+
 zone solver should return all possible forced endings (wins and maybe losses)
     with corresponding domino cost for both players (or domino slots)
     coordinator then uses all possible forced completions for all zones to find an optimal combination.

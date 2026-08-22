@@ -585,7 +585,7 @@ body.require-confirm .piece-selector--touch {
   z-index: 6; /* above .board-overlay (default stacking) and .zone-tooltip's z-index: 5 */
   width: 32px;
   height: 32px;
-  display: flex;
+  display: none;
   align-items: center;
   justify-content: center;
   background: var(--color-surface-popover);
@@ -594,6 +594,10 @@ body.require-confirm .piece-selector--touch {
   color: var(--color-text-secondary);
   cursor: pointer;
   padding: 0;
+}
+
+.board-peek-btn:not([hidden]) {
+  display: flex;
 }
 
 .board-peek-btn svg {
