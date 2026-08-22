@@ -28,13 +28,19 @@ export class EndcardController {
   syncGameOver() {
     const { ui } = this;
     const overlay = document.getElementById("gameOverOverlay");
+    const peekBtn = document.getElementById("btnPeekBoard");
     if (!overlay) return;
 
     if (!ui.game.gameOver) {
       overlay.hidden = true;
+      if (peekBtn) peekBtn.hidden = true;
       return;
     }
-    overlay.hidden = false;
+    // Peek button only makes sense once there's an endcard to hide/show —
+    // shown here (not just left permanently visible) so it can't be
+    // clicked mid-game and appears exactly when the overlay itself does.
+    if (peekBtn) peekBtn.hidden = false;
+    overlay.hidden = ui._peekingBoard;
 
     if (!ui._gameOverSoundPlayed) {
       ui._gameOverSoundPlayed = true;
@@ -227,6 +233,25 @@ export class EndcardController {
   // our own button, since clicking it now is exactly how we accept.
   showOpponentWantsRematch() {
     this.setRematchStatus("Opponent wants a rematch — click Rematch to accept!", { active: true });
+  }
+
+  // Bound to btnPeekBoard. Purely a visibility toggle on the existing
+  // overlay — doesn't touch ui.game or ui._endOverride at all, so the
+  // endcard's actual content (winner, scores, breakdown) is exactly as
+  // it was the moment the toggle is clicked back off.
+  toggleBoardPeek() {
+    const { ui } = this;
+    ui._peekingBoard = !ui._peekingBoard;
+    ui.sound.uiConfirm();
+
+    const overlay = document.getElementById("gameOverOverlay");
+    if (overlay) overlay.hidden = ui._peekingBoard;
+
+    const peekBtn = document.getElementById("btnPeekBoard");
+    if (peekBtn) {
+      peekBtn.setAttribute("aria-pressed", String(ui._peekingBoard));
+      peekBtn.title = ui._peekingBoard ? "Show end screen" : "Hide end screen to see the board";
+    }
   }
 
   // Small imperative status-line helper for the online rematch

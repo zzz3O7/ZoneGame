@@ -1,6 +1,6 @@
 next bot: first try to create a winning zone, only then move to exitsing ones
 
-a button to hide/show end screen to see the board after the game
+after the game end render the board differenly: color all zones in their winner's correcponding color
 
 better bot naming
 bot logging

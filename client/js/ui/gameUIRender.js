@@ -19,7 +19,7 @@ export class RenderSync {
   render() {
     const { ui } = this;
     ui._lowTimeWarned = { 0: false, 1: false }; // fresh turn cycle — see ClockController._renderClockFor
-    ui.renderer.setWaiting(!ui._isMyTurn());
+    ui.renderer.setWaiting(!ui.game.gameOver && !ui._isMyTurn());
     this.syncStaticCanvas();
     this.syncCanvas();
     this.syncControls();

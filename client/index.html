@@ -756,6 +756,29 @@
             <canvas id="board-canvas-static"></canvas>
             <canvas id="board-canvas"></canvas>
             <div class="zone-tooltip" id="zoneTooltip" hidden></div>
+            <!-- Lives outside #gameOverOverlay (as a sibling, not a child) so it
+                 stays put and clickable in both states — a button placed inside
+                 the overlay itself would vanish the moment it hides the overlay,
+                 with no way to bring it back. -->
+            <button
+              class="board-peek-btn"
+              id="btnPeekBoard"
+              type="button"
+              hidden
+              aria-pressed="false"
+              title="Hide end screen to see the board"
+            >
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path
+                  d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7Z"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linejoin="round"
+                />
+                <circle cx="12" cy="12" r="3" fill="none" stroke="currentColor" stroke-width="2" />
+              </svg>
+            </button>
             <div class="board-overlay" id="gameOverOverlay" hidden>
               <div class="endcard">
                 <div class="endcard__header">
