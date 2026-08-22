@@ -1,9 +1,9 @@
-create rated doesn't work (I think its because of the time modes)
+next bot: first try to create a winning zone, only then move to exitsing ones
 
-dont logout on server restart
+    dont logout on server restart
 
 zone solver should return all possible forced endings (wins and maybe losses)
-    with corresponding domino cost for both players
+    with corresponding domino cost for both players (or domino slots)
     coordinator then uses all possible forced completions for all zones to find an optimal combination.
     order of completions matters too - because of dominoes and pass penalties
 
