@@ -3,8 +3,8 @@
 // Human-ish pacing before a bot submits its move. Uniform random in
 // [BOT_THINK_MIN_MS, BOT_THINK_MIN_MS + BOT_THINK_RANGE_MS), before any
 // clock-safety clamping (see botTiming.js).
-export const BOT_THINK_MIN_MS = 1000;
-export const BOT_THINK_RANGE_MS = 9000;
+export const BOT_THINK_MIN_MS = 1; // 1000; DEBUG
+export const BOT_THINK_RANGE_MS = 9; // 9000; DEBUG
 
 // Time-control safety: a bot should never lose on time because of its
 // own artificial delay, so it never spends more than this fraction of
