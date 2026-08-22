@@ -321,18 +321,127 @@ time" rather than landing the full solver before anything ships):
 2. `no-waste-01` — uniform random, but never spends a domino unless every
    other piece type has zero legal placements. Shipped. See
    `server/bot/noWasteBot.js`.
-3. Exact per-zone solver, greedy zone selection — no cross-zone tempo
-   reasoning yet. Not started.
+3. `solver-greedy-01` — exact per-zone solver (`server/bot/zoneSolver.js`)
+   + greedy zone selection (`server/bot/tier3Bot.js`). Shipped. Details below.
 4. Tempo-aware coordinator — solver reports a "does this zone currently
    guarantee me an always-available move" flag; coordinator prefers holding
    near-won zones open and weighs new-zone tempo exposure, not just size.
-   Not started.
+   Not started. **Motivated by a real, measured gap** — see "known
+   limitation" below.
 5. Full endgame search — solve the whole remaining position exactly once
    few enough cells/zones remain. Not started.
 
 Depth/noise variants within a tier (e.g. capped search depth, weighted-random
 move selection instead of always-best) are additional dial settings on top of
 this ladder, not separate tiers of their own.
+
+### Tier 3 — the solver
+
+`ZoneSolver` (`server/bot/zoneSolver.js`) deliberately excludes dominoes
+from its model **entirely**, not just deprioritizes them — a zone is solved
+as if only trominoes/tetrominoes exist, matching the coordinator rule that
+dominoes are only even considered once every non-domino move anywhere is
+exhausted. With the domino's shared, match-wide budget out of the picture,
+a zone is a plain impartial combinatorial game with zero cross-region
+coupling, so Sprague-Grundy decomposition applies exactly: a connected
+component's Grundy number is solved fully independently of every other
+component, and the position's outcome is the XOR of its components' numbers.
+Decomposition is re-checked at every recursion node, not just the top level,
+since a component very often fragments further mid-search as pieces get
+placed inside it — that's where most of the real performance win comes from.
+
+An earlier version tried to keep dominoes in the solver's model, with
+decomposition worked around their shared budget. That coupling is a genuine,
+non-trivial extension of Grundy theory (not a mechanical add-on) and was
+dropped in favor of the domino-free model above, once the coordinator design
+made "ignore dominoes until they're the only moves left, anywhere" the
+actual rule rather than just a per-move preference.
+
+**Correctness**: verified against an independent, unoptimized brute-force
+joint-state search (no decomposition, no Grundy numbers) across 40 randomly
+generated small shapes — zero mismatches. Also verified directly against the
+motivating strategies from playtesting: two matching tromino-only regions
+force a mover loss (mirroring/pairing), three matching regions flip it back
+to a mover win (parity), and domino-scarcity (one side out, one side not)
+correctly changes the outcome.
+
+**Performance**: a connected component above `maxBlobSize` (default 12,
+tunable per `ZoneSolver` construction) returns `null` (undetermined) rather
+than being fully searched — this check happens *after* decomposition, on
+each component individually, which is what makes a large-but-fragmented zone
+solvable regardless of its raw open-cell count. `maxTotalCells` (default
+10000) is a separate, purely defensive ceiling against pathological input
+(e.g. an extreme custom zone radius) blowing up the one-time linear setup
+cost — it does **not** decide solvability and is set high enough that it
+should never fire on any realistic zone. (An earlier version of this ceiling
+was set far too low — 300 — and gated on raw open-cell count *before*
+decomposition ran at all, which meant a large zone that was mostly filled in
+with only small scattered fragments left got incorrectly reported
+"uncertain" purely because of its total count, even though every individual
+fragment would have solved instantly. Fixed and verified: a 400-open-cell
+zone made of 200 disconnected dead pairs, and a 300-open-cell zone made of
+100 tromino-shaped fragments, both now resolve correctly in milliseconds.) A
+fresh, fully-open zone at Classic's zone radius (up to ~80 cells, one big
+unfragmented blob) still correctly and instantly bails out to `null` on the
+`maxBlobSize` check — it's only once a zone has actually been played into
+for a while, and fragments into small independent pieces, that `solveFull()`
+determines an answer, typically in low single-digit milliseconds even for a
+~28-open-cell midgame zone. A genuinely pathological zone (tested at 22,500
+cells) still returns `null` in well under 50ms with no exception. The one
+genuinely slow (but still bounded, non-crashing) case that remains is a
+large, *fully open, never-fragmented* blob within `maxBlobSize` (a
+fully-open 25-cell square took 2.5s in testing) — exactly the case
+`maxBlobSize` exists to reject rather than attempt.
+
+### Tier 3 — the coordinator
+
+`tier3BotMove` (`server/bot/tier3Bot.js`) priority order (confirmed in
+design chat):
+
+1. An active zone (bot's own local turn) already provably winnable — play a
+   winning move there (random among winnable zones if more than one).
+2. Otherwise, try to **create** a zone — prefer a provably winnable one
+   (biggest cost first), then any uncertain one, then the smallest provably
+   lost one. Note the inversion here versus step 1: creating a zone hands
+   the very next local turn to the *opponent* (`Zone.create` sets
+   `localTurn = 1 - creator`), so "good to create" means solving the
+   resulting position with the **opponent** as mover and wanting them to
+   lose — the solver's win/loss sense is deliberately flipped for this case.
+   `Zone.floodFill`'s result depends only on the anchor cell and radius, not
+   the piece shape placed there, so evaluation only needs one flood-fill per
+   distinct candidate anchor, reused across every shape variant anchored
+   there — this matters a lot on an open board where otherwise the number of
+   (shape, anchor) combinations to flood-fill would be much larger.
+3. Otherwise, an uncertain active zone — random non-domino move.
+4. Otherwise, a lost active zone — random non-domino move (still better
+   than passing or spending a domino).
+5. Otherwise, dominoes are the only moves left anywhere — play one in the
+   most valuable (highest-cost) available zone.
+6. Otherwise, no legal move exists at all anywhere — pass. Confirmed this is
+   the only condition under which the coordinator should ever pass, per the
+   rules (a pass is never a strategic choice this bot makes).
+
+**Verified**: a full self-play game runs to completion with zero illegal
+moves and zero incorrect passes (checked programmatically — every non-null
+move re-validated against `Rules.canPlaceHere`, every pass confirmed against
+`canCurrentPlayerMove()`). In a 10-seed batch, tier 3 beat tier 2 (`no-waste`)
+9/10 as P0 and 10/10 as P1 — not a first-move-advantage artifact, since it
+wins convincingly from *both* seats.
+
+**Known limitation, motivating tier 4**: tier-3-vs-tier-3 self-play shows a
+real, substantial *second-mover* advantage (P1 won 7/10 in testing, several
+by wide margins). This isn't a bug — it's the direct, expected consequence
+of the coordinator having no cross-zone tempo reasoning yet. It's greedy
+zone-by-zone and has no notion of your strategies #2 (never engage the
+opponent's biggest zone, starve them into passing/spending a domino instead)
+or #3 (leave an already-won zone open one move from closing, as banked
+tempo) — exactly what tier 4 needs to add.
+
+**Known cost, not yet addressed**: the very first move of a fresh game (a
+fully unzoned board — every zone-creation candidate anchor needs a flood
+fill) took ~880ms in testing; every subsequent move stayed well under that.
+One-time cost, not a per-move problem, but worth knowing about when
+`botThinkDelayMs()` pacing is revisited.
 
 **Adding a new tier**: write the `(game, playerIndex) -> move | null`
 function, register it in `server/bot/botRegistry.js`'s

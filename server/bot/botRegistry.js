@@ -1,5 +1,6 @@
 import { randomBotMove } from "./randomBot.js";
 import { noWasteBotMove } from "./noWasteBot.js";
+import { tier3BotMove } from "./tier3Bot.js";
 
 // One entry per strength tier. Keyed by the same botKey used in
 // seedBots.js / findOrCreateBotPlayer (see botRepository.js) — that key
@@ -9,6 +10,7 @@ import { noWasteBotMove } from "./noWasteBot.js";
 const CHOOSE_MOVE_BY_KEY = {
   "random-01": randomBotMove,
   "no-waste-01": noWasteBotMove,
+  "solver-greedy-01": tier3BotMove,
 };
 
 // Unknown/missing key (e.g. a bot row seeded before its tier's code

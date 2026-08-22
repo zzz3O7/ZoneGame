@@ -1,4 +1,13 @@
+create rated doesn't work (I think its because of the time modes)
+
+tier 3 DONT WASTE DOMINOES even on fully random move
+
 dont logout on server restart
+
+zone solver should return all possible forced endings (wins and maybe losses)
+    with corresponding domino cost for both players
+    coordinator then uses all possible forced completions for all zones to find an optimal combination.
+    order of completions matters too - because of dominoes and pass penalties
 
 scale thinking time with possible moves (for simple bots)
 and with move "complexity" for smarter bots
