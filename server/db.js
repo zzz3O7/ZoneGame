@@ -84,6 +84,20 @@ db.exec(`
     match_type TEXT NOT NULL DEFAULT 'pvp',
     origin TEXT NOT NULL DEFAULT 'matchmaking'
   );
+
+  -- Sessions used to live only in an in-memory Map in sessionStore.js,
+  -- which meant every dev restart silently logged everyone out even
+  -- though their (still-valid, still-signed) cookie survived the
+  -- restart just fine — the cookie pointed at a session the server no
+  -- longer remembered. Persisting the mapping here instead means a
+  -- restart no longer loses it. expires_at mirrors cookies.js's
+  -- MAX_AGE_SECONDS (30 days) so a session doesn't outlive its cookie.
+  CREATE TABLE IF NOT EXISTS sessions (
+    id TEXT PRIMARY KEY,
+    player_id INTEGER NOT NULL REFERENCES players(id),
+    created_at INTEGER NOT NULL,
+    expires_at INTEGER NOT NULL
+  );
 `);
 
 // CREATE TABLE IF NOT EXISTS above only helps a brand-new database — an

@@ -1,10 +1,18 @@
-dont waste dominoes (other bots)
+next bot: first try to create a winning zone, only then move to exitsing ones
+
+better bot naming
+bot logging
+
+zone solver should return all possible forced endings (wins and maybe losses)
+    with corresponding domino cost for both players (or domino slots)
+    coordinator then uses all possible forced completions for all zones to find an optimal combination.
+    order of completions matters too - because of dominoes and pass penalties
 
 scale thinking time with possible moves (for simple bots)
 and with move "complexity" for smarter bots
 same parameter "complexity" just for simple bots it is possible move count
 
-built in admin tools (to see and/or edit all past matches, ongoing matches, players, connections, bots, logs for everything, etc)
+    build admin tools (to see and/or edit all past matches, ongoing matches, players, connections, bots, logs for everything, etc)
 
 different timeouts on disconnect for different time control settings
 

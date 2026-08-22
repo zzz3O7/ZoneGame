@@ -13,10 +13,11 @@ import {
   MATCHMAKING_TIME_MODES,
   MATCHMAKING_SWEEP_INTERVAL_MS,
   MATCHMAKING_BOT_FALLBACK_MS,
+  TIME_PRESETS,
 } from "../shared/config.js";
 import { applyInactivityRegrowth } from "./rating.js";
-import { randomBotMove } from "./bot/randomBot.js";
-import { listBotPlayers, pickClosestBot } from "./bot/botRepository.js";
+import { chooseMoveForBotKey } from "./bot/botRegistry.js";
+import { listBotPlayers, pickClosestBot, botKeyFromRow } from "./bot/botRepository.js";
 import { displayRating } from "./playerRepository.js";
 
 // A plain http.Server sits in front of the WS server now, because
@@ -105,7 +106,7 @@ function matchBotFallback(entry, resolvedTimeMode, rated, remove) {
     humanAccountPlayerId: entry.accountPlayerId,
     botNickname: bot.nickname,
     botAccountPlayerId: bot.id,
-    makeBotAgent: (m) => new BotAgent(m, randomBotMove),
+    makeBotAgent: (m) => new BotAgent(m, chooseMoveForBotKey(botKeyFromRow(bot))),
     params,
     rated,
     origin: "matchmaking",
@@ -132,6 +133,23 @@ function heartbeat() {
 // play, just not a comparable one for rating purposes, so it needs an
 // explicit exclusion here rather than a plain truthiness check.
 const RATED_TIME_MODES = MATCHMAKING_TIME_MODES.filter((m) => m !== "any");
+
+// CREATE_MATCH's params arrive already resolved via shared/params.js's
+// resolveParams() (client calls it in Menu.buildParams(), and it's
+// idempotent so re-running it here is fine) — that means params carries
+// `timeControl: { initialMs, incrementMs } | null`, NOT a `timeMode`
+// string (unlike matchPair/matchBotFallback above, which build params
+// directly server-side and so still have a real timeMode). So rated
+// eligibility here has to be checked by comparing the resolved
+// timeControl against the RATED_TIME_MODES presets' values, not by
+// looking for a timeMode key that this shape never has.
+function isRatedTimeControl(timeControl) {
+  if (!timeControl) return false;
+  return RATED_TIME_MODES.some((m) => {
+    const preset = TIME_PRESETS[m];
+    return preset && preset.initialMs === timeControl.initialMs && preset.incrementMs === timeControl.incrementMs;
+  });
+}
 
 wss.on("connection", (ws, req) => {
   ws.isAlive = true;
@@ -167,14 +185,16 @@ wss.on("connection", (ws, req) => {
       if (msg.type === MSG.CREATE_MATCH) {
         const rated = Boolean(msg.rated);
 
-        // Rated is restricted to recognized presets — same reasoning as
-        // matchmaking already enforces by construction (it always sends
-        // { mode: "classic", timeMode: <a real preset> }). An arbitrary
-        // custom board or custom/no clock would mean a rated game isn't
-        // comparable to any other rated game, which breaks the rating
-        // system's core assumption now and blocks ever splitting ratings
-        // per-mode later (see docs/BOTS.md-adjacent plans for that).
-        if (rated && (msg.params?.mode !== "classic" || !RATED_TIME_MODES.includes(msg.params?.timeMode))) {
+        // Rated is restricted to a recognized, actually-timed preset —
+        // same reasoning as matchmaking (which enforces this by
+        // construction). An arbitrary custom board or custom/no clock
+        // would mean a rated game isn't comparable to any other rated
+        // game, which breaks the rating system's core assumption now
+        // and blocks ever splitting ratings per-mode later (see
+        // docs/BOTS.md-adjacent plans for that). See isRatedTimeControl
+        // above for why this compares timeControl values rather than a
+        // timeMode string.
+        if (rated && (msg.params?.mode !== "classic" || !isRatedTimeControl(msg.params?.timeControl))) {
           ws.send(
             JSON.stringify({
               type: MSG.ERROR,
@@ -354,7 +374,7 @@ wss.on("connection", (ws, req) => {
           humanAccountPlayerId: ws.__accountPlayer?.id ?? null,
           botNickname: bot.nickname,
           botAccountPlayerId: bot.id,
-          makeBotAgent: (m) => new BotAgent(m, randomBotMove),
+          makeBotAgent: (m) => new BotAgent(m, chooseMoveForBotKey(botKeyFromRow(bot))),
           params,
           rated: false, // direct debug never affects rating — see docs/BOTS.md
           origin: "direct_debug",

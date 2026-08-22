@@ -28,6 +28,15 @@ export function listBotPlayers() {
   return listBots.all();
 }
 
+// Inverse of findOrCreateBotPlayer's `bot:${botKey}` encoding — this is
+// how a bot player row gets matched back up to its chooseMove function
+// in botRegistry.js. Any row with is_bot=1 went through
+// findOrCreateBotPlayer, so this prefix is always present; a non-bot
+// row is a caller bug, not a data case to handle quietly.
+export function botKeyFromRow(bot) {
+  return bot.google_sub.slice("bot:".length);
+}
+
 // Nearest bot by rating_mu; unknown target (guest) or no comparable
 // info falls back to a random bot from the pool. Only one bot exists in
 // Phase 1, so this is trivially correct today and does the real work

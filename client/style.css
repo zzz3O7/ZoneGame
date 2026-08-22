@@ -578,6 +578,42 @@ body.require-confirm .piece-selector--touch {
   display: flex;
 }
 
+.board-peek-btn {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  z-index: 6; /* above .board-overlay (default stacking) and .zone-tooltip's z-index: 5 */
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--color-surface-popover);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  padding: 0;
+}
+
+.board-peek-btn svg {
+  width: 18px;
+  height: 18px;
+}
+
+.board-peek-btn:hover {
+  color: var(--color-text);
+  border-color: var(--color-text-secondary);
+}
+
+/* Active = currently peeking (overlay hidden on purpose) — same eye icon,
+   just visually "on" so it's clear another click brings the endcard back. */
+.board-peek-btn[aria-pressed="true"] {
+  background: var(--color-accent);
+  color: var(--color-surface);
+  border-color: var(--color-accent);
+}
+
 .board--waiting {
   opacity: 0.6;
 }

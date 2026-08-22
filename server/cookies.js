@@ -2,7 +2,10 @@ import { createHmac, timingSafeEqual } from "crypto";
 import { authConfig } from "./config.js";
 
 const COOKIE_NAME = "zonegame_session";
-const MAX_AGE_SECONDS = 60 * 60 * 24 * 30; // 30 days
+// Exported so sessionStore.js can expire its persisted rows at the same
+// horizon the cookie itself expires at, instead of duplicating this
+// number and risking the two drifting apart.
+export const MAX_AGE_SECONDS = 60 * 60 * 24 * 30; // 30 days
 
 // The cookie only ever holds an opaque session id — signing it just
 // means a tampered/forged cookie is rejected without a session-store

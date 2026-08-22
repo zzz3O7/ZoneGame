@@ -60,6 +60,7 @@ export class GameUI {
     this.historyPanelHovered = false;
 
     this._endOverride = null; // set via showForcedEnd() for a forfeit — see gameUIEndcard.js
+    this._peekingBoard = false; // toggled via btnPeekBoard — see EndcardController.toggleBoardPeek
     this._clockInterval = null; // see ClockController/destroy
 
     this.sound = sound; // shared page-level singleton — see soundManager.js
@@ -331,6 +332,9 @@ export class GameUI {
     document
       .getElementById("btnOnlineRematch")
       ?.addEventListener("click", () => this.endcard.requestRematch(), { signal });
+    document.getElementById("btnPeekBoard")?.addEventListener("click", () => this.endcard.toggleBoardPeek(), {
+      signal,
+    });
     document.getElementById("btnCalcUndo")?.addEventListener("click", () => this.input.undoCalc(), { signal });
     document.getElementById("btnCalcRedo")?.addEventListener("click", () => this.input.redoCalc(), { signal });
     document.getElementById("btnCalcClear")?.addEventListener("click", () => this.input.clearCalc(), { signal });
