@@ -285,10 +285,19 @@ of the game rather than generic minimax:
   dead space is excluded — for this to be tractable, especially once the open
   area fragments into disconnected sub-regions, which lets the solver
   decompose via Sprague-Grundy and combine components by Grundy-XOR instead
-  of searching the joint state space). The domino budget (capped at 2 per
-  player match-wide) parameterizes a zone's solve rather than needing general
-  resource-game machinery — enumerate the ≤9 `(dominoes-available-to-mover,
-  dominoes-available-to-opponent)` combinations per zone state.
+  of searching the joint state space).
+- **Dominoes are excluded from the solver's model entirely, not
+  budget-parameterized** — an earlier design kept dominoes in the model,
+  parameterizing a zone's solve by the ≤9 `(dominoes-available-to-mover,
+  dominoes-available-to-opponent)` combinations. That was abandoned: the
+  coordinator-level rule "ignore dominoes until they're the only moves left
+  anywhere" made a domino-free solver both simpler and exactly what the
+  actual decision needed, and — the real payoff — with the domino's shared,
+  match-wide budget out of the picture, a zone becomes a plain impartial game
+  with *zero* cross-region coupling, so Grundy decomposition applies with no
+  caveats at all (the domino-aware version would have needed a real, unbuilt
+  extension to Grundy theory to combine components under a shared resource).
+  See "Tier 3 — the solver" below for the actual implementation.
 - **The global game is not a classical free disjunctive sum** — a zone locks
   a player out until `localTurn` comes back around to them (no "playing the
   same component twice while the opponent ignores it"), and the shared
@@ -321,19 +330,28 @@ time" rather than landing the full solver before anything ships):
 2. `no-waste-01` — uniform random, but never spends a domino unless every
    other piece type has zero legal placements. Shipped. See
    `server/bot/noWasteBot.js`.
-3. `solver-greedy-01` — exact per-zone solver (`server/bot/zoneSolver.js`)
-   + greedy zone selection (`server/bot/tier3Bot.js`). Shipped. Details below.
+3. Exact per-zone solver (`server/bot/zoneSolver.js`) + configurable greedy
+   coordinator (`server/bot/tier3Bot.js`'s `createSolverGreedyBot`). Shipped
+   as a family of four registered variants (`solver-greedy-01`, `-weak-01`,
+   `-strong-01`, `-strong-02`) differing only in tie-break/strength config —
+   see "The solver-greedy bot family" below. **Currently the strongest tier
+   in the pool.**
 4. Tempo-aware coordinator — solver reports a "does this zone currently
    guarantee me an always-available move" flag; coordinator prefers holding
    near-won zones open and weighs new-zone tempo exposure, not just size.
-   Not started. **Motivated by a real, measured gap** — see "known
-   limitation" below.
+   **Not started — this is the next real engine work.** Motivated by a real,
+   measured gap: tier-3-vs-tier-3 self-play shows a substantial second-mover
+   advantage (see "Known limitation, motivating tier 4" further down) that's
+   the direct, expected consequence of having no cross-zone tempo reasoning
+   yet.
 5. Full endgame search — solve the whole remaining position exactly once
    few enough cells/zones remain. Not started.
 
 Depth/noise variants within a tier (e.g. capped search depth, weighted-random
 move selection instead of always-best) are additional dial settings on top of
-this ladder, not separate tiers of their own.
+this ladder, not separate tiers of their own — see the solver-greedy family's
+own `zoneSelection`/`avoidLosingMove`/`maxBlobSize` dials for how tier 3
+already does this.
 
 ### Tier 3 — the solver
 
@@ -567,6 +585,51 @@ fill) took ~880ms in testing; every subsequent move stayed well under that.
 One-time cost, not a per-move problem, but worth knowing about when
 `botThinkDelayMs()` pacing is revisited.
 
+### Considered and shelved: alpha-beta win/loss search above maxBlobSize
+
+Prototyped a second, larger `maxBooleanBlobSize` ceiling: for a single
+unfragmented blob too big for `grundyOf`'s exact nimber path, run a
+boolean-only (win/loss, not full nimber) alpha-beta-style search instead —
+proving a *win* only needs one move that leaves the opponent in a proven
+loss (short-circuit, no evaluation function needed, still exact), though
+proving a *loss* still requires checking every move, same as ordinary
+minimax. Whenever a candidate move fragmented the blob, this handed off to
+the existing, unmodified `grundyOf()` for the real XOR combination — the
+boolean shortcut is only valid for the position actually being asked about,
+never for a component that still needs to be XOR'd with a sibling (two
+components individually "won" for whoever moves in them alone can still XOR
+to a loss for the combined sum).
+
+**Verified correct**: zero wrong-sign answers across 172+ random realistic
+shapes, `findWinningMove` recovered a genuinely winning move in all 114
+winnable cases checked. **Verified valuable on realistic shapes**: resolved
+63% of previously-undetermined cases in that same batch.
+
+**Shelved anyway**, based on a clean apples-to-apples benchmark (same
+`maxBlobSize=12` for both, isolating the pure added cost) on the
+pathological worst case — a fully-open, never-fragmenting square:
+
+| size | old (instant `null`) | new (boolean fallback) | result |
+|---|---|---|---|
+| 18 | 0ms | 7ms | `true` |
+| 20 | 0ms | 108ms | `true` |
+| 22 | 0ms | 256ms | `null` |
+| 26 | 0ms | 2566ms | `null` |
+| 30 | 0ms | 49516ms | `null` |
+
+Real gain tops out around **+6-8 cells** past whatever `maxBlobSize` is
+already set to, before hitting the same exponential wall — and it adds a
+real "dead zone": a fragment landing between `maxBlobSize` and
+`maxBooleanBlobSize` during the search can't be resolved by *either* method
+(too big for exact, and boolean-only can't help a component needing XOR
+magnitude). For a marginal, capped gain, that complexity — a second size
+dial, a gap that behaves unlike either simple case — wasn't judged worth it
+over just raising `maxBlobSize` directly. Not implemented in
+`tier3Bot.js`/`botRegistry.js` at all; reverted out of `zoneSolver.js`
+entirely rather than left dormant. Revisit if a future need specifically
+calls for squeezing more out of the same `maxBlobSize` without simply
+raising it.
+
 ### The solver-greedy bot family
 
 Four named configs of `createSolverGreedyBot` are registered
@@ -596,14 +659,25 @@ illegal moves, zero incorrect passes, every game completes, all beat
 `no-waste` 10/10. Strength ordering is real, not just a label: `strong-02`
 beat `weak-01` 20/20 across both seats head-to-head.
 
-**Adding a new tier**: write the `(game, playerIndex) -> move | null`
-function, register it in `server/bot/botRegistry.js`'s
-`CHOOSE_MOVE_BY_KEY`, add a `{ key, nickname }` entry to
-`server/scripts/seedBots.js`, run the seed script. A bot player row's
-`botKey` is recovered from its `google_sub` (`bot:${botKey}`) via
-`botKeyFromRow()` in `botRepository.js` — this is how `index.js` picks the
-right `chooseMove` for whichever bot row `pickClosestBot()`/`PLAY_BOT_REQUEST`
-resolved to, without hardcoding a single bot everywhere the way Phase 1 did.
+**Adding a new tier from scratch** (a genuinely different algorithm, not a
+config variant): write the `(game, playerIndex) -> move | null` function,
+register it in `server/bot/botRegistry.js`'s `CHOOSE_MOVE_BY_KEY`, add a
+`{ key, nickname }` entry to `server/scripts/seedBots.js`, run the seed
+script.
+
+**Adding a new variant of the solver-greedy family** (the far more common
+case now — see "The solver-greedy bot family" below): just call
+`createSolverGreedyBot({ ...config })` with a new combination of
+`zoneSelection`/`avoidLosingMove`/`maxBlobSize`, assign it a new botKey in
+`CHOOSE_MOVE_BY_KEY`, and add the matching seed entry. No new source file
+needed — `tier3Bot.js` is the one implementation, the registry is what turns
+configs into named bots.
+
+A bot player row's `botKey` is recovered from its `google_sub`
+(`bot:${botKey}`) via `botKeyFromRow()` in `botRepository.js` — this is how
+`index.js` picks the right `chooseMove` for whichever bot row
+`pickClosestBot()`/`PLAY_BOT_REQUEST` resolved to, without hardcoding a
+single bot everywhere the way Phase 1 did.
 
 Performance/concurrency: staying on the main event loop for now (no worker
 threads) — exact zone solving is only expensive for wide-open zones, which is
