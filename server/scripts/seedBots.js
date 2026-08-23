@@ -8,13 +8,14 @@ import { findOrCreateBotPlayer } from "../bot/botRepository.js";
 
 // Phase 2 tiers land one at a time (docs/BOTS.md) — add an entry here
 // (and a matching key in server/bot/botRegistry.js) as each one ships.
+// The old solver-greedy-* family was removed (see botRegistry.js) —
+// its bot rows are now orphaned (chooseMoveForBotKey falls back to
+// random-01's logic for them, but they should really be removed via
+// the admin tool once the new roster replaces them). New named bots go
+// here once the new family's configs are decided.
 const BOTS = [
   { key: "random-01", nickname: "Bot_Random_01" },
   { key: "no-waste-01", nickname: "Bot_NoWaste_01" },
-  { key: "solver-greedy-01", nickname: "Bot_SolverGreedy_01" },
-  { key: "solver-greedy-weak-01", nickname: "Bot_SolverGreedyWeak_01" },
-  { key: "solver-greedy-strong-01", nickname: "Bot_SolverGreedyStrong_01" },
-  { key: "solver-greedy-strong-02", nickname: "Bot_SolverGreedyStrong_02" },
 ];
 
 for (const { key, nickname } of BOTS) {

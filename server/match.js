@@ -3,7 +3,7 @@ import { Game } from "../shared/engine/game.js";
 import { Clock } from "../shared/clock.js";
 import { resolveParams } from "../shared/params.js";
 import { MSG } from "../shared/net/protocol.js";
-import { DISCONNECT_ABORT_MS, REMATCH_TIMEOUT_MS, MATCH_POST_GAME_IDLE_MS } from "../shared/config.js";
+import { disconnectAbortMsFor, REMATCH_TIMEOUT_MS, MATCH_POST_GAME_IDLE_MS } from "../shared/config.js";
 import { log, shortId, formatDuration } from "./logger.js";
 import { getPlayerById, displayRating } from "./playerRepository.js";
 
@@ -356,24 +356,25 @@ export class Match {
     if (this.status === "aborted") return; // already terminal, nothing left to do
 
     const opponent = this.players.find((p) => p !== player);
+    const abortMs = disconnectAbortMsFor(this.activeParams?.timeControl);
 
     if (opponent?.connected && this.status === "active") {
       this._sendTo(opponent.agent, {
         type: MSG.OPPONENT_DISCONNECTED,
         playerIndex: player.playerIndex,
-        abortInMs: DISCONNECT_ABORT_MS,
+        abortInMs: abortMs,
       });
       log(
-        `Match ${shortId(this.matchId)}: ${player.nickname} disconnected, aborting in ${Math.round(DISCONNECT_ABORT_MS / 1000)}s if not back`,
+        `Match ${shortId(this.matchId)}: ${player.nickname} disconnected, aborting in ${Math.round(abortMs / 1000)}s if not back`,
       );
     }
 
-    this._armAbortTimer();
+    this._armAbortTimer(abortMs);
   }
 
-  _armAbortTimer() {
+  _armAbortTimer(abortMs) {
     clearTimeout(this._abortTimer);
-    this._abortTimer = setTimeout(() => this._onAbortTimeout(), DISCONNECT_ABORT_MS);
+    this._abortTimer = setTimeout(() => this._onAbortTimeout(), abortMs);
   }
 
   // Called for RECONNECT_ATTEMPT — sessionId is the durable identity,

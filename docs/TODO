@@ -1,6 +1,9 @@
-next bot: first try to create a winning zone, only then move to exitsing ones
+domino move: make sure to include zone creations as candidates and their corresponding zone's cost
+domino only zone solver
 
+drop down menu for bots - too many for cards
 better bot naming
+
 bot logging
 
 comments cleanup
@@ -14,10 +17,6 @@ scale thinking time with possible moves (for simple bots)
 and with move "complexity" for smarter bots
 same parameter "complexity" just for simple bots it is possible move count
 
-    build admin tools (to see and/or edit all past matches, ongoing matches, players, connections, bots, logs for everything, etc)
-
-different timeouts on disconnect for different time control settings
-
 account overview
 game history
 rating graph
@@ -28,11 +27,5 @@ replay past games move by move
 ? history panel minimum height
 
 matchStart currently arrives before matchJoined
-
 cannot set clock to 15 seconds by sliders
-
-??? skip move - 10% penalty on all points ( concecutive passess are not allowed)
-??? fixed flat penalty
-
-??? laggy connection
 ??? on different grid sizes board is still a square not a rectangle and tiles are squished

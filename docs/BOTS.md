@@ -285,10 +285,19 @@ of the game rather than generic minimax:
   dead space is excluded — for this to be tractable, especially once the open
   area fragments into disconnected sub-regions, which lets the solver
   decompose via Sprague-Grundy and combine components by Grundy-XOR instead
-  of searching the joint state space). The domino budget (capped at 2 per
-  player match-wide) parameterizes a zone's solve rather than needing general
-  resource-game machinery — enumerate the ≤9 `(dominoes-available-to-mover,
-  dominoes-available-to-opponent)` combinations per zone state.
+  of searching the joint state space).
+- **Dominoes are excluded from the solver's model entirely, not
+  budget-parameterized** — an earlier design kept dominoes in the model,
+  parameterizing a zone's solve by the ≤9 `(dominoes-available-to-mover,
+  dominoes-available-to-opponent)` combinations. That was abandoned: the
+  coordinator-level rule "ignore dominoes until they're the only moves left
+  anywhere" made a domino-free solver both simpler and exactly what the
+  actual decision needed, and — the real payoff — with the domino's shared,
+  match-wide budget out of the picture, a zone becomes a plain impartial game
+  with *zero* cross-region coupling, so Grundy decomposition applies with no
+  caveats at all (the domino-aware version would have needed a real, unbuilt
+  extension to Grundy theory to combine components under a shared resource).
+  See "Tier 3 — the solver" below for the actual implementation.
 - **The global game is not a classical free disjunctive sum** — a zone locks
   a player out until `localTurn` comes back around to them (no "playing the
   same component twice while the opponent ignores it"), and the shared
@@ -321,19 +330,30 @@ time" rather than landing the full solver before anything ships):
 2. `no-waste-01` — uniform random, but never spends a domino unless every
    other piece type has zero legal placements. Shipped. See
    `server/bot/noWasteBot.js`.
-3. `solver-greedy-01` — exact per-zone solver (`server/bot/zoneSolver.js`)
-   + greedy zone selection (`server/bot/tier3Bot.js`). Shipped. Details below.
+3. Exact per-zone solver (`server/bot/zoneSolver.js`) + fully configurable
+   coordinator (`server/bot/solverBot.js`'s `createSolverBot`). The
+   underlying mechanism is built and verified — priority order, zone
+   tie-breaks, and strength dials are all config, not fixed rules — but the
+   named-bot roster built on it is currently empty (the old fixed-order
+   family that shipped here has been removed; see "The solver bot family"
+   below). **No tier-3 bot is currently registered/playable until a roster
+   is decided.**
 4. Tempo-aware coordinator — solver reports a "does this zone currently
    guarantee me an always-available move" flag; coordinator prefers holding
    near-won zones open and weighs new-zone tempo exposure, not just size.
-   Not started. **Motivated by a real, measured gap** — see "known
-   limitation" below.
+   **Not started — this is the next real engine work.** Motivated by a real,
+   measured gap: tier-3-vs-tier-3 self-play shows a substantial second-mover
+   advantage (see "Known limitation, motivating tier 4" further down) that's
+   the direct, expected consequence of having no cross-zone tempo reasoning
+   yet.
 5. Full endgame search — solve the whole remaining position exactly once
    few enough cells/zones remain. Not started.
 
 Depth/noise variants within a tier (e.g. capped search depth, weighted-random
 move selection instead of always-best) are additional dial settings on top of
-this ladder, not separate tiers of their own.
+this ladder, not separate tiers of their own — see the solver bot family's
+own `actionPriority`/`zoneSelection`/`avoidLosingMove`/`maxBlobSize` dials
+for how tier 3 already does this.
 
 ### Tier 3 — the solver
 
@@ -393,49 +413,59 @@ large, *fully open, never-fragmented* blob within `maxBlobSize` (a
 fully-open 25-cell square took 2.5s in testing) — exactly the case
 `maxBlobSize` exists to reject rather than attempt.
 
-### Tier 3 — the coordinator, now a configurable bot family
+### Tier 3 — the coordinator, now a fully configurable bot family
 
-`createSolverGreedyBot(config)` (`server/bot/tier3Bot.js`) builds a
-`chooseMove` function from a config object, so the same core algorithm can
-produce a whole family of bots that differ only in their tie-break
-preferences — not a single fixed bot. `tier3BotMove` (still exported, still
-`"solver-greedy-01"` in `botRegistry.js`) is just `createSolverGreedyBot()`
-with defaults matching the original behavior.
+**Status: `tier3Bot.js` and the entire solver-greedy-* family it shipped
+(`-01`/`-weak-01`/`-strong-01`/`-strong-02`) have been removed.** Replaced
+by `server/bot/solverBot.js`'s `createSolverBot(config)` — a second-
+generation generalization that makes the *priority order itself* a config
+dial, not just the tie-breaks within a fixed order (which is all the old
+family exposed). `botRegistry.js` currently has no named bots built on it
+— the new roster's configs are still being decided; this section documents
+the mechanism, not yet a specific lineup.
 
-**Every ordering decision, and which ones are dials vs. fixed rules** (see
-`DEFAULT_CONFIG`'s own comment in the source for the numbered list):
+The underlying zone-solving machinery (`ZoneSolver`, `classifyActiveZone`,
+`zoneCreationCandidates`, `pickMoveAvoidingLoss`, etc. — everything below
+this point through "Known cost, not yet addressed") is unchanged, just
+relocated into `solverBot.js` — all of it, including the three historical
+bug fixes below, carried over verbatim.
 
-1. Among multiple winnable *active* zones — `zoneSelection.winnableActive`
-   (default `"random"`).
-2. Among multiple winnable zone-*creation* candidates — **fixed** `"biggest"`
-   (not exposed; paired with #4, see below).
-3. Among multiple uncertain creation candidates — `zoneSelection.creationUncertain`
-   (default `"random"`).
-4. Among multiple lost creation candidates — **fixed** `"smallest"` (not
-   exposed). #2 and #4 are kept as one fixed rule rather than two
-   independent dials on purpose — a big *won* zone is a bonus, a big *lost*
-   zone is a tempo trap you shouldn't have handed the opponent in the first
-   place (see the design chat on strategy #2), so decoupling them would let
-   a config accidentally prefer creating big zones even when losing them.
-5. Among multiple uncertain active zones — `zoneSelection.uncertainActive`
-   (default `"random"`).
-6. Among multiple lost active zones — `zoneSelection.lostActive` (default
-   `"random"`).
-7. Among multiple domino-fallback targets — `zoneSelection.dominoFallback`
-   (default `"biggest"`).
-8. Which winning move to play within an already-winnable zone — no dial.
-   Any winning move is equivalent under the current domino-free model, so
-   whichever `findWinningMove()` happens to return stands. Will matter once
-   the solver can compare remaining domino-shaped spots between candidate
-   winning lines — not yet.
-9. Which move to try first in an uncertain/lost zone — `avoidLosingMove`
-   (`{ enabled, maxTries }`, default `{ enabled: true, maxTries: 15 }`). See
-   below.
+**The seven action categories** a config's `actionPriority.order` arranges
+(see `solverBot.js`'s own `DEFAULT_CONFIG` comment for the authoritative
+list): `winnableActive`, `uncertainActive`, `lostActive`,
+`creationWinnable`, `creationUncertain`, `creationLost`, `domino`. `pass`
+is deliberately **not** a category — it's a structural fallthrough only
+reached once all seven are checked and empty (see the safety net below),
+never something a config ranks or randomizes into.
 
-Selection strategies 1/3/5/6/7 each independently take `"random"`,
-`"smallest"`, or `"biggest"` (by zone/candidate cost) via a shared
-`selectByStrategy` helper — a config can mix strategies across decisions
-freely (e.g. random for active zones, biggest for creation).
+**`actionPriority` config shape**: `{ shuffle, order }`, where `order` is
+all 7 categories each optionally flagged `pinned: true`.
+- `shuffle: false` (default) — `order` is used literally, top to bottom.
+  The shipped default order reproduces the old fixed family's behavior
+  exactly (`winnableActive` → full creation sweep → `uncertainActive` →
+  `lostActive` → `domino`).
+- `shuffle: true` — every category **not** marked `pinned` gets reshuffled
+  among the slot positions the non-pinned entries occupy, fresh on every
+  single `chooseMove` call; pinned entries never move from their
+  configured position. E.g. domino pinned last with everything else
+  shuffled gives a bot that's uniformly random *among whichever action
+  types currently have a candidate* — genuinely different from tier 1's
+  uniform-over-all-legal-moves randomness, while domino still stays the
+  true last resort. Verified directly (not just via self-play): 5000
+  trials confirmed a pinned category never left its slot, and each
+  non-pinned category landed first ~14-17% of the time (uniform over 6).
+
+**`zoneSelection`** — one independent `"random"`/`"smallest"`/`"biggest"`
+dial per category (`winnableActive`, `uncertainActive`, `lostActive`,
+`creationWinnable`, `creationUncertain`, `creationLost`,
+`dominoFallback`), applied via the same `selectByStrategy` helper as
+before. The old family's one fixed rule — `creationWinnable` forced
+`"biggest"`, `creationLost` forced `"smallest"`, never independently
+configurable — is gone; both are now free dials like every other
+category (default values still `"biggest"`/`"smallest"` respectively, to
+match old behavior, but overridable). The original reasoning for the
+pairing (a big *won* zone is a bonus, a big *lost* zone is a tempo trap)
+still holds as a sensible default, it's just no longer enforced.
 
 **Decision 9 — `pickMoveAvoidingLoss`**: within a chosen uncertain/lost
 zone, tries up to `maxTries` of its real legal moves in random order,
@@ -464,33 +494,27 @@ win or dodge a provable loss) at a cost that's linear, not exponential,
 in `maxTries`. Both are natural levers for building weaker/stronger
 variants within this bot family, alongside the `zoneSelection` tie-breaks.
 
-**Priority order** (fixed across the whole family — only the tie-breaks
-within each step are configurable):
+**Note on `creationWinnable`/`creationLost`'s zone-creation inversion**:
+creating a zone hands the very next local turn to the *opponent*
+(`Zone.create` sets `localTurn = 1 - creator`), so "good to create" means
+solving the resulting position with the **opponent** as mover and wanting
+them to lose — the solver's win/loss sense is deliberately flipped for
+this case. `Zone.floodFill`'s result depends only on the anchor cell and
+radius, not the piece shape placed there, so evaluation only needs one
+flood-fill per distinct candidate anchor, reused across every shape
+variant anchored there.
 
-1. An active zone (bot's own local turn) already provably winnable — play a
-   winning move there.
-2. Otherwise, try to **create** a zone — prefer a provably winnable one
-   (biggest first), then any uncertain one, then the smallest provably lost
-   one. Note the inversion here versus step 1: creating a zone hands the
-   very next local turn to the *opponent* (`Zone.create` sets
-   `localTurn = 1 - creator`), so "good to create" means solving the
-   resulting position with the **opponent** as mover and wanting them to
-   lose — the solver's win/loss sense is deliberately flipped for this case.
-   `Zone.floodFill`'s result depends only on the anchor cell and radius, not
-   the piece shape placed there, so evaluation only needs one flood-fill per
-   distinct candidate anchor, reused across every shape variant anchored
-   there.
-3. Otherwise, an uncertain active zone **that currently has a real
-   non-domino move available** — see the bug fix below for why this
-   qualifier matters.
-4. Otherwise, a lost active zone with a real move available (still better
-   than passing or spending a domino).
-5. Otherwise, dominoes are the only moves left anywhere — either in an
-   existing active zone, or by **creating** a brand-new one (see the second
-   bug fix below).
-6. Otherwise, no legal move exists at all anywhere — pass. Confirmed this is
-   the only condition under which the coordinator should ever pass, per the
-   rules (a pass is never a strategic choice this bot makes).
+**Safety-net fallback** (new in this generalization, replaces the old
+family's implicit "otherwise pass"): if every one of the 7 categories
+comes back empty, `chooseMove` doesn't trust that as "no move exists" —
+with per-category logic this configurable, a bug in any one category's
+filter could reach this point while a real move still exists elsewhere.
+It re-checks `Rules.canPlayerMove` directly and, if a move genuinely
+exists, logs a warning and plays a uniformly random real legal move
+instead of passing. Only passes (`return null`) if `canPlayerMove` also
+confirms none exists. This makes an incorrect pass structurally
+impossible regardless of config — a future logic bug becomes "plays a
+suboptimal move," never "gets stuck or passes illegally."
 
 #### Two real bugs found and fixed during this refactor
 
@@ -542,15 +566,40 @@ while re-testing after the refactor. Fixed by passing
 `{ maxBlobSize: cfg.maxBlobSize, maxTries: cfg.avoidLosingMove.maxTries }`
 explicitly at both call sites.
 
-**Verified after all three fixes**: 60 self-play games across three
-batches (10 games with an aggressive all-`"smallest"` custom config
-exercising the exact previously-stuck scenarios, a 30-seed default-config
-sweep, and a 10-seed P0/P1 seat-swap check) — zero illegal moves, zero
-incorrect passes (every pass cross-checked against
-`canCurrentPlayerMove()`), every game reaches completion. Win rate against
-tier 2 (`no-waste`) is now 30/30 in the sweep and 10/10 in both seats —
-higher than the previously-reported 19/20, consistent with
-`pickMoveAvoidingLoss` actually running now instead of silently no-oping.
+**Verified after all three fixes** (pre-generalization, on the old
+fixed-order family): 60 self-play games across three batches (10 games
+with an aggressive all-`"smallest"` custom config exercising the exact
+previously-stuck scenarios, a 30-seed default-config sweep, and a 10-seed
+P0/P1 seat-swap check) — zero illegal moves, zero incorrect passes (every
+pass cross-checked against `canCurrentPlayerMove()`), every game reaches
+completion. Win rate against tier 2 (`no-waste`) was 30/30 in the sweep
+and 10/10 in both seats — higher than the previously-reported 19/20,
+consistent with `pickMoveAvoidingLoss` actually running now instead of
+silently no-oping.
+
+**Verified again after the `actionPriority`/`zoneSelection` generalization**
+into `solverBot.js`: 40 self-play games (10 default-config, 10 full-shuffle-
+with-domino-pinned, 20 split across a "create-winning-zone-first" reordered
+config in both seats) — zero illegal moves, zero errors, every game
+completes. The `resolveOrder` pin/shuffle mechanism itself was also checked
+directly (not just via self-play): 5000 trials, pinned category never left
+its slot, non-pinned categories landed first uniformly.
+
+**The "create winning zone before playing an existing winnable active zone"
+hypothesis was tested and is a wash, not an improvement**: 70 games total
+(both seats, fresh seeds) gave 34 wins to the reordered config, 35 to the
+old default order, 1 draw — no measurable edge either direction. Confirms
+the earlier caution that this was a genuine tempo *trade*, not a strict
+improvement, and shouldn't become the new default without more evidence.
+One unresolved side-observation from the same batch, weak signal only:
+whichever bot occupied the first-move seat won more regardless of which
+order-config it was running (avg score margin swung ~±30-40 by seat, not
+by config) — worth a dedicated look, but 70 games isn't enough to say
+more than "noticed it." Also notable: this seat effect points toward a
+*first*-mover advantage, which is the opposite direction from the
+second-mover advantage described below for tier-3-vs-tier-3 play — not
+necessarily a contradiction (different configs, different sample), but
+worth reconciling whenever tempo/seat effects get a real investigation.
 
 **Known limitation, motivating tier 4**: tier-3-vs-tier-3 self-play shows a
 real, substantial *second-mover* advantage (P1 won 7/10 in earlier testing,
@@ -567,43 +616,80 @@ fill) took ~880ms in testing; every subsequent move stayed well under that.
 One-time cost, not a per-move problem, but worth knowing about when
 `botThinkDelayMs()` pacing is revisited.
 
-### The solver-greedy bot family
+### Considered and shelved: alpha-beta win/loss search above maxBlobSize
 
-Four named configs of `createSolverGreedyBot` are registered
-(`server/bot/botRegistry.js`), from weakest to strongest:
+Prototyped a second, larger `maxBooleanBlobSize` ceiling: for a single
+unfragmented blob too big for `grundyOf`'s exact nimber path, run a
+boolean-only (win/loss, not full nimber) alpha-beta-style search instead —
+proving a *win* only needs one move that leaves the opponent in a proven
+loss (short-circuit, no evaluation function needed, still exact), though
+proving a *loss* still requires checking every move, same as ordinary
+minimax. Whenever a candidate move fragmented the blob, this handed off to
+the existing, unmodified `grundyOf()` for the real XOR combination — the
+boolean shortcut is only valid for the position actually being asked about,
+never for a component that still needs to be XOR'd with a sibling (two
+components individually "won" for whoever moves in them alone can still XOR
+to a loss for the combined sum).
 
-- **`solver-greedy-weak-01`** — all `zoneSelection` random, `dominoFallback`
-  "biggest", `avoidLosingMove` **disabled** entirely. The weakest realistic
-  variant — never spends the extra solves to catch a hidden win or dodge a
-  loss.
-- **`solver-greedy-01`** — the default config (identical zone preferences to
-  `weak-01`, but with `avoidLosingMove` on, `maxTries: 15`). Kept as its own
-  entry since it already existed before this family was built out.
-- **`solver-greedy-strong-01`** — prefers the *smallest* winnable/creation/
-  uncertain target (bank easy wins fast, don't let an uncertain zone grow
-  before dealing with it) but the *biggest* lost zone (a lost zone is
-  already a sunk cost — better to extract whatever tempo/board-presence
-  value is left in it before it closes). `avoidLosingMove` at default
-  (on, 15 tries).
-- **`solver-greedy-strong-02`** — `strong-01`'s zone preferences, with both
-  strength dials pushed further: `maxBlobSize` 12 → 18, `avoidLosingMove.
-  maxTries` 15 → 30. Checked the exponential wall before committing to 18:
-  a fully-open, unfragmented 18-cell blob (the actual worst case) solves in
-  47ms, comfortably within budget.
+**Verified correct**: zero wrong-sign answers across 172+ random realistic
+shapes, `findWinningMove` recovered a genuinely winning move in all 114
+winnable cases checked. **Verified valuable on realistic shapes**: resolved
+63% of previously-undetermined cases in that same batch.
 
-**Verified**: each of the three new variants (10-seed batches) — zero
-illegal moves, zero incorrect passes, every game completes, all beat
-`no-waste` 10/10. Strength ordering is real, not just a label: `strong-02`
-beat `weak-01` 20/20 across both seats head-to-head.
+**Shelved anyway**, based on a clean apples-to-apples benchmark (same
+`maxBlobSize=12` for both, isolating the pure added cost) on the
+pathological worst case — a fully-open, never-fragmenting square:
 
-**Adding a new tier**: write the `(game, playerIndex) -> move | null`
-function, register it in `server/bot/botRegistry.js`'s
-`CHOOSE_MOVE_BY_KEY`, add a `{ key, nickname }` entry to
-`server/scripts/seedBots.js`, run the seed script. A bot player row's
-`botKey` is recovered from its `google_sub` (`bot:${botKey}`) via
-`botKeyFromRow()` in `botRepository.js` — this is how `index.js` picks the
-right `chooseMove` for whichever bot row `pickClosestBot()`/`PLAY_BOT_REQUEST`
-resolved to, without hardcoding a single bot everywhere the way Phase 1 did.
+| size | old (instant `null`) | new (boolean fallback) | result |
+|---|---|---|---|
+| 18 | 0ms | 7ms | `true` |
+| 20 | 0ms | 108ms | `true` |
+| 22 | 0ms | 256ms | `null` |
+| 26 | 0ms | 2566ms | `null` |
+| 30 | 0ms | 49516ms | `null` |
+
+Real gain tops out around **+6-8 cells** past whatever `maxBlobSize` is
+already set to, before hitting the same exponential wall — and it adds a
+real "dead zone": a fragment landing between `maxBlobSize` and
+`maxBooleanBlobSize` during the search can't be resolved by *either* method
+(too big for exact, and boolean-only can't help a component needing XOR
+magnitude). For a marginal, capped gain, that complexity — a second size
+dial, a gap that behaves unlike either simple case — wasn't judged worth it
+over just raising `maxBlobSize` directly. Not implemented in
+`tier3Bot.js`/`botRegistry.js` at all; reverted out of `zoneSolver.js`
+entirely rather than left dormant. Revisit if a future need specifically
+calls for squeezing more out of the same `maxBlobSize` without simply
+raising it.
+
+### The solver bot family (roster removed, redesign in progress)
+
+The old four named configs (`solver-greedy-01`/`-weak-01`/`-strong-01`/
+`-strong-02`) have been deleted from `botRegistry.js` and
+`seedBots.js` — their DB rows are now orphaned (falls back to
+`random-01`'s logic via `chooseMoveForBotKey`'s safety net until removed
+via the admin tool or re-seeded under the new system). No replacement
+roster is registered yet; the config-space generalization in
+`solverBot.js` is done and verified (see above), but which specific named
+configs to ship is still being decided.
+
+**Adding a new tier from scratch** (a genuinely different algorithm, not a
+config variant): write the `(game, playerIndex) -> move | null` function,
+register it in `server/bot/botRegistry.js`'s `CHOOSE_MOVE_BY_KEY`, add a
+`{ key, nickname }` entry to `server/scripts/seedBots.js`, run the seed
+script.
+
+**Adding a new variant of the solver bot family**: call
+`createSolverBot({ ...config })` (`server/bot/solverBot.js`) with a new
+combination of `actionPriority`/`zoneSelection`/`avoidLosingMove`/
+`maxBlobSize`, assign it a new botKey in `CHOOSE_MOVE_BY_KEY`, and add the
+matching seed entry. No new source file needed — `solverBot.js` is the one
+implementation, the registry is what turns configs into named bots.
+
+A bot player row's `botKey` is recovered from its `google_sub`
+(`bot:${botKey}`) via `botKeyFromRow()` in `botRepository.js` — this is how
+`index.js` picks the right `chooseMove` for whichever bot row
+`pickClosestBot()`/`PLAY_BOT_REQUEST` resolved to, without hardcoding a
+single bot everywhere the way Phase 1 did.
 
 Performance/concurrency: staying on the main event loop for now (no worker
 threads) — exact zone solving is only expensive for wide-open zones, which is

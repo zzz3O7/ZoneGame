@@ -40,9 +40,19 @@ export const LAYOUT = {
 
 export const PASS_PENALTY = 0.7; // global, not mode-tunable (yet)
 
-// How long a match stays alive after a player disconnects before the server
-// gives up and aborts it. Server-only concern.
-export const DISCONNECT_ABORT_MS = 60_000;
+export const DISCONNECT_ABORT_MS_DEFAULT = 60_000; // untimed matches default
+
+// A timed match's disconnect grace period scales with the clock.
+const DISCONNECT_ABORT_FRACTION = 1 / 6;
+const DISCONNECT_ABORT_MIN_MS = 15_000;
+const DISCONNECT_ABORT_MAX_MS = 120_000;
+
+// timeControl is the resolved { initialMs, incrementMs } shape (or null for an untimed match)
+export function disconnectAbortMsFor(timeControl) {
+  if (!timeControl?.initialMs) return DISCONNECT_ABORT_MS_DEFAULT;
+  const scaled = timeControl.initialMs * DISCONNECT_ABORT_FRACTION;
+  return Math.round(Math.min(DISCONNECT_ABORT_MAX_MS, Math.max(DISCONNECT_ABORT_MIN_MS, scaled)));
+}
 
 // How long the server waits for the second player to also request a
 // rematch before giving up and telling the first requester it fizzled.
@@ -50,11 +60,11 @@ export const REMATCH_TIMEOUT_MS = 20_000;
 
 // How long a finished match stays alive waiting for a rematch that
 // never comes, before the server gives up and closes it — same idea as
-// DISCONNECT_ABORT_MS, just for the "game ended, nobody's disconnected,
-// nobody's asked for a rematch either" case, which nothing else times
-// out (a tab left open on the endcard would otherwise hold the match in
-// memory indefinitely). Applies uniformly to every match regardless of
-// who's playing — PvP, PvE, EvE all use the same rule.
+// disconnectAbortMsFor() above, just for the "game ended, nobody's
+// disconnected, nobody's asked for a rematch either" case, which nothing
+// else times out (a tab left open on the endcard would otherwise hold the
+// match in memory indefinitely). Applies uniformly to every match
+// regardless of who's playing — PvP, PvE, EvE all use the same rule.
 export const MATCH_POST_GAME_IDLE_MS = 5 * 60_000;
 
 // Fixed presets. Adding a new mode later = one more entry here, nothing else changes.

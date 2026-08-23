@@ -32,7 +32,12 @@ db.exec(`
     -- Bots are real rows here (real rating_mu/sigma, same rating pipeline
     -- as any human) — this just flags them so player lists, leaderboards,
     -- etc. can exclude them. See docs/BOTS.md.
-    is_bot INTEGER NOT NULL DEFAULT 0
+    is_bot INTEGER NOT NULL DEFAULT 0,
+    -- Admin-controlled: a disabled bot stops being offered for new
+    -- matches (matchmaking fallback, direct-debug bot list) but its
+    -- row and game history are untouched — this is a visibility toggle,
+    -- not a delete. Irrelevant for human rows (always 1, never read).
+    is_active INTEGER NOT NULL DEFAULT 1
   );
 
   -- Case-insensitive uniqueness: "Artem" and "artem" shouldn't both be
@@ -117,5 +122,6 @@ function addColumnIfMissing(table, columnDef) {
   }
 }
 addColumnIfMissing("players", "is_bot INTEGER NOT NULL DEFAULT 0");
+addColumnIfMissing("players", "is_active INTEGER NOT NULL DEFAULT 1");
 addColumnIfMissing("games", "match_type TEXT NOT NULL DEFAULT 'pvp'");
 addColumnIfMissing("games", "origin TEXT NOT NULL DEFAULT 'matchmaking'");

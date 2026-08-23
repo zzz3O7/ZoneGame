@@ -5,6 +5,8 @@ import { HumanAgent, BotAgent } from "./playerAgent.js";
 import { MSG } from "../shared/net/protocol.js";
 import { log, shortId } from "./logger.js";
 import { handleAuthRequest } from "./authRoutes.js";
+import { handleAdminRequest } from "./adminRoutes.js";
+import { recordMessage } from "./metrics.js";
 import { serveStatic } from "./staticServer.js";
 import { readSessionCookie } from "./cookies.js";
 import { getSessionPlayer } from "./sessionStore.js";
@@ -17,7 +19,7 @@ import {
 } from "../shared/config.js";
 import { applyInactivityRegrowth } from "./rating.js";
 import { chooseMoveForBotKey } from "./bot/botRegistry.js";
-import { listBotPlayers, pickClosestBot, botKeyFromRow } from "./bot/botRepository.js";
+import { listActiveBotPlayers, pickClosestBot, botKeyFromRow } from "./bot/botRepository.js";
 import { displayRating } from "./playerRepository.js";
 
 // A plain http.Server sits in front of the WS server now, because
@@ -30,6 +32,7 @@ import { displayRating } from "./playerRepository.js";
 const httpServer = http.createServer(async (req, res) => {
   const url = new URL(req.url, `http://${req.headers.host}`);
   if (await handleAuthRequest(req, res, url)) return;
+  if (await handleAdminRequest(req, res, url, { manager, queue, wss })) return;
   if (await serveStatic(req, res, url)) return;
   res.writeHead(404);
   res.end();
@@ -154,6 +157,9 @@ function isRatedTimeControl(timeControl) {
 wss.on("connection", (ws, req) => {
   ws.isAlive = true;
   ws.on("pong", heartbeat);
+  // Metadata for the admin tool only — nothing else reads these.
+  ws.__connectedAt = Date.now();
+  ws.__ip = req.socket.remoteAddress;
 
   // Resolves account identity once, from the cookie sent on the WS
   // upgrade request — same cookie/session the HTTP /auth/* routes use.
@@ -169,10 +175,11 @@ wss.on("connection", (ws, req) => {
 
   // prevent unhandled 'error' crashing whole process
   ws.on("error", (err) => {
-    console.error("ws error:", err.message);
+    log(`ws error: ${err.message}`);
   });
 
   ws.on("message", (raw) => {
+    recordMessage();
     let msg;
     try {
       msg = JSON.parse(raw);
@@ -345,7 +352,7 @@ wss.on("connection", (ws, req) => {
       }
 
       if (msg.type === MSG.BOT_LIST_REQUEST) {
-        const bots = listBotPlayers().map((b) => ({ id: b.id, nickname: b.nickname, rating: displayRating(b) }));
+        const bots = listActiveBotPlayers().map((b) => ({ id: b.id, nickname: b.nickname, rating: displayRating(b) }));
         ws.send(JSON.stringify({ type: MSG.BOT_LIST, bots }));
         return;
       }
@@ -353,7 +360,7 @@ wss.on("connection", (ws, req) => {
       // Direct-debug PvE — bypasses the queue, always unrated, zero move
       // delay on the bot's side. See docs/BOTS.md "direct_debug" origin.
       if (msg.type === MSG.PLAY_BOT_REQUEST) {
-        const bots = listBotPlayers();
+        const bots = listActiveBotPlayers();
         const bot = bots.find((b) => b.id === msg.botId);
         if (!bot) {
           ws.send(JSON.stringify({ type: MSG.ERROR, message: "Unknown bot" }));
@@ -459,7 +466,7 @@ wss.on("connection", (ws, req) => {
         return;
       }
     } catch (err) {
-      console.error("handler error:", err.message);
+      log(`handler error: ${err.message}`);
     }
   });
 

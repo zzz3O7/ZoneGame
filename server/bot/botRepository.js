@@ -10,6 +10,8 @@ const insertBot = db.prepare(
 );
 const getByGoogleSub = db.prepare(`SELECT * FROM players WHERE google_sub = ?`);
 const listBots = db.prepare(`SELECT * FROM players WHERE is_bot = 1`);
+const listActiveBots = db.prepare(`SELECT * FROM players WHERE is_bot = 1 AND is_active = 1`);
+const setBotActiveStmt = db.prepare(`UPDATE players SET is_active = ? WHERE id = ? AND is_bot = 1`);
 
 // Idempotent — safe to re-run a seed script. botKey is a stable internal
 // identifier distinct from nickname: debug-readable now (e.g.
@@ -28,6 +30,25 @@ export function listBotPlayers() {
   return listBots.all();
 }
 
+// Only bots actually offered for real play — matchmaking fallback and
+// the direct-debug bot list should both use this, not listBotPlayers(),
+// so a disabled bot immediately stops appearing for new matches without
+// touching its row or history. The admin tool is the one caller that
+// wants every bot regardless of active state, so it keeps using
+// listBotPlayers() directly.
+export function listActiveBotPlayers() {
+  return listActiveBots.all();
+}
+
+// Admin-only mutation — toggles a bot's availability for new matches.
+// No-op (returns false) if id doesn't refer to a bot row, so a caller
+// can't accidentally flip an unrelated human player's flag by passing
+// the wrong id.
+export function setBotActive(id, active) {
+  const info = setBotActiveStmt.run(active ? 1 : 0, id);
+  return info.changes > 0;
+}
+
 // Inverse of findOrCreateBotPlayer's `bot:${botKey}` encoding — this is
 // how a bot player row gets matched back up to its chooseMove function
 // in botRegistry.js. Any row with is_bot=1 went through
@@ -38,11 +59,13 @@ export function botKeyFromRow(bot) {
 }
 
 // Nearest bot by rating_mu; unknown target (guest) or no comparable
-// info falls back to a random bot from the pool. Only one bot exists in
-// Phase 1, so this is trivially correct today and does the real work
-// once more tiers exist (docs/BOTS.md Phase 2).
+// info falls back to a random bot from the pool. Only active bots are
+// eligible — a disabled bot should never be silently handed to a real
+// player via matchmaking fallback. Only one bot exists in Phase 1, so
+// this is trivially correct today and does the real work once more
+// tiers exist (docs/BOTS.md Phase 2).
 export function pickClosestBot(targetMu) {
-  const bots = listBotPlayers();
+  const bots = listActiveBotPlayers();
   if (bots.length === 0) return null;
   if (targetMu == null) return bots[Math.floor(Math.random() * bots.length)];
   return bots.reduce((best, b) => (Math.abs(b.rating_mu - targetMu) < Math.abs(best.rating_mu - targetMu) ? b : best));
