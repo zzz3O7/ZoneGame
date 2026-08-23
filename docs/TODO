@@ -26,11 +26,5 @@ replay past games move by move
 ? history panel minimum height
 
 matchStart currently arrives before matchJoined
-
 cannot set clock to 15 seconds by sliders
-
-??? skip move - 10% penalty on all points ( concecutive passess are not allowed)
-??? fixed flat penalty
-
-??? laggy connection
 ??? on different grid sizes board is still a square not a rectangle and tiles are squished

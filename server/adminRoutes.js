@@ -194,6 +194,13 @@ export async function handleAdminRequest(req, res, url, ctx) {
     return true;
   }
 
+  // GET /admin/bot-keys — known strategy keys, for populating a "seed a
+  // new bot" form without hardcoding the list on the client.
+  if (parts.length === 2 && parts[1] === "bot-keys" && req.method === "GET") {
+    json(res, 200, { keys: KNOWN_BOT_KEYS });
+    return true;
+  }
+
   // POST /admin/bots  { key, nickname } — seed a new bot row for a known
   // strategy tier (see botRegistry.js). Idempotent: re-posting the same
   // key returns the existing row rather than erroring, same as the

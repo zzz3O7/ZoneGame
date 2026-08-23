@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>ZoneGame — Admin</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="admin.css" />
+    <link rel="icon" type="image/svg+xml" href="../favicon.svg" />
+  </head>
+  <body>
+    <div class="shell">
+      <aside class="sidebar">
+        <div class="brand">
+          <span class="brand__mark"></span>
+          <span class="brand__name">ZoneGame<span class="brand__sub">/admin</span></span>
+        </div>
+
+        <nav class="nav" id="nav">
+          <button class="nav__item" data-view="status">Status</button>
+          <button class="nav__item" data-view="matches">Matches</button>
+          <button class="nav__item" data-view="connections">Connections</button>
+          <button class="nav__item" data-view="queue">Queue</button>
+          <button class="nav__item" data-view="players">Players</button>
+          <button class="nav__item" data-view="games">Games</button>
+          <button class="nav__item" data-view="bots">Bots</button>
+          <button class="nav__item" data-view="logs">Logs</button>
+        </nav>
+
+        <div class="sidebar__foot">
+          <div class="pulse-row">
+            <span class="pulse" id="pulseDot"></span>
+            <span id="pulseLabel">disconnected</span>
+          </div>
+          <label class="token-field">
+            <span>Admin token</span>
+            <input type="password" id="tokenInput" placeholder="paste ADMIN_TOKEN" autocomplete="off" />
+          </label>
+          <label class="refresh-toggle">
+            <input type="checkbox" id="autoRefreshToggle" checked />
+            <span>Auto-refresh (5s)</span>
+          </label>
+        </div>
+      </aside>
+
+      <main class="main">
+        <header class="topbar">
+          <h1 id="viewTitle">Status</h1>
+          <div class="topbar__meta" id="viewMeta"></div>
+        </header>
+        <div class="content" id="content"></div>
+      </main>
+    </div>
+
+    <script type="module" src="admin.js"></script>
+  </body>
+</html>
