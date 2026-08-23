@@ -228,7 +228,11 @@ async function renderStatus() {
       <div class="card">
         <div class="card__label">Running commit</div>
         <div class="card__value" style="font-size:16px">${esc(version.gitCommit ?? "unknown")}</div>
-        <div class="card__sub">${esc(version.gitBranch ?? "?")}${version.gitDirty ? " · dirty" : ""} · node ${esc(version.nodeVersion)}</div>
+        <div class="card__sub">${
+          version.gitError
+            ? `<span style="color:var(--color-danger)">${esc(version.gitError)}</span>`
+            : `${esc(version.gitBranch ?? "?")}${version.gitDirty ? " · dirty" : ""} · node ${esc(version.nodeVersion)}`
+        }</div>
       </div>
     </div>
   `;
