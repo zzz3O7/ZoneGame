@@ -3,7 +3,7 @@ domino only zone solver
 drop down menu for bots - too many for cards
 better bot naming
 
-bot logging
+bot logging: individual bot decisions stored for each match for each move. not global logging, so it can be viewed individually in the admin's panel
 
 comments cleanup
 
