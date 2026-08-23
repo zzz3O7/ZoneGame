@@ -88,11 +88,17 @@ export class RenderSync {
       ui.selectedType === "calc" ? ui.calcDrawing.displayStrokes : null,
     );
 
+    // Once the game's over, the tooltip should track whether the board is
+    // actually visible — not gameOver by itself. While the endcard is up,
+    // the board's covered and hovering it doesn't mean anything; once
+    // peeking (see EndcardController.toggleBoardPeek), it's just the
+    // board again and the cost tooltip is exactly as useful as mid-game.
+    const tooltipBoardVisible = !ui.game.gameOver || ui._peekingBoard;
     ui.zoneTooltip.update(
-      ui.game.gameOver ? null : ui.cursorCell,
+      tooltipBoardVisible ? ui.cursorCell : null,
       ui.game.board,
       ui.game.zones,
-      !ui.game.gameOver && cursorInPreview ? zonePreview : null,
+      tooltipBoardVisible && cursorInPreview ? zonePreview : null,
     );
   }
 

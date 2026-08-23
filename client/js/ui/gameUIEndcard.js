@@ -256,6 +256,8 @@ export class EndcardController {
       peekBtn.setAttribute("aria-pressed", String(ui._peekingBoard));
       peekBtn.title = ui._peekingBoard ? "Show end screen" : "Hide end screen to see the board";
     }
+
+    ui.render.renderHover();
   }
 
   // Small imperative status-line helper for the online rematch
