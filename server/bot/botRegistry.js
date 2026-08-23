@@ -76,3 +76,10 @@ const CHOOSE_MOVE_BY_KEY = {
 export function chooseMoveForBotKey(botKey) {
   return CHOOSE_MOVE_BY_KEY[botKey] ?? randomBotMove;
 }
+
+// Exposed so the admin tool can validate a botKey against a real
+// strategy before creating a new bot row, rather than silently handing
+// back a random-mover for a typo'd key (see chooseMoveForBotKey's
+// fallback above — that fallback is a safety net for existing rows, not
+// something new bot creation should rely on).
+export const KNOWN_BOT_KEYS = Object.keys(CHOOSE_MOVE_BY_KEY);

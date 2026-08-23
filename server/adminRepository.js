@@ -129,3 +129,92 @@ export function getGameDetail(id) {
       .get(id) || null
   );
 }
+
+// --- Player rating adjustment (write) --------------------------------
+
+const getPlayerRating = db.prepare(`SELECT id, nickname, rating_mu, rating_sigma FROM players WHERE id = ?`);
+const updatePlayerRating = db.prepare(`UPDATE players SET rating_mu = ?, rating_sigma = ? WHERE id = ?`);
+
+// Direct, unaudited-in-DB rating overwrite — bypasses the normal
+// match-result update path in rating.js entirely, on purpose: this is
+// for correcting a bad value (bug, abuse, manual seeding), not for
+// simulating a game result. Caller (adminRoutes.js) is responsible for
+// range validation and for logging the change; this function trusts its
+// inputs. Returns null if the id doesn't exist, otherwise
+// { before, after } for the caller to log/report.
+export function adminSetPlayerRating(id, mu, sigma) {
+  const before = getPlayerRating.get(id);
+  if (!before) return null;
+  updatePlayerRating.run(mu, sigma, id);
+  return {
+    before: { rating_mu: before.rating_mu, rating_sigma: before.rating_sigma },
+    after: { rating_mu: mu, rating_sigma: sigma },
+    nickname: before.nickname,
+  };
+}
+
+// --- Bot performance ---------------------------------------------------
+
+const getBotGames = db.prepare(
+  `SELECT player0_id, player1_id, winner, mu_before_0, mu_before_1
+   FROM games
+   WHERE (player0_id = @id OR player1_id = @id) AND ended_at IS NOT NULL`,
+);
+
+const BAND_SIZE = 200;
+function bandLabel(mu) {
+  const lower = Math.floor(mu / BAND_SIZE) * BAND_SIZE;
+  return `${lower}-${lower + BAND_SIZE - 1}`;
+}
+function round(n) {
+  return Math.round(n * 1000) / 1000;
+}
+
+// Win/loss/draw for a given bot, both overall and bucketed by the
+// opponent's rating at the time (mu_before_X, already stored per game —
+// using the opponent's *current* rating instead would let a since-improved
+// or since-tanked opponent quietly reshuffle old bands). Bucketing is
+// done in JS rather than SQL CASE/GROUP BY — this table isn't large
+// enough per-bot for that to matter, and it's much easier to read here.
+export function getBotPerformance(botId) {
+  const rows = getBotGames.all({ id: botId });
+
+  let wins = 0,
+    losses = 0,
+    draws = 0;
+  const byBand = new Map();
+
+  for (const row of rows) {
+    const isP0 = row.player0_id === botId;
+    const isDraw = row.winner == null;
+    const botWon = !isDraw && row.winner === (isP0 ? 0 : 1);
+    const opponentMu = isP0 ? row.mu_before_1 : row.mu_before_0;
+
+    if (isDraw) draws++;
+    else if (botWon) wins++;
+    else losses++;
+
+    if (opponentMu != null) {
+      const band = bandLabel(opponentMu);
+      const entry = byBand.get(band) || { band, games: 0, wins: 0, losses: 0, draws: 0 };
+      entry.games++;
+      if (isDraw) entry.draws++;
+      else if (botWon) entry.wins++;
+      else entry.losses++;
+      byBand.set(band, entry);
+    }
+  }
+
+  const bands = [...byBand.values()]
+    .sort((a, b) => parseInt(a.band) - parseInt(b.band))
+    .map((b) => ({ ...b, winRate: b.games ? round(b.wins / b.games) : null }));
+
+  const total = rows.length;
+  return {
+    botId,
+    totalGames: total,
+    overall: { wins, losses, draws, winRate: total ? round(wins / total) : null },
+    byBand: bands,
+  };
+}
+

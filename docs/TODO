@@ -1,5 +1,7 @@
 next bot: first try to create a winning zone, only then move to exitsing ones
 
+drop down menu for bots - too many for cards
+
 better bot naming
 bot logging
 
@@ -11,8 +13,6 @@ zone solver should return all possible forced endings (wins and maybe losses)
 scale thinking time with possible moves (for simple bots)
 and with move "complexity" for smarter bots
 same parameter "complexity" just for simple bots it is possible move count
-
-    build admin tools (to see and/or edit all past matches, ongoing matches, players, connections, bots, logs for everything, etc)
 
 different timeouts on disconnect for different time control settings
 

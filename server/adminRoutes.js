@@ -1,7 +1,17 @@
 import { isAdminConfigured, isAuthorizedAdmin } from "./adminAuth.js";
-import { getRecentLogs } from "./logger.js";
-import { listBotPlayers } from "./bot/botRepository.js";
-import { listPlayers, getPlayerDetail, listGames, getGameDetail } from "./adminRepository.js";
+import { getRecentLogs, log } from "./logger.js";
+import { listBotPlayers, setBotActive, findOrCreateBotPlayer, botKeyFromRow } from "./bot/botRepository.js";
+import { KNOWN_BOT_KEYS } from "./bot/botRegistry.js";
+import { processMetrics } from "./metrics.js";
+import { versionInfo } from "./version.js";
+import {
+  listPlayers,
+  getPlayerDetail,
+  listGames,
+  getGameDetail,
+  adminSetPlayerRating,
+  getBotPerformance,
+} from "./adminRepository.js";
 
 function json(res, status, body) {
   res.writeHead(status, { "Content-Type": "application/json; charset=utf-8" });
@@ -78,6 +88,45 @@ function parseId(str) {
   return Number.isInteger(n) ? n : null;
 }
 
+// Reads and JSON-parses a request body, capped so a misbehaving/malicious
+// client can't stream an unbounded body into memory. Returns null (not a
+// throw) for empty/invalid bodies — every write route below treats a
+// null body as a 400, so this keeps that check in one place.
+const MAX_BODY_BYTES = 64 * 1024;
+function readJsonBody(req) {
+  return new Promise((resolve) => {
+    let size = 0;
+    const chunks = [];
+    req.on("data", (chunk) => {
+      size += chunk.length;
+      if (size > MAX_BODY_BYTES) {
+        req.destroy();
+        resolve(null);
+        return;
+      }
+      chunks.push(chunk);
+    });
+    req.on("end", () => {
+      if (!chunks.length) return resolve(null);
+      try {
+        resolve(JSON.parse(Buffer.concat(chunks).toString("utf8")));
+      } catch {
+        resolve(null);
+      }
+    });
+    req.on("error", () => resolve(null));
+  });
+}
+
+// Sane bounds for a manual rating overwrite — generous enough to never
+// get in the way of a legitimate correction, tight enough to catch an
+// obvious typo (e.g. an extra digit) before it hits the DB.
+const MU_BOUNDS = [-1000, 10000];
+const SIGMA_BOUNDS = [1, 2000];
+function inBounds(n, [lo, hi]) {
+  return typeof n === "number" && Number.isFinite(n) && n >= lo && n <= hi;
+}
+
 // ctx: { manager, queue, wss }. Returns true if this request was handled
 // (including auth failures), false if the caller should try something
 // else — same contract as authRoutes.js/staticServer.js so index.js can
@@ -91,10 +140,6 @@ export async function handleAdminRequest(req, res, url, ctx) {
   }
   if (!isAuthorizedAdmin(req)) {
     json(res, 401, { error: "Unauthorized" });
-    return true;
-  }
-  if (req.method !== "GET") {
-    json(res, 405, { error: "Only GET is supported right now" });
     return true;
   }
 
@@ -144,19 +189,70 @@ export async function handleAdminRequest(req, res, url, ctx) {
   }
 
   // GET /admin/bots
-  if (parts.length === 2 && parts[1] === "bots") {
+  if (parts.length === 2 && parts[1] === "bots" && req.method === "GET") {
     json(res, 200, { bots: listBotPlayers() });
     return true;
   }
 
+  // POST /admin/bots  { key, nickname } — seed a new bot row for a known
+  // strategy tier (see botRegistry.js). Idempotent: re-posting the same
+  // key returns the existing row rather than erroring, same as the
+  // seedBots.js script this replaces for ad-hoc use.
+  if (parts.length === 2 && parts[1] === "bots" && req.method === "POST") {
+    const body = await readJsonBody(req);
+    if (!body || typeof body.key !== "string" || typeof body.nickname !== "string" || !body.nickname.trim()) {
+      return json(res, 400, { error: "Body must be { key, nickname }" }), true;
+    }
+    if (!KNOWN_BOT_KEYS.includes(body.key)) {
+      return json(res, 400, { error: `Unknown bot key. Known keys: ${KNOWN_BOT_KEYS.join(", ")}` }), true;
+    }
+    const bot = findOrCreateBotPlayer(body.key, body.nickname.trim());
+    log(`admin: seeded/fetched bot ${bot.nickname} (id=${bot.id}, key=${body.key})`);
+    json(res, 200, { bot });
+    return true;
+  }
+
+  // POST /admin/bots/:id/active  { active: boolean }
+  if (parts.length === 4 && parts[1] === "bots" && parts[3] === "active" && req.method === "POST") {
+    const id = parseId(parts[2]);
+    if (id == null) return json(res, 400, { error: "Invalid bot id" }), true;
+    const body = await readJsonBody(req);
+    if (!body || typeof body.active !== "boolean") return json(res, 400, { error: "Body must be { active: boolean }" }), true;
+    const changed = setBotActive(id, body.active);
+    if (!changed) return json(res, 404, { error: "No bot with that id" }), true;
+    log(`admin: bot id=${id} set ${body.active ? "active" : "inactive"}`);
+    json(res, 200, { id, active: body.active });
+    return true;
+  }
+
+  // GET /admin/bots/:id/performance — win rate overall + by opponent rating band
+  if (parts.length === 4 && parts[1] === "bots" && parts[3] === "performance" && req.method === "GET") {
+    const id = parseId(parts[2]);
+    if (id == null) return json(res, 400, { error: "Invalid bot id" }), true;
+    json(res, 200, getBotPerformance(id));
+    return true;
+  }
+
   // GET /admin/logs?limit=200
-  if (parts.length === 2 && parts[1] === "logs") {
+  if (parts.length === 2 && parts[1] === "logs" && req.method === "GET") {
     json(res, 200, { lines: getRecentLogs(Number(q.get("limit")) || 200) });
     return true;
   }
 
+  // GET /admin/version — which commit/branch this process is actually running
+  if (parts.length === 2 && parts[1] === "version" && req.method === "GET") {
+    json(res, 200, versionInfo);
+    return true;
+  }
+
+  // GET /admin/metrics — process health + ws traffic rate
+  if (parts.length === 2 && parts[1] === "metrics" && req.method === "GET") {
+    json(res, 200, processMetrics());
+    return true;
+  }
+
   // GET /admin/players?search=&isBot=&sort=&dir=&limit=&offset=
-  if (parts.length === 2 && parts[1] === "players") {
+  if (parts.length === 2 && parts[1] === "players" && req.method === "GET") {
     const result = listPlayers({
       search: q.get("search") || undefined,
       isBot: q.get("isBot") || undefined,
@@ -170,7 +266,7 @@ export async function handleAdminRequest(req, res, url, ctx) {
   }
 
   // GET /admin/players/:id
-  if (parts.length === 3 && parts[1] === "players") {
+  if (parts.length === 3 && parts[1] === "players" && req.method === "GET") {
     const id = parseId(parts[2]);
     if (id == null) return json(res, 400, { error: "Invalid player id" }), true;
     const detail = getPlayerDetail(id);
@@ -179,8 +275,33 @@ export async function handleAdminRequest(req, res, url, ctx) {
     return true;
   }
 
+  // POST /admin/players/:id/rating  { mu, sigma } — direct overwrite for
+  // correcting a bad value; does NOT go through the normal match-result
+  // rating update in rating.js. Logged, not otherwise audited in the DB.
+  if (parts.length === 4 && parts[1] === "players" && parts[3] === "rating" && req.method === "POST") {
+    const id = parseId(parts[2]);
+    if (id == null) return json(res, 400, { error: "Invalid player id" }), true;
+    const body = await readJsonBody(req);
+    if (!body || !inBounds(body.mu, MU_BOUNDS) || !inBounds(body.sigma, SIGMA_BOUNDS)) {
+      return (
+        json(res, 400, {
+          error: `Body must be { mu, sigma } with mu in [${MU_BOUNDS}] and sigma in [${SIGMA_BOUNDS}]`,
+        }),
+        true
+      );
+    }
+    const result = adminSetPlayerRating(id, body.mu, body.sigma);
+    if (!result) return json(res, 404, { error: "Player not found" }), true;
+    log(
+      `admin: rating override for ${result.nickname} (id=${id}): ` +
+        `mu ${result.before.rating_mu}->${result.after.rating_mu}, sigma ${result.before.rating_sigma}->${result.after.rating_sigma}`,
+    );
+    json(res, 200, result);
+    return true;
+  }
+
   // GET /admin/games?player=&matchType=&origin=&sort=&dir=&limit=&offset=
-  if (parts.length === 2 && parts[1] === "games") {
+  if (parts.length === 2 && parts[1] === "games" && req.method === "GET") {
     const result = listGames({
       player: q.get("player") ? parseId(q.get("player")) : undefined,
       matchType: q.get("matchType") || undefined,
@@ -195,7 +316,7 @@ export async function handleAdminRequest(req, res, url, ctx) {
   }
 
   // GET /admin/games/:id
-  if (parts.length === 3 && parts[1] === "games") {
+  if (parts.length === 3 && parts[1] === "games" && req.method === "GET") {
     const id = parseId(parts[2]);
     if (id == null) return json(res, 400, { error: "Invalid game id" }), true;
     const detail = getGameDetail(id);
@@ -204,6 +325,6 @@ export async function handleAdminRequest(req, res, url, ctx) {
     return true;
   }
 
-  json(res, 404, { error: "Unknown admin route" });
+  json(res, 404, { error: "Unknown admin route, or wrong method for that route" });
   return true;
 }
