@@ -156,6 +156,17 @@ export class MatchManager {
     return { match, human, bot };
   }
 
+  // Read-only introspection for the admin tool — every live match,
+  // regardless of status. Callers should treat these as a snapshot, not
+  // hold onto them across ticks.
+  listMatches() {
+    return [...this.matchesById.values()];
+  }
+
+  getMatch(matchId) {
+    return this.matchesById.get(matchId) || null;
+  }
+
   removeMatch(matchId) {
     const match = this.matchesById.get(matchId);
     if (!match) return;

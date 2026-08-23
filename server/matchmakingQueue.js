@@ -213,6 +213,26 @@ export class MatchmakingQueue {
     return results;
   }
 
+  // Read-only introspection for the admin tool — a plain-object view of
+  // both pools, safe to JSON-serialize (drops `ws`/`remove`, neither of
+  // which means anything outside this class). Not used by any matching
+  // logic itself, so it's fine for this to be O(n) and rebuilt on demand.
+  snapshot(now = Date.now()) {
+    const describeEntry = (entry) => ({
+      nickname: entry.nickname,
+      accountPlayerId: entry.accountPlayerId,
+      mu: entry.mu,
+      sigma: entry.sigma,
+      joinedAt: entry.joinedAt,
+      waitedMs: now - entry.joinedAt,
+    });
+    const describePool = (pool) => ({
+      specific: Object.fromEntries([...pool.specific].map(([mode, list]) => [mode, list.map(describeEntry)])),
+      any: pool.any.map(describeEntry),
+    });
+    return { rated: describePool(this.rated), unrated: describePool(this.unrated) };
+  }
+
   leave(ws) {
     for (const pool of [this.rated, this.unrated]) {
       pool.any = pool.any.filter((e) => e.ws !== ws);

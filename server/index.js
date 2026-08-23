@@ -5,6 +5,7 @@ import { HumanAgent, BotAgent } from "./playerAgent.js";
 import { MSG } from "../shared/net/protocol.js";
 import { log, shortId } from "./logger.js";
 import { handleAuthRequest } from "./authRoutes.js";
+import { handleAdminRequest } from "./adminRoutes.js";
 import { serveStatic } from "./staticServer.js";
 import { readSessionCookie } from "./cookies.js";
 import { getSessionPlayer } from "./sessionStore.js";
@@ -30,6 +31,7 @@ import { displayRating } from "./playerRepository.js";
 const httpServer = http.createServer(async (req, res) => {
   const url = new URL(req.url, `http://${req.headers.host}`);
   if (await handleAuthRequest(req, res, url)) return;
+  if (await handleAdminRequest(req, res, url, { manager, queue, wss })) return;
   if (await serveStatic(req, res, url)) return;
   res.writeHead(404);
   res.end();
@@ -154,6 +156,9 @@ function isRatedTimeControl(timeControl) {
 wss.on("connection", (ws, req) => {
   ws.isAlive = true;
   ws.on("pong", heartbeat);
+  // Metadata for the admin tool only — nothing else reads these.
+  ws.__connectedAt = Date.now();
+  ws.__ip = req.socket.remoteAddress;
 
   // Resolves account identity once, from the cookie sent on the WS
   // upgrade request — same cookie/session the HTTP /auth/* routes use.
@@ -169,7 +174,7 @@ wss.on("connection", (ws, req) => {
 
   // prevent unhandled 'error' crashing whole process
   ws.on("error", (err) => {
-    console.error("ws error:", err.message);
+    log(`ws error: ${err.message}`);
   });
 
   ws.on("message", (raw) => {
@@ -459,7 +464,7 @@ wss.on("connection", (ws, req) => {
         return;
       }
     } catch (err) {
-      console.error("handler error:", err.message);
+      log(`handler error: ${err.message}`);
     }
   });
 
