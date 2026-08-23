@@ -7,7 +7,7 @@ import { MatchClient } from "./net/matchClient.js";
 import { Menu } from "./ui/menu.js";
 import { showBanner, hideBanner } from "./ui/banner.js";
 import {
-  DISCONNECT_ABORT_MS,
+  disconnectAbortMsFor,
   MODES,
   TIME_PRESETS,
   MATCHMAKING_WINDOW_BASE_DEVIATION,
@@ -285,7 +285,8 @@ async function handleConnectionLost(matchClient) {
   reconnectInProgress = true;
   sound.connectionLost();
 
-  const deadline = Date.now() + Math.max(DISCONNECT_ABORT_MS - 1500, 2000);
+  const abortMs = disconnectAbortMsFor(matchClient.params?.timeControl);
+  const deadline = Date.now() + Math.max(abortMs - 1500, 2000);
 
   const abandon = () => {
     reconnectInProgress = false;
