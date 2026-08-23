@@ -1,4 +1,3 @@
-domino move: make sure to include zone creations as candidates and their corresponding zone's cost
 domino only zone solver
 
 drop down menu for bots - too many for cards
