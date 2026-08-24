@@ -467,6 +467,39 @@ match old behavior, but overridable). The original reasoning for the
 pairing (a big *won* zone is a bonus, a big *lost* zone is a tempo trap)
 still holds as a sensible default, it's just no longer enforced.
 
+**`"safeSmallest"` — a fourth `zoneSelection` option, valid only for
+`creationUncertain`.** `"smallest"` there has a real exploit: creating a
+zone hands the very next local turn in it to the *opponent*
+(`Zone.create` flips `localTurn`), and a small *uncertain* zone is
+disproportionately easy for the opponent to crack outright via
+`pickMoveAvoidingLoss` — one placement removes at most 4 cells, so only
+a zone small enough that a single cut can leave two `maxBlobSize`-sized
+halves is at real risk of the opponent's bounded `maxTries` search
+actually solving it. `"smallest"` optimizes purely for cheap-if-lost and
+walks straight into that range; found via A/B self-play (a bot with
+`creationUncertain: "random"`/`"biggest"` consistently outperformed the
+same bot with `"smallest"`, isolating this one field).
+
+`"safeSmallest"` fixes this without adding any solver calls: it filters
+creation candidates to those whose *open-cell count* (not `cost` — bonus
+markers don't affect solvability) exceeds `safeCreationMargin(maxBlobSize)`
+= `2 * maxBlobSize + 4` (no single placement can carve a bigger blob into
+two solver-sized halves), then picks smallest-by-`cost` within that safe
+pool, falling back to the full candidate set if none clear the margin.
+This is a size-based *proxy* for exploitability, not a simulation of
+it — an odd-shaped blob just above the margin could still have an
+exploitable bottleneck — but it's O(candidates) instead of the
+O(candidates × maxTries) a real simulated-opponent-response check would
+cost, which matters since zone-creation evaluation is already the most
+expensive part of a move decision. Verified in self-play: switching bots
+1-3's `creationUncertain` from `"smallest"` to `"safeSmallest"` improved
+their win rate against the stronger bots by roughly 5 percentage points
+in a several-hundred-game batch. `creationLost` deliberately keeps plain
+`"smallest"` — a zone in that bucket is already *provably* lost
+regardless of size, so there's no probability to manipulate, only
+magnitude, and minimizing magnitude is exactly what `"smallest"` does
+correctly there.
+
 **Decision 9 — `pickMoveAvoidingLoss`**: within a chosen uncertain/lost
 zone, tries up to `maxTries` of its real legal moves in random order,
 solving the resulting position each time. If any move outright **wins**
