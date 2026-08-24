@@ -242,31 +242,36 @@ export class Menu {
 
   // Called once per bots-tab visit that actually gets a response (see
   // main.js's botsListLoaded guard — this itself is safe to call more
-  // than once, it just re-renders). Empty list is a distinct state from
-  // "still loading" (see the initial "Loading bots…" text in HTML).
+  // than once, it just re-renders the option list). Empty list is a
+  // distinct state from "still loading" (see the initial "Loading
+  // bots…" text in HTML). A dropdown rather than one mode-card per bot
+  // since the roster (server/bot/botRegistry.js) is now big enough that
+  // a card grid stopped being a usable picker.
   renderBotList(bots) {
     this.selectedBotId = null;
     this.els.btnPlayBot.disabled = true;
     this.els.botsListGrid.innerHTML = "";
 
     if (bots.length === 0) {
+      this.els.botsListGrid.disabled = true;
       this.els.botsStatus.textContent = "No bots available yet — run server/scripts/seedBots.js.";
       return;
     }
+    this.els.botsListGrid.disabled = false;
     this.els.botsStatus.textContent = "";
 
+    const placeholder = document.createElement("option");
+    placeholder.value = "";
+    placeholder.textContent = "Choose a bot…";
+    placeholder.disabled = true;
+    placeholder.selected = true;
+    this.els.botsListGrid.appendChild(placeholder);
+
     for (const bot of bots) {
-      const card = document.createElement("div");
-      card.className = "mode-card";
-      card.dataset.botId = bot.id;
-      card.innerHTML = `<div class="mode-card__name">${bot.nickname}</div><div class="mode-card__desc">Rating ${bot.rating}</div>`;
-      card.addEventListener("click", () => {
-        sound.uiClick();
-        this.selectedBotId = bot.id;
-        [...this.els.botsListGrid.children].forEach((c) => c.classList.toggle("selected", c === card));
-        this.els.btnPlayBot.disabled = false;
-      });
-      this.els.botsListGrid.appendChild(card);
+      const option = document.createElement("option");
+      option.value = bot.id;
+      option.textContent = `${bot.nickname} — Rating ${bot.rating}`;
+      this.els.botsListGrid.appendChild(option);
     }
   }
 
@@ -421,6 +426,15 @@ export class Menu {
       }
       sound.uiConfirm();
       this.onJoinQueue(true, this.rankedTimeMode, null);
+    });
+
+    this.els.botsListGrid.addEventListener("change", () => {
+      sound.uiClick();
+      // option.value is always a string; bot.id is numeric and the server
+      // matches it with strict equality (server/index.js's PLAY_BOT_REQUEST
+      // handler), so this has to be cast back or every match would fail.
+      this.selectedBotId = this.els.botsListGrid.value ? Number(this.els.botsListGrid.value) : null;
+      this.els.btnPlayBot.disabled = !this.selectedBotId;
     });
 
     this.els.btnPlayBot.addEventListener("click", () => {

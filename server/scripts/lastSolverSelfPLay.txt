@@ -1,0 +1,38 @@
+solver bot self-play — masterSeed=1557660057, 100 games/matchup, maxMoves=4000
+presets: BOT_SOLVER_0, BOT_SOLVER_1, BOT_SOLVER_2, BOT_SOLVER_3
+
+                                               BOT_SOLVER_0 vs BOT_SOLVER_1  (100 games)
+  BOT_SOLVER_0: 44 wins ( 44.0%)   BOT_SOLVER_1: 55 wins ( 55.0%)   draws: 1
+  BOT_SOLVER_0 win rate of decisive games:  44.4% ± 9.8pp (95% CI)
+  avg score margin (A-B): -14.4   avg game length: 43.8 moves
+
+                                               BOT_SOLVER_0 vs BOT_SOLVER_2  (100 games)
+  BOT_SOLVER_0: 35 wins ( 35.0%)   BOT_SOLVER_2: 64 wins ( 64.0%)   draws: 1
+  BOT_SOLVER_0 win rate of decisive games:  35.4% ± 9.4pp (95% CI)
+  avg score margin (A-B): -29.9   avg game length: 42.5 moves
+
+                                               BOT_SOLVER_0 vs BOT_SOLVER_3  (100 games)
+  BOT_SOLVER_0: 14 wins ( 14.0%)   BOT_SOLVER_3: 85 wins ( 85.0%)   draws: 1
+  BOT_SOLVER_0 win rate of decisive games:  14.1% ± 6.9pp (95% CI)
+  avg score margin (A-B): -84.9   avg game length: 43.9 moves
+
+                                               BOT_SOLVER_1 vs BOT_SOLVER_2  (100 games)
+  BOT_SOLVER_1: 42 wins ( 42.0%)   BOT_SOLVER_2: 58 wins ( 58.0%)   draws: 0
+  BOT_SOLVER_1 win rate of decisive games:  42.0% ± 9.7pp (95% CI)
+  avg score margin (A-B): -23.1   avg game length: 43.0 moves
+
+                                               BOT_SOLVER_1 vs BOT_SOLVER_3  (100 games)
+  BOT_SOLVER_1: 22 wins ( 22.0%)   BOT_SOLVER_3: 78 wins ( 78.0%)   draws: 0
+  BOT_SOLVER_1 win rate of decisive games:  22.0% ± 8.1pp (95% CI)
+  avg score margin (A-B): -64.5   avg game length: 43.1 moves
+
+                                               BOT_SOLVER_2 vs BOT_SOLVER_3  (100 games)
+  BOT_SOLVER_2: 28 wins ( 28.0%)   BOT_SOLVER_3: 72 wins ( 72.0%)   draws: 0
+  BOT_SOLVER_2 win rate of decisive games:  28.0% ± 8.8pp (95% CI)
+  avg score margin (A-B): -58.3   avg game length: 45.5 moves
+
+--- Ladder (aggregate across all matchups, 1486.32s total) ---
+  BOT_SOLVER_3    W: 235  L:  64  D:  1   win rate:  78.6%
+  BOT_SOLVER_2    W: 150  L: 149  D:  1   win rate:  50.2%
+  BOT_SOLVER_1    W: 119  L: 180  D:  1   win rate:  39.8%
+  BOT_SOLVER_0    W:  93  L: 204  D:  3   win rate:  31.3%
