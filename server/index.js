@@ -484,7 +484,7 @@ const interval = setInterval(() => {
     ws.isAlive = false;
     ws.ping();
   });
-}, 5000);
+}, 2000);
 
 wss.on("close", () => clearInterval(interval));
 

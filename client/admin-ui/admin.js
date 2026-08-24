@@ -88,7 +88,10 @@ function setPulse(kind, label) {
 // ------------------------------------------------------------ helpers --
 
 function esc(str) {
-  return String(str ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+  return String(str ?? "").replace(
+    /[&<>"']/g,
+    (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c],
+  );
 }
 
 function relTime(ms) {
@@ -189,9 +192,10 @@ async function renderStatus() {
   const [status, metrics, version] = await Promise.all([api("/status"), api("/metrics"), api("/version")]);
   els.viewMeta.textContent = `updated ${new Date().toLocaleTimeString()}`;
 
-  const byStatus = Object.entries(status.matches.byStatus)
-    .map(([k, v]) => `${k}: ${v}`)
-    .join(" · ") || "none";
+  const byStatus =
+    Object.entries(status.matches.byStatus)
+      .map(([k, v]) => `${k}: ${v}`)
+      .join(" · ") || "none";
 
   const queueTotal = (pool) => pool.any.length + Object.values(pool.specific).reduce((a, l) => a + l.length, 0);
 
@@ -260,7 +264,7 @@ async function renderMatches() {
       <tr class="is-clickable" data-id="${esc(m.matchId)}">
         <td class="mono">${esc(m.matchId.slice(0, 8))}</td>
         <td>${matchStatusPill(m.status)}</td>
-        <td>${esc(m.matchType)}${m.rated ? "" : " <span class=\"muted\">(unrated)</span>"}</td>
+        <td>${esc(m.matchType)}${m.rated ? "" : ' <span class="muted">(unrated)</span>'}</td>
         <td>${m.players.map((p) => esc(p.nickname ?? "guest")).join(" vs ")}</td>
         <td class="mono muted">${relTime(m.startedAt)}</td>
       </tr>`,
@@ -314,7 +318,7 @@ async function showMatchDetail(id) {
                 <td>${p.playerIndex}</td>
                 <td>${esc(p.nickname ?? "guest")}</td>
                 <td class="mono">${p.accountPlayerId ?? "—"}</td>
-                <td>${p.connected ? "<span class=\"pill pill--live\">yes</span>" : "<span class=\"pill pill--danger\">no</span>"}</td>
+                <td>${p.connected ? '<span class="pill pill--live">yes</span>' : '<span class="pill pill--danger">no</span>'}</td>
                 <td class="mono muted">${esc(p.sessionId ?? "—")}</td>
               </tr>`,
             )
@@ -343,8 +347,8 @@ async function renderConnections() {
         <td>${esc(c.nickname ?? "guest")}</td>
         <td class="mono">${esc(c.ip ?? "—")}</td>
         <td class="mono muted">${relTime(c.connectedAt)}</td>
-        <td>${c.isAlive ? "<span class=\"pill pill--live\">alive</span>" : "<span class=\"pill pill--danger\">stale</span>"}</td>
-        <td class="mono">${c.inMatchId ? esc(c.inMatchId.slice(0, 8)) : "<span class=\"muted\">—</span>"}</td>
+        <td>${c.isAlive ? '<span class="pill pill--live">alive</span>' : '<span class="pill pill--danger">stale</span>'}</td>
+        <td class="mono">${c.inMatchId ? esc(c.inMatchId.slice(0, 8)) : '<span class="muted">—</span>'}</td>
       </tr>`,
     )
     .join("");
@@ -425,7 +429,7 @@ async function renderPlayers() {
         <td>${esc(p.nickname)}</td>
         <td class="num">${Math.round(p.rating_mu)} ± ${Math.round(p.rating_sigma)}</td>
         <td class="mono">${p.games_played}</td>
-        <td>${p.is_bot ? "<span class=\"pill\">bot</span>" : "human"}</td>
+        <td>${p.is_bot ? '<span class="pill">bot</span>' : "human"}</td>
         <td class="mono muted">${fmtDate(p.created_at)}</td>
       </tr>`,
     )
@@ -575,7 +579,7 @@ async function renderGames() {
       (g) => `
       <tr class="is-clickable" data-id="${g.id}">
         <td>${esc(g.player0_nickname ?? "?")} vs ${esc(g.player1_nickname ?? "?")}</td>
-        <td>${g.winner == null ? "<span class=\"muted\">draw</span>" : g.winner === 0 ? "<span class=\"pill pill--a\">P0</span>" : "<span class=\"pill pill--b\">P1</span>"}</td>
+        <td>${g.winner == null ? '<span class="muted">draw</span>' : g.winner === 0 ? '<span class="pill pill--a">P0</span>' : '<span class="pill pill--b">P1</span>'}</td>
         <td class="num">${g.score_0}–${g.score_1}</td>
         <td>${esc(g.match_type)}</td>
         <td class="muted">${esc(g.origin)}</td>
@@ -669,7 +673,7 @@ async function renderBots() {
         <td class="mono muted">${esc(key)}</td>
         <td class="num">${Math.round(b.rating_mu)} ± ${Math.round(b.rating_sigma)}</td>
         <td class="mono">${b.games_played}</td>
-        <td>${b.is_active ? "<span class=\"pill pill--live\">active</span>" : "<span class=\"pill pill--danger\">disabled</span>"}</td>
+        <td>${b.is_active ? '<span class="pill pill--live">active</span>' : '<span class="pill pill--danger">disabled</span>'}</td>
         <td>
           <button class="btn" data-toggle="${b.id}" data-active="${b.is_active}">${b.is_active ? "Disable" : "Enable"}</button>
           <button class="btn" data-perf="${b.id}">Performance</button>
@@ -720,7 +724,10 @@ async function renderBots() {
   els.content.querySelectorAll("[data-toggle]").forEach((btn) => {
     btn.addEventListener("click", async () => {
       const id = Number(btn.dataset.toggle);
-      const currentlyActive = btn.dataset.active === "true";
+      // b.is_active comes straight from better-sqlite3 as a raw 0/1
+      // integer, so the dataset attribute below is the *string* "1" or
+      // "0" — never the literal "true".
+      const currentlyActive = btn.dataset.active === "1";
       try {
         await api(`/bots/${id}/active`, { method: "POST", body: { active: !currentlyActive } });
         await renderBots();

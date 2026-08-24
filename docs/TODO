@@ -23,6 +23,9 @@ rating graph
 undo/redo history panel
 replay past games move by move
 
+notification admin tool: show a message to all connected players
+queues and match creation admin switch - to disable them a few minutes before server restart (and show a message) so players without a connection who didn't get a message dont start a new match.
+
 ? history panel minimum height
 
 matchStart currently arrives before matchJoined
