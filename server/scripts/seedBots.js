@@ -6,16 +6,23 @@
 
 import { findOrCreateBotPlayer } from "../bot/botRepository.js";
 
-// Phase 2 tiers land one at a time (docs/BOTS.md) — add an entry here
-// (and a matching key in server/bot/botRegistry.js) as each one ships.
-// The old solver-greedy-* family was removed (see botRegistry.js) —
-// its bot rows are now orphaned (chooseMoveForBotKey falls back to
-// random-01's logic for them, but they should really be removed via
-// the admin tool once the new roster replaces them). New named bots go
-// here once the new family's configs are decided.
+// Keys/nicknames must match botRegistry.js's CHOOSE_MOVE_BY_KEY exactly
+// (key = nickname lowercased, "_" -> "-"). Two families:
+//  - Random (bot-random-0/1): tier 1 (uniform random) and tier 2
+//    (no-waste) — grouped together since neither does real evaluation.
+//  - Solver (bot-solver-0..3): server/bot/solverBotPresets.js's four
+//    configs, numbered weakest (0) to strongest (3).
+// Renamed from the old random-01/no-waste-01 keys — safe since no real
+// bot-row data exists yet; if it ever does, the old rows become orphaned
+// (chooseMoveForBotKey falls back to random-01's logic for an unknown
+// key) and should be removed via the admin tool rather than left around.
 const BOTS = [
-  { key: "random-01", nickname: "Bot_Random_01" },
-  { key: "no-waste-01", nickname: "Bot_NoWaste_01" },
+  { key: "bot-random-0", nickname: "Bot_Random_0" },
+  { key: "bot-random-1", nickname: "Bot_Random_1" },
+  { key: "bot-solver-0", nickname: "Bot_Solver_0" },
+  { key: "bot-solver-1", nickname: "Bot_Solver_1" },
+  { key: "bot-solver-2", nickname: "Bot_Solver_2" },
+  { key: "bot-solver-3", nickname: "Bot_Solver_3" },
 ];
 
 for (const { key, nickname } of BOTS) {

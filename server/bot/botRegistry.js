@@ -1,24 +1,31 @@
 import { randomBotMove } from "./randomBot.js";
 import { noWasteBotMove } from "./noWasteBot.js";
+import { createSolverBot } from "./solverBot.js";
+import { BOT_SOLVER_0, BOT_SOLVER_1, BOT_SOLVER_2, BOT_SOLVER_3 } from "./solverBotPresets.js";
 
-// The old fixed-priority solver-greedy family (tier3Bot.js,
-// "solver-greedy-01/weak-01/strong-01/strong-02") has been removed
-// entirely and replaced by server/bot/solverBot.js's generalized
-// createSolverBot(config) — see docs/BOTS.md's "Tier 3 — the solver bot
-// family" section. New named bots built on it will be added here (and
-// to server/scripts/seedBots.js) once the new roster's configs are
-// decided; deliberately empty until then rather than half-migrated.
+// Two families:
+//  - "Random" (bot-random-0/1): no real evaluation, just constrained
+//    randomness — tier 1 (uniform over all legal moves) and tier 2 (same,
+//    but never wastes a domino unless nothing else is legal) are close
+//    enough in kind to share a family name/numbering.
+//  - "Solver" (bot-solver-0..3): server/bot/solverBot.js's
+//    createSolverBot(config), configs from solverBotPresets.js — see
+//    docs/BOTS.md's "Tier 3 — the solver bot family" section. Numbered
+//    weakest (0) to strongest (3), matching solverBotPresets.js's own
+//    documented ladder.
 //
-// import { createSolverBot } from "./solverBot.js";
-
 // Keyed by the same botKey used in seedBots.js / findOrCreateBotPlayer
 // (see botRepository.js) — that key is what's encoded into the player
 // row's google_sub as `bot:${botKey}`, so a bot row and its move logic
 // are matched up by that key, not by nickname (free to change) or id
 // (DB-assigned).
 const CHOOSE_MOVE_BY_KEY = {
-  "random-01": randomBotMove,
-  "no-waste-01": noWasteBotMove,
+  "bot-random-0": randomBotMove,
+  "bot-random-1": noWasteBotMove,
+  "bot-solver-0": createSolverBot(BOT_SOLVER_0),
+  "bot-solver-1": createSolverBot(BOT_SOLVER_1),
+  "bot-solver-2": createSolverBot(BOT_SOLVER_2),
+  "bot-solver-3": createSolverBot(BOT_SOLVER_3),
 };
 
 // Unknown/missing key (e.g. a bot row seeded before its tier's code

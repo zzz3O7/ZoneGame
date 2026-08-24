@@ -15,7 +15,7 @@ const setBotActiveStmt = db.prepare(`UPDATE players SET is_active = ? WHERE id =
 
 // Idempotent — safe to re-run a seed script. botKey is a stable internal
 // identifier distinct from nickname: debug-readable now (e.g.
-// "random-01"), a generated human-like name eventually (docs/BOTS.md
+// "bot-random-0"), a generated human-like name eventually (docs/BOTS.md
 // Phase 4) — same underlying bot row either way, keyed off google_sub
 // rather than nickname so a nickname change never orphans the row.
 export function findOrCreateBotPlayer(botKey, nickname) {

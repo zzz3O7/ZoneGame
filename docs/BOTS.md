@@ -326,18 +326,15 @@ of the game rather than generic minimax:
 **Tier ladder** (each one a real, shippable bot — "improve slightly every
 time" rather than landing the full solver before anything ships):
 
-1. `random-01` — uniform random. Shipped, Phase 1.
-2. `no-waste-01` — uniform random, but never spends a domino unless every
+1. `bot-random-0` — uniform random. Shipped, Phase 1.
+2. `bot-random-1` — uniform random, but never spends a domino unless every
    other piece type has zero legal placements. Shipped. See
    `server/bot/noWasteBot.js`.
 3. Exact per-zone solver (`server/bot/zoneSolver.js`) + fully configurable
-   coordinator (`server/bot/solverBot.js`'s `createSolverBot`). The
-   underlying mechanism is built and verified — priority order, zone
-   tie-breaks, and strength dials are all config, not fixed rules — but the
-   named-bot roster built on it is currently empty (the old fixed-order
-   family that shipped here has been removed; see "The solver bot family"
-   below). **No tier-3 bot is currently registered/playable until a roster
-   is decided.**
+   coordinator (`server/bot/solverBot.js`'s `createSolverBot`). Shipped as
+   `bot-solver-0` through `bot-solver-3` (see `solverBotPresets.js`),
+   weakest to strongest — registered in `botRegistry.js` and seeded via
+   `seedBots.js`, playable in matchmaking fallback and direct-debug.
 4. Tempo-aware coordinator — solver reports a "does this zone currently
    guarantee me an always-available move" flag; coordinator prefers holding
    near-won zones open and weighs new-zone tempo exposure, not just size.
@@ -420,9 +417,8 @@ fully-open 25-cell square took 2.5s in testing) — exactly the case
 by `server/bot/solverBot.js`'s `createSolverBot(config)` — a second-
 generation generalization that makes the *priority order itself* a config
 dial, not just the tie-breaks within a fixed order (which is all the old
-family exposed). `botRegistry.js` currently has no named bots built on it
-— the new roster's configs are still being decided; this section documents
-the mechanism, not yet a specific lineup.
+family exposed). Shipped roster: `bot-solver-0` through `bot-solver-3`
+(`botRegistry.js` / `solverBotPresets.js`), weakest to strongest.
 
 The underlying zone-solving machinery (`ZoneSolver`, `classifyActiveZone`,
 `zoneCreationCandidates`, `pickMoveAvoidingLoss`, etc. — everything below
@@ -694,16 +690,21 @@ entirely rather than left dormant. Revisit if a future need specifically
 calls for squeezing more out of the same `maxBlobSize` without simply
 raising it.
 
-### The solver bot family (roster removed, redesign in progress)
+### The solver bot family (registered)
 
 The old four named configs (`solver-greedy-01`/`-weak-01`/`-strong-01`/
-`-strong-02`) have been deleted from `botRegistry.js` and
-`seedBots.js` — their DB rows are now orphaned (falls back to
-`random-01`'s logic via `chooseMoveForBotKey`'s safety net until removed
-via the admin tool or re-seeded under the new system). No replacement
-roster is registered yet; the config-space generalization in
-`solverBot.js` is done and verified (see above), but which specific named
-configs to ship is still being decided.
+`-strong-02`) were deleted from `botRegistry.js` and `seedBots.js` in an
+earlier pass, orphaning their DB rows. They've since been replaced by the
+new roster: `bot-solver-0` through `bot-solver-3`, registered in
+`botRegistry.js` against `solverBotPresets.js`'s four configs (weakest to
+strongest) and seeded via `seedBots.js`. The old `bot-random-*`/
+`bot-solver-*` keys/nicknames were also standardized in this pass — see
+`seedBots.js` for the naming rule (key = nickname lowercased, `_` -> `-`).
+Any pre-existing bot rows under the old `random-01`/`no-waste-01`/
+`solver-greedy-*` keys are now orphaned; since no real bot-row data
+existed at rename time this was a clean cutover, but on an environment
+with real data, those old rows should be removed via the admin tool
+rather than left around.
 
 **Adding a new tier from scratch** (a genuinely different algorithm, not a
 config variant): write the `(game, playerIndex) -> move | null` function,
