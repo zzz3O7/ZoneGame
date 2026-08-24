@@ -54,6 +54,14 @@ const DEFAULT_ACTION_ORDER = [
 //                         "smallest" / "biggest" (by zone or candidate
 //                         cost). One independent dial per category, no
 //                         more hardcoded pairing between any two.
+//                         "safeSmallest" is an extra option valid ONLY for
+//                         creationUncertain: smallest-by-cost among
+//                         candidates whose open-cell count clears
+//                         safeCreationMargin (see that function) — avoids
+//                         "smallest" wandering into zones cheap enough to
+//                         be cost-efficient but small enough that the
+//                         opponent's avoidLosingMove search can often
+//                         crack them outright.
 //   avoidLosingMove    — STRENGTH DIAL. Within a chosen uncertain/lost
 //                         zone, how hard to search for a move that wins
 //                         outright or at least avoids a provable loss
@@ -163,6 +171,40 @@ function selectByStrategy(items, strategy, costOf) {
   if (strategy === "smallest") return items.reduce((best, x) => (costOf(x) < costOf(best) ? x : best));
   if (strategy === "biggest") return items.reduce((best, x) => (costOf(x) > costOf(best) ? x : best));
   throw new Error(`solverBot: unknown zone selection strategy "${strategy}"`);
+}
+
+// A single non-domino piece placement removes at most this many cells
+// (the largest tetromino/tromino shape) — see SHAPE_VARIANTS.
+const MAX_NON_DOMINO_PIECE_CELLS = 4;
+
+// "safeSmallest" for creationUncertain only (see creationBucket): plain
+// "smallest" picks by cost, but a small UNCERTAIN zone is disproportionately
+// exploitable, not just cheap. pickMoveAvoidingLoss only wins outright when
+// one placement leaves a residual that fully decomposes into components
+// each <= maxBlobSize — impossible if the zone's open-cell count is above
+// 2*maxBlobSize + (biggest piece), since no single placement can carve it
+// into two solver-sized halves. Below that threshold a lucky cut can, so
+// that's the exploitable range "smallest" keeps wandering into.
+//
+// This is a size-based proxy for exploitability, not a simulation of it —
+// cheap (no extra ZoneSolver calls) but not exact: an odd-shaped blob just
+// above the margin could still have a bottleneck a single piece exploits.
+// Trades a bit of precision for staying O(candidates) instead of
+// O(candidates * maxTries) like actually simulating the opponent would be.
+function safeCreationMargin(maxBlobSize) {
+  return 2 * maxBlobSize + MAX_NON_DOMINO_PIECE_CELLS;
+}
+
+function selectSafeSmallest(items, costOf, cellCountOf, maxBlobSize) {
+  const margin = safeCreationMargin(maxBlobSize);
+  const safe = items.filter((x) => cellCountOf(x) > margin);
+  // Nothing clears the margin (e.g. maxBlobSize itself is large relative
+  // to available zones) — fall back to the full candidate set rather than
+  // returning nothing.
+  const pool = safe.length > 0 ? safe : items;
+  // Within the safe pool, still prefer cheap — no reason to pay more cost
+  // than necessary once exploitability risk is already controlled for.
+  return pool.reduce((best, x) => (costOf(x) < costOf(best) ? x : best));
 }
 
 function openCellKeysOfZone(board, zone) {
@@ -307,7 +349,11 @@ function evaluateCreationCandidate(preview, move, maxBlobSize) {
     const opponentWins = solver.solveFull();
     outcome = opponentWins === true ? "lost" : opponentWins === false ? "winnable" : "uncertain";
   }
-  return { move, outcome, cost: preview.cost };
+  // cellCount is the open-cell count the OPPONENT's solver will actually
+  // see (post-placement, pre-bonus) — the thing "safeSmallest" reasons
+  // about. Deliberately separate from `cost`, which also folds in bonus
+  // markers (see Zone.preview) and isn't what determines solvability.
+  return { move, outcome, cost: preview.cost, cellCount: openCells.length };
 }
 
 function zoneCreationCandidates(game, player, maxBlobSize) {
@@ -422,6 +468,9 @@ function buildCategoryHandlers(game, playerIndex, cfg) {
   function creationBucket(outcome, strategy) {
     const bucket = creation().filter((c) => c.outcome === outcome);
     if (bucket.length === 0) return null;
+    if (strategy === "safeSmallest") {
+      return selectSafeSmallest(bucket, (c) => c.cost, (c) => c.cellCount, cfg.maxBlobSize).move;
+    }
     return selectByStrategy(bucket, strategy, (c) => c.cost).move;
   }
 

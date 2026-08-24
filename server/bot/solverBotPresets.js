@@ -64,59 +64,7 @@ export const BOT_SOLVER_1 = {
     uncertainActive: "smallest",
     lostActive: "random",
     creationWinnable: "biggest",
-    creationUncertain: "smallest",
-    creationLost: "smallest",
-    dominoFallback: "biggest",
-  },
-  avoidLosingMove: { enabled: true, maxTries: 15 },
-};
-
-export const BOT_SOLVER_1_5 = {
-  maxBlobSize: 12,
-  actionPriority: {
-    shuffle: true,
-    order: [
-      { category: "creationWinnable" },
-      { category: "lostActive" },
-      { category: "uncertainActive" },
-      { category: "creationUncertain" },
-      { category: "winnableActive" },
-      { category: "creationLost" },
-      { category: "domino", pinned: true },
-    ],
-  },
-  zoneSelection: {
-    winnableActive: "smallest",
-    uncertainActive: "smallest",
-    lostActive: "random",
-    creationWinnable: "biggest",
-    creationUncertain: "random",
-    creationLost: "smallest",
-    dominoFallback: "biggest",
-  },
-  avoidLosingMove: { enabled: true, maxTries: 15 },
-};
-
-export const BOT_SOLVER_1_6 = {
-  maxBlobSize: 12,
-  actionPriority: {
-    shuffle: true,
-    order: [
-      { category: "creationWinnable" },
-      { category: "lostActive" },
-      { category: "uncertainActive" },
-      { category: "creationUncertain" },
-      { category: "winnableActive" },
-      { category: "creationLost" },
-      { category: "domino", pinned: true },
-    ],
-  },
-  zoneSelection: {
-    winnableActive: "smallest",
-    uncertainActive: "smallest",
-    lostActive: "random",
-    creationWinnable: "biggest",
-    creationUncertain: "biggest",
+    creationUncertain: "safeSmallest",
     creationLost: "smallest",
     dominoFallback: "biggest",
   },
@@ -148,7 +96,7 @@ export const BOT_SOLVER_2 = {
     uncertainActive: "smallest",
     lostActive: "random",
     creationWinnable: "biggest",
-    creationUncertain: "smallest",
+    creationUncertain: "safeSmallest",
     creationLost: "smallest",
     dominoFallback: "biggest",
   },
@@ -181,7 +129,7 @@ export const BOT_SOLVER_3 = {
     uncertainActive: "smallest",
     lostActive: "random",
     creationWinnable: "biggest",
-    creationUncertain: "smallest",
+    creationUncertain: "safeSmallest",
     creationLost: "smallest",
     dominoFallback: "biggest",
   },
