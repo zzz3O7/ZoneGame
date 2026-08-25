@@ -16,16 +16,25 @@ import { findOrCreateBotPlayer } from "../bot/botRepository.js";
 // bot-row data exists yet; if it ever does, the old rows become orphaned
 // (chooseMoveForBotKey falls back to random-01's logic for an unknown
 // key) and should be removed via the admin tool rather than left around.
+//
+// ratingMu/ratingSigma are the bot's STARTING point, applied only the
+// first time each row is created (see findOrCreateBotPlayer) — after
+// that, real rated games move it same as any human, and re-running this
+// script is a no-op for existing rows. Omit either field (or the whole
+// object) to fall back to the normal new-player default (1500/350).
+//
+// The values below are placeholders spread across the known strength
+// ladder, NOT measured numbers.
 const BOTS = [
-  { key: "bot-random-0", nickname: "Bot_Random_0" },
-  { key: "bot-random-1", nickname: "Bot_Random_1" },
-  { key: "bot-solver-0", nickname: "Bot_Solver_0" },
-  { key: "bot-solver-1", nickname: "Bot_Solver_1" },
-  { key: "bot-solver-2", nickname: "Bot_Solver_2" },
-  { key: "bot-solver-3", nickname: "Bot_Solver_3" },
+  { key: "bot-random-0", nickname: "Bot_Random_0", ratingMu: 250, ratingSigma: 100 },
+  { key: "bot-random-1", nickname: "Bot_Random_1", ratingMu: 500, ratingSigma: 100 },
+  { key: "bot-solver-0", nickname: "Bot_Solver_0", ratingMu: 750, ratingSigma: 100 },
+  { key: "bot-solver-1", nickname: "Bot_Solver_1", ratingMu: 1000, ratingSigma: 100 },
+  { key: "bot-solver-2", nickname: "Bot_Solver_2", ratingMu: 1250, ratingSigma: 100 },
+  { key: "bot-solver-3", nickname: "Bot_Solver_3", ratingMu: 1500, ratingSigma: 100 },
 ];
 
-for (const { key, nickname } of BOTS) {
-  const bot = findOrCreateBotPlayer(key, nickname);
+for (const { key, nickname, ratingMu, ratingSigma } of BOTS) {
+  const bot = findOrCreateBotPlayer(key, nickname, { mu: ratingMu, sigma: ratingSigma });
   console.log(`${bot.nickname} (id=${bot.id}, mu=${bot.rating_mu}, sigma=${bot.rating_sigma})`);
 }

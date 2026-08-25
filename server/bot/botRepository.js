@@ -6,7 +6,8 @@ import { db } from "../db.js";
 // et al. in playerRepository.js stay human-only.
 
 const insertBot = db.prepare(
-  `INSERT INTO players (google_sub, email, nickname, created_at, is_bot) VALUES (?, ?, ?, ?, 1)`,
+  `INSERT INTO players (google_sub, email, nickname, created_at, is_bot, rating_mu, rating_sigma)
+   VALUES (?, ?, ?, ?, 1, ?, ?)`,
 );
 const getByGoogleSub = db.prepare(`SELECT * FROM players WHERE google_sub = ?`);
 const listBots = db.prepare(`SELECT * FROM players WHERE is_bot = 1`);
@@ -18,11 +19,18 @@ const setBotActiveStmt = db.prepare(`UPDATE players SET is_active = ? WHERE id =
 // "bot-random-0"), a generated human-like name eventually (docs/BOTS.md
 // Phase 4) — same underlying bot row either way, keyed off google_sub
 // rather than nickname so a nickname change never orphans the row.
-export function findOrCreateBotPlayer(botKey, nickname) {
+//
+// `initialRating` only applies at creation — an existing row's mu/sigma
+// reflects whatever rated games it's actually played since, and
+// re-running the seed script must never reset that. Omit it (or either
+// field) to fall back to the table's normal new-player default
+// (1500 / 350, same as any human's first game) — see db.js.
+export function findOrCreateBotPlayer(botKey, nickname, initialRating = {}) {
   const googleSub = `bot:${botKey}`;
   const existing = getByGoogleSub.get(googleSub);
   if (existing) return existing;
-  insertBot.run(googleSub, `${botKey}@bots.zonegame.local`, nickname, Date.now());
+  const { mu = 1500, sigma = 350 } = initialRating;
+  insertBot.run(googleSub, `${botKey}@bots.zonegame.local`, nickname, Date.now(), mu, sigma);
   return getByGoogleSub.get(googleSub);
 }
 
