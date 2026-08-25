@@ -7,7 +7,7 @@ import { db } from "./db.js";
 // code path needs, without pushing that surface into the files real
 // game logic depends on.
 
-const SORTABLE_PLAYER_COLUMNS = new Set(["rating_mu", "games_played", "created_at", "nickname"]);
+const SORTABLE_PLAYER_COLUMNS = new Set(["id", "rating_mu", "games_played", "created_at", "nickname"]);
 const SORTABLE_GAME_COLUMNS = new Set(["started_at", "ended_at"]);
 
 function clampLimit(limit, fallback = 50, max = 200) {
@@ -22,7 +22,12 @@ function clampOffset(offset) {
 }
 
 // { search, isBot, sort, dir, limit, offset } -> { rows, total }
-export function listPlayers({ search, isBot, sort = "created_at", dir = "desc", limit, offset } = {}) {
+// Default sort is "id" ASC — signup order, with no possible ties (unlike
+// created_at, which several bots seeded back-to-back in one script run
+// can land on the same millisecond, making relative order effectively
+// undefined without a tie-break). Still sortable by any of
+// SORTABLE_PLAYER_COLUMNS via the admin UI's clickable headers.
+export function listPlayers({ search, isBot, sort = "id", dir = "asc", limit, offset } = {}) {
   const where = [];
   const params = {};
   if (search) {
@@ -33,7 +38,7 @@ export function listPlayers({ search, isBot, sort = "created_at", dir = "desc", 
   if (isBot === "false" || isBot === false) where.push("is_bot = 0");
   const whereSql = where.length ? `WHERE ${where.join(" AND ")}` : "";
 
-  const sortCol = SORTABLE_PLAYER_COLUMNS.has(sort) ? sort : "created_at";
+  const sortCol = SORTABLE_PLAYER_COLUMNS.has(sort) ? sort : "id";
   const sortDir = dir === "asc" ? "ASC" : "DESC";
 
   const lim = clampLimit(limit);
@@ -43,7 +48,11 @@ export function listPlayers({ search, isBot, sort = "created_at", dir = "desc", 
     .prepare(
       `SELECT id, nickname, email, rating_mu, rating_sigma, games_played, is_bot, created_at, last_rated_game_at
        FROM players ${whereSql}
-       ORDER BY ${sortCol} ${sortDir}
+       -- id ASC tie-break: several bots seeded back-to-back in one script
+       -- run (seedBots.js) can land the same created_at millisecond,
+       -- which without a tie-break made their relative order effectively
+       -- undefined/inconsistent across requests.
+       ORDER BY ${sortCol} ${sortDir}, id ASC
        LIMIT @limit OFFSET @offset`,
     )
     .all({ ...params, limit: lim, offset: off });

@@ -10,8 +10,8 @@ const insertBot = db.prepare(
    VALUES (?, ?, ?, ?, 1, ?, ?)`,
 );
 const getByGoogleSub = db.prepare(`SELECT * FROM players WHERE google_sub = ?`);
-const listBots = db.prepare(`SELECT * FROM players WHERE is_bot = 1`);
-const listActiveBots = db.prepare(`SELECT * FROM players WHERE is_bot = 1 AND is_active = 1`);
+const listBots = db.prepare(`SELECT * FROM players WHERE is_bot = 1 ORDER BY id ASC`);
+const listActiveBots = db.prepare(`SELECT * FROM players WHERE is_bot = 1 AND is_active = 1 ORDER BY id ASC`);
 const setBotActiveStmt = db.prepare(`UPDATE players SET is_active = ? WHERE id = ? AND is_bot = 1`);
 
 // Idempotent — safe to re-run a seed script. botKey is a stable internal

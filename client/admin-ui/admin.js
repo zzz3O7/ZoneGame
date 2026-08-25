@@ -26,7 +26,7 @@ const state = {
   view: "status",
   refreshTimer: null,
   // Per-view UI state that should survive a tab switch but not a reload.
-  players: { search: "", isBot: "", sort: "created_at", dir: "desc", offset: 0, expandedId: null },
+  players: { search: "", isBot: "", sort: "id", dir: "asc", offset: 0, expandedId: null },
   games: { player: "", matchType: "", origin: "", offset: 0, expandedId: null },
   matches: { expandedId: null },
   bots: { expandedId: null },
@@ -426,6 +426,7 @@ async function renderPlayers() {
     .map(
       (p) => `
       <tr class="is-clickable" data-id="${p.id}">
+        <td class="mono muted">${p.id}</td>
         <td>${esc(p.nickname)}</td>
         <td class="num">${Math.round(p.rating_mu)} ± ${Math.round(p.rating_sigma)}</td>
         <td class="mono">${p.games_played}</td>
@@ -447,7 +448,7 @@ async function renderPlayers() {
     ${
       rows.length
         ? `<table>
-            <thead><tr>${sortHeader("nickname", "Nickname")}${sortHeader("rating_mu", "Rating")}${sortHeader("games_played", "Games")}<th>Type</th>${sortHeader("created_at", "Joined")}</tr></thead>
+            <thead><tr>${sortHeader("id", "ID")}${sortHeader("nickname", "Nickname")}${sortHeader("rating_mu", "Rating")}${sortHeader("games_played", "Games")}<th>Type</th>${sortHeader("created_at", "Joined")}</tr></thead>
             <tbody>${tableRows}</tbody>
           </table>`
         : `<div class="empty-state">No players match this filter.</div>`
