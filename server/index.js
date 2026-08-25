@@ -29,13 +29,32 @@ import { displayRating } from "./playerRepository.js";
 // Static file serving (client/ + shared/) is included here for local
 // dev convenience only — in production nginx serves those paths
 // directly and requests for them never reach this process at all.
+//
+// The whole body is wrapped in try/catch on purpose: this callback is
+// async, and Node's http.Server doesn't await or catch what it returns —
+// an unhandled rejection here (e.g. a DB write throwing) doesn't just
+// fail that one request, it crashes the entire process and disconnects
+// every live match. One bad admin request should never be able to do
+// that. WS message handling already has this same protection (see
+// ws.on("message")'s try/catch below); this closes the equivalent gap
+// on the HTTP side.
 const httpServer = http.createServer(async (req, res) => {
-  const url = new URL(req.url, `http://${req.headers.host}`);
-  if (await handleAuthRequest(req, res, url)) return;
-  if (await handleAdminRequest(req, res, url, { manager, queue, wss })) return;
-  if (await serveStatic(req, res, url)) return;
-  res.writeHead(404);
-  res.end();
+  try {
+    const url = new URL(req.url, `http://${req.headers.host}`);
+    if (await handleAuthRequest(req, res, url)) return;
+    if (await handleAdminRequest(req, res, url, { manager, queue, wss })) return;
+    if (await serveStatic(req, res, url)) return;
+    res.writeHead(404);
+    res.end();
+  } catch (err) {
+    log(`http handler error: ${err.message}`);
+    if (!res.headersSent) {
+      res.writeHead(500, { "Content-Type": "application/json; charset=utf-8" });
+      res.end(JSON.stringify({ error: "Internal server error" }));
+    } else {
+      res.end();
+    }
+  }
 });
 
 const wss = new WebSocketServer({ server: httpServer });
@@ -477,7 +496,15 @@ wss.on("connection", (ws, req) => {
   });
 });
 
-// heartbeat sweep, kill dead sockets, keep proxies from idle-timeout-dropping live ones
+// Heartbeat sweep, kill dead sockets, keep proxies from idle-timeout-dropping
+// live ones. Interval also bounds how long a dead connection can go
+// undetected: worst case is two full intervals (one sweep to notice no
+// pong and ping again, the next to give up) before handleDisconnect even
+// fires — and the game clock (by design, see Match.buildSyncState) keeps
+// running the whole time if it's the dropped player's turn. 2000ms keeps
+// that worst case at ~4s instead of 10s; still far under nginx's default
+// 60s proxy_read_timeout, so no risk of this fighting the very idle-timeout
+// problem it exists to prevent.
 const interval = setInterval(() => {
   wss.clients.forEach((ws) => {
     if (ws.isAlive === false) return ws.terminate();

@@ -2,8 +2,6 @@ domino only zone solver
 
 bot logging: individual bot decisions stored for each match for each move. not global logging, so it can be viewed individually in the admin's panel
 
-comments cleanup
-
 zone solver should return all possible forced endings (wins and maybe losses)
     with corresponding domino cost for both players (or domino slots)
     coordinator then uses all possible forced completions for all zones to find an optimal combination.
@@ -12,6 +10,8 @@ zone solver should return all possible forced endings (wins and maybe losses)
 scale thinking time with possible moves (for simple bots)
 and with move "complexity" for smarter bots
 same parameter "complexity" just for simple bots it is possible move count
+
+comments cleanup
 
 account overview
 game history
