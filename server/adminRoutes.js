@@ -276,7 +276,7 @@ export async function handleAdminRequest(req, res, url, ctx) {
   if (parts.length === 3 && parts[1] === "players" && req.method === "GET") {
     const id = parseId(parts[2]);
     if (id == null) return json(res, 400, { error: "Invalid player id" }), true;
-    const detail = getPlayerDetail(id);
+    const detail = getPlayerDetail(id, { rated: q.get("rated") || undefined });
     if (!detail) return json(res, 404, { error: "Player not found" }), true;
     json(res, 200, detail);
     return true;
@@ -307,12 +307,13 @@ export async function handleAdminRequest(req, res, url, ctx) {
     return true;
   }
 
-  // GET /admin/games?player=&matchType=&origin=&sort=&dir=&limit=&offset=
+  // GET /admin/games?player=&matchType=&origin=&rated=&sort=&dir=&limit=&offset=
   if (parts.length === 2 && parts[1] === "games" && req.method === "GET") {
     const result = listGames({
       player: q.get("player") ? parseId(q.get("player")) : undefined,
       matchType: q.get("matchType") || undefined,
       origin: q.get("origin") || undefined,
+      rated: q.get("rated") || undefined,
       sort: q.get("sort") || undefined,
       dir: q.get("dir") || undefined,
       limit: q.get("limit") || undefined,

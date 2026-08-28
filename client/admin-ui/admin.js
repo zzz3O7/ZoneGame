@@ -26,8 +26,8 @@ const state = {
   view: "status",
   refreshTimer: null,
   // Per-view UI state that should survive a tab switch but not a reload.
-  players: { search: "", isBot: "", sort: "id", dir: "asc", offset: 0, expandedId: null },
-  games: { player: "", matchType: "", origin: "", offset: 0, expandedId: null },
+  players: { search: "", isBot: "", sort: "id", dir: "asc", offset: 0, expandedId: null, gamesRated: "" },
+  games: { player: "", matchType: "", origin: "", rated: "", offset: 0, expandedId: null },
   matches: { expandedId: null },
   bots: { expandedId: null },
 };
@@ -503,7 +503,9 @@ async function togglePlayerDetail(id) {
 }
 
 async function showPlayerDetail(id) {
-  const { player, recentGames, activeSessions } = await api(`/players/${id}`);
+  const s = state.players;
+  const params = new URLSearchParams({ ...(s.gamesRated ? { rated: s.gamesRated } : {}) });
+  const { player, recentGames, activeSessions } = await api(`/players/${id}?${params}`);
 
   const gameRows = recentGames
     .map(
@@ -511,6 +513,7 @@ async function showPlayerDetail(id) {
         <td>${esc(g.player0_nickname ?? "?")} vs ${esc(g.player1_nickname ?? "?")}</td>
         <td>${g.winner == null ? "draw" : g.winner === 0 ? esc(g.player0_nickname ?? "P0") : esc(g.player1_nickname ?? "P1")}</td>
         <td class="num">${g.score_0}–${g.score_1}</td>
+        <td>${g.rated ? '<span class="pill pill--live">rated</span>' : '<span class="pill">unrated</span>'}</td>
         <td class="mono muted">${relTime(g.ended_at)}</td>
       </tr>`,
     )
@@ -534,14 +537,21 @@ async function showPlayerDetail(id) {
         <button class="btn btn--primary" type="submit">Save</button>
       </form>
 
-      <div class="section-title">Recent games</div>
+      <div class="section-title">
+        Recent games
+        <select id="playerGamesRatedFilter" style="margin-left: 8px;">
+          <option value="" ${s.gamesRated === "" ? "selected" : ""}>All games</option>
+          <option value="true" ${s.gamesRated === "true" ? "selected" : ""}>Rated only</option>
+          <option value="false" ${s.gamesRated === "false" ? "selected" : ""}>Unrated only</option>
+        </select>
+      </div>
       ${
         recentGames.length
           ? `<table>
-              <thead><tr><th>Match</th><th>Winner</th><th>Score</th><th>Ended</th></tr></thead>
+              <thead><tr><th>Match</th><th>Winner</th><th>Score</th><th>Rated</th><th>Ended</th></tr></thead>
               <tbody>${gameRows}</tbody>
             </table>`
-          : `<div class="empty-state">No games yet.</div>`
+          : `<div class="empty-state">No games match this filter.</div>`
       }
     </div>
   `;
@@ -559,6 +569,10 @@ async function showPlayerDetail(id) {
       showToast(err.message, true);
     }
   });
+  document.getElementById("playerGamesRatedFilter").addEventListener("change", async (e) => {
+    s.gamesRated = e.target.value;
+    await showPlayerDetail(id);
+  });
 }
 
 // ---------------------------------------------------------------- games --
@@ -571,6 +585,7 @@ async function renderGames() {
     ...(s.player ? { player: s.player } : {}),
     ...(s.matchType ? { matchType: s.matchType } : {}),
     ...(s.origin ? { origin: s.origin } : {}),
+    ...(s.rated ? { rated: s.rated } : {}),
   });
   const { rows, total } = await api(`/games?${params}`);
   els.viewMeta.textContent = `${total} total`;
@@ -584,6 +599,7 @@ async function renderGames() {
         <td class="num">${g.score_0}–${g.score_1}</td>
         <td>${esc(g.match_type)}</td>
         <td class="muted">${esc(g.origin)}</td>
+        <td>${g.rated ? '<span class="pill pill--live">rated</span>' : '<span class="pill">unrated</span>'}</td>
         <td class="mono muted">${relTime(g.ended_at)}</td>
       </tr>`,
     )
@@ -594,11 +610,16 @@ async function renderGames() {
       <input type="text" id="gamePlayer" placeholder="filter by player id…" value="${esc(s.player)}" />
       <input type="text" id="gameMatchType" placeholder="match type…" value="${esc(s.matchType)}" />
       <input type="text" id="gameOrigin" placeholder="origin…" value="${esc(s.origin)}" />
+      <select id="gameRatedFilter">
+        <option value="" ${s.rated === "" ? "selected" : ""}>All games</option>
+        <option value="true" ${s.rated === "true" ? "selected" : ""}>Rated only</option>
+        <option value="false" ${s.rated === "false" ? "selected" : ""}>Unrated only</option>
+      </select>
     </div>
     ${
       rows.length
         ? `<table>
-            <thead><tr><th>Players</th><th>Winner</th><th>Score</th><th>Type</th><th>Origin</th><th>Ended</th></tr></thead>
+            <thead><tr><th>Players</th><th>Winner</th><th>Score</th><th>Type</th><th>Origin</th><th>Rated</th><th>Ended</th></tr></thead>
             <tbody>${tableRows}</tbody>
           </table>`
         : `<div class="empty-state">No games match this filter.</div>`
@@ -619,6 +640,7 @@ async function renderGames() {
   document.getElementById("gamePlayer").addEventListener("change", (e) => applyFilter("player", e.target.value));
   document.getElementById("gameMatchType").addEventListener("change", (e) => applyFilter("matchType", e.target.value));
   document.getElementById("gameOrigin").addEventListener("change", (e) => applyFilter("origin", e.target.value));
+  document.getElementById("gameRatedFilter").addEventListener("change", (e) => applyFilter("rated", e.target.value));
   document.getElementById("gamesPrev").addEventListener("click", () => {
     s.offset = Math.max(0, s.offset - 50);
     render();
@@ -651,6 +673,7 @@ async function showGameDetail(id) {
         <div><div class="k">Player 0</div><div class="v">${esc(game.player0_nickname ?? "?")} (mu ${Math.round(game.mu_before_0 ?? 0)})</div></div>
         <div><div class="k">Player 1</div><div class="v">${esc(game.player1_nickname ?? "?")} (mu ${Math.round(game.mu_before_1 ?? 0)})</div></div>
         <div><div class="k">Score</div><div class="v">${game.score_0}–${game.score_1}</div></div>
+        <div><div class="k">Rated</div><div class="v">${game.rated ? '<span class="pill pill--live">rated</span>' : '<span class="pill">unrated</span>'}</div></div>
         <div><div class="k">End reason</div><div class="v">${esc(game.end_reason ?? "—")}</div></div>
         <div><div class="k">Started</div><div class="v">${fmtDate(game.started_at)}</div></div>
         <div><div class="k">Ended</div><div class="v">${fmtDate(game.ended_at)}</div></div>

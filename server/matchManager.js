@@ -1,6 +1,6 @@
 import { randomUUID } from "crypto";
 import { Match } from "./match.js";
-import { finalizeRatedGame } from "./ratingService.js";
+import { finalizeRatedGame, finalizeUnratedGame } from "./ratingService.js";
 
 function genInviteCode() {
   // 6 char, readable alphabet (no 0/O/1/I confusion)
@@ -38,10 +38,12 @@ export class MatchManager {
 
   // Shared construction path for every match, regardless of how its
   // players arrive (invite code vs matchmaking queue) — wires the
-  // rated-game-end hook uniformly so there's exactly one place that
-  // decides "does this match's outcome need scoring". matchType/origin
-  // default to plain human matchmaking play — see docs/BOTS.md for the
-  // other combinations, wired in as those paths get built.
+  // game-end hook uniformly so there's exactly one place that decides
+  // how a finished match gets recorded: finalizeRatedGame (rating math
+  // + history row) for rated matches, finalizeUnratedGame (history row
+  // only, no rating math) for everything else. matchType/origin default
+  // to plain human matchmaking play — see docs/BOTS.md for the other
+  // combinations, wired in as those paths get built.
   _buildMatch(params, rated, matchType = "pvp", origin = "matchmaking") {
     const matchId = randomUUID();
     let inviteCode;
@@ -55,6 +57,7 @@ export class MatchManager {
     let match;
     const onGameEnd = () => {
       if (match.rated) finalizeRatedGame(match);
+      else finalizeUnratedGame(match);
     };
     match = new Match(
       matchId,

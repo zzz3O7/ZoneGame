@@ -87,7 +87,15 @@ db.exec(`
     -- direct_debug PvE never reaches this table at all (see
     -- ratingService.js), so every row here is already "rated-eligible".
     match_type TEXT NOT NULL DEFAULT 'pvp',
-    origin TEXT NOT NULL DEFAULT 'matchmaking'
+    origin TEXT NOT NULL DEFAULT 'matchmaking',
+    -- 1 for a rated game (the only kind ever stored before this column
+    -- existed — see the ALTER below), 0 for unrated. Unrated games are
+    -- still saved for history/admin visibility, but never touch a
+    -- player's rating_mu/sigma/games_played (see gameRepository.js's
+    -- recordUnratedGame). player0_id/player1_id are still populated
+    -- whenever that side was logged in, even though the game is
+    -- unrated — only an actual guest leaves one of those NULL.
+    rated INTEGER NOT NULL DEFAULT 1
   );
 
   -- Sessions used to live only in an in-memory Map in sessionStore.js,
@@ -125,3 +133,7 @@ addColumnIfMissing("players", "is_bot INTEGER NOT NULL DEFAULT 0");
 addColumnIfMissing("players", "is_active INTEGER NOT NULL DEFAULT 1");
 addColumnIfMissing("games", "match_type TEXT NOT NULL DEFAULT 'pvp'");
 addColumnIfMissing("games", "origin TEXT NOT NULL DEFAULT 'matchmaking'");
+// DEFAULT 1 is correct for backfill: every row that already exists here
+// predates unrated games being saved at all, so every one of them is a
+// rated game by construction.
+addColumnIfMissing("games", "rated INTEGER NOT NULL DEFAULT 1");

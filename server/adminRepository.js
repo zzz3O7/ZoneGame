@@ -62,28 +62,51 @@ export function listPlayers({ search, isBot, sort = "id", dir = "asc", limit, of
   return { rows, total, limit: lim, offset: off };
 }
 
-export function getPlayerDetail(id) {
+// ratedFilter: undefined/"" -> both; "true"/true -> rated only;
+// "false"/false -> unrated only. Shared by listGames and
+// getPlayerDetail's recentGames so the same string coming straight off
+// a query param means the same thing in both places. Unqualified
+// column name — every caller's query only ever has `games` in scope
+// (aliased `g` or not), so it resolves fine either way, same as the
+// other WHERE fragments in this file.
+function ratedWhereClause(ratedFilter) {
+  if (ratedFilter === "true" || ratedFilter === true) return "rated = 1";
+  if (ratedFilter === "false" || ratedFilter === false) return "rated = 0";
+  return null;
+}
+
+// { rated } -> recentGames filtered to that player's rated, unrated, or
+// (default) all games. A player's unrated games show up here too as
+// long as they were logged in when the game was played — see
+// finalizeUnratedGame in ratingService.js for why player0_id/
+// player1_id are populated for a logged-in side even on an unrated row.
+export function getPlayerDetail(id, { rated } = {}) {
   const player = db.prepare(`SELECT * FROM players WHERE id = ?`).get(id);
   if (!player) return null;
+
+  const where = ["(player0_id = @id OR player1_id = @id)"];
+  const ratedClause = ratedWhereClause(rated);
+  if (ratedClause) where.push(ratedClause);
+
   const recentGames = db
     .prepare(
       `SELECT g.*, p0.nickname AS player0_nickname, p1.nickname AS player1_nickname
        FROM games g
        LEFT JOIN players p0 ON p0.id = g.player0_id
        LEFT JOIN players p1 ON p1.id = g.player1_id
-       WHERE g.player0_id = ? OR g.player1_id = ?
+       WHERE ${where.join(" AND ")}
        ORDER BY g.ended_at DESC
        LIMIT 25`,
     )
-    .all(id, id);
+    .all({ id });
   const activeSessions = db
     .prepare(`SELECT id, created_at, expires_at FROM sessions WHERE player_id = ? ORDER BY created_at DESC`)
     .all(id);
   return { player, recentGames, activeSessions };
 }
 
-// { player, matchType, origin, sort, dir, limit, offset } -> { rows, total }
-export function listGames({ player, matchType, origin, sort = "ended_at", dir = "desc", limit, offset } = {}) {
+// { player, matchType, origin, rated, sort, dir, limit, offset } -> { rows, total }
+export function listGames({ player, matchType, origin, rated, sort = "ended_at", dir = "desc", limit, offset } = {}) {
   const where = [];
   const params = {};
   if (player) {
@@ -98,6 +121,8 @@ export function listGames({ player, matchType, origin, sort = "ended_at", dir = 
     where.push("origin = @origin");
     params.origin = origin;
   }
+  const ratedClause = ratedWhereClause(rated);
+  if (ratedClause) where.push(ratedClause);
   const whereSql = where.length ? `WHERE ${where.join(" AND ")}` : "";
 
   const sortCol = SORTABLE_GAME_COLUMNS.has(sort) ? sort : "ended_at";
@@ -109,7 +134,7 @@ export function listGames({ player, matchType, origin, sort = "ended_at", dir = 
   const rows = db
     .prepare(
       `SELECT g.id, g.player0_id, g.player1_id, p0.nickname AS player0_nickname, p1.nickname AS player1_nickname,
-              g.winner, g.score_0, g.score_1, g.end_reason, g.match_type, g.origin,
+              g.winner, g.score_0, g.score_1, g.end_reason, g.match_type, g.origin, g.rated,
               g.started_at, g.ended_at
        FROM games g
        LEFT JOIN players p0 ON p0.id = g.player0_id

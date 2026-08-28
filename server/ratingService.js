@@ -1,5 +1,5 @@
 import { getPlayerById } from "./playerRepository.js";
-import { recordRatedGame } from "./gameRepository.js";
+import { recordRatedGame, recordUnratedGame } from "./gameRepository.js";
 import { computeBinaryUpdate, computeMarginModifier, applyInactivityRegrowth } from "./rating.js";
 import { log, shortId } from "./logger.js";
 import { MSG } from "../shared/net/protocol.js";
@@ -123,4 +123,59 @@ export function finalizeRatedGame(match) {
     opponentRatingBefore: p.playerIndex === 0 ? ratingBefore1 : ratingBefore0,
     opponentRatingAfter: p.playerIndex === 0 ? ratingAfter1 : ratingAfter0,
   }));
+}
+
+// Called once, right after an UNRATED match's status/endInfo have
+// already been set to a final result — same trigger points as
+// finalizeRatedGame (every game-ending path, only when a game actually
+// started). Saves the game to history for admin visibility, but runs
+// no rating math at all: rating_mu/sigma/games_played on either player
+// row are left completely untouched, and every mu/sigma column on the
+// stored row is null (there's nothing to snapshot — see
+// recordUnratedGame in gameRepository.js).
+//
+// Unlike rated matches, a player here can be a guest (accountPlayerId
+// == null) — that's allowed by design for unrated play. Whenever a
+// side IS logged in, though, their real player id is stored (not
+// null), specifically so their unrated games still show up under their
+// own admin player-detail history alongside their rated ones.
+export function finalizeUnratedGame(match) {
+  const [p0, p1] = match.players;
+  const winnerIndex = match.endInfo?.winnerIndex ?? null;
+  const endReason = match.endInfo?.reason ?? null;
+  const [rawScore0, rawScore1] = match.game.players.map((p) => p.score);
+  const totalBoardPoints = match.game.totalBoardPoints;
+  const remainingPossiblePoints = match.game.remainingPossiblePoints;
+
+  // Margin is a pure function of the scores (see rating.js) — still
+  // worth storing here for the same "self-explaining history" reason
+  // rated games store it, even though no modifier ever gets applied to
+  // anything for an unrated game.
+  const { margin } = computeMarginModifier(rawScore0, rawScore1, totalBoardPoints);
+
+  recordUnratedGame({
+    player0_id: p0.accountPlayerId ?? null,
+    player1_id: p1.accountPlayerId ?? null,
+    winner: winnerIndex,
+    score_0: rawScore0,
+    score_1: rawScore1,
+    end_reason: endReason,
+    margin,
+    remaining_possible_points: remainingPossiblePoints,
+    total_board_points: totalBoardPoints,
+    mu_before_0: null,
+    sigma_before_0: null,
+    mu_after_0: null,
+    sigma_after_0: null,
+    mu_before_1: null,
+    sigma_before_1: null,
+    mu_after_1: null,
+    sigma_after_1: null,
+    seed: match.activeParams.seed,
+    params_json: JSON.stringify(match.activeParams),
+    started_at: match._gameStartedAt ?? Date.now(),
+    ended_at: Date.now(),
+    match_type: match.matchType,
+    origin: match.origin,
+  });
 }

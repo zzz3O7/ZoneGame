@@ -1,11 +1,6 @@
-domino only zone solver
+exclude lingering strips of cells attached to the blob from search - no piece can be placed there (saves some blob size)
 
 bot logging: individual bot decisions stored for each match for each move. not global logging, so it can be viewed individually in the admin's panel
-
-zone solver should return all possible forced endings (wins and maybe losses)
-    with corresponding domino cost for both players (or domino slots)
-    coordinator then uses all possible forced completions for all zones to find an optimal combination.
-    order of completions matters too - because of dominoes and pass penalties
 
 scale thinking time with possible moves (for simple bots)
 and with move "complexity" for smarter bots

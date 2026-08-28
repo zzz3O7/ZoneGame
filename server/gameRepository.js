@@ -8,7 +8,7 @@ const insertGame = db.prepare(`
     mu_after_0, sigma_after_0,
     mu_before_1, sigma_before_1,
     mu_after_1, sigma_after_1,
-    seed, params_json, started_at, ended_at, match_type, origin
+    seed, params_json, started_at, ended_at, match_type, origin, rated
   ) VALUES (
     @player0_id, @player1_id, @winner,
     @score_0, @score_1, @end_reason, @margin, @remaining_possible_points, @total_board_points,
@@ -16,7 +16,7 @@ const insertGame = db.prepare(`
     @mu_after_0, @sigma_after_0,
     @mu_before_1, @sigma_before_1,
     @mu_after_1, @sigma_after_1,
-    @seed, @params_json, @started_at, @ended_at, @match_type, @origin
+    @seed, @params_json, @started_at, @ended_at, @match_type, @origin, @rated
   )
 `);
 
@@ -29,10 +29,19 @@ const bumpRating = db.prepare(`
 // One transaction so a crash between inserting the history row and
 // updating ratings can't leave the two out of sync with each other.
 export const recordRatedGame = db.transaction((row) => {
-  insertGame.run(row);
+  insertGame.run({ ...row, rated: 1 });
   bumpRating.run(row.mu_after_0, row.sigma_after_0, row.ended_at, row.player0_id);
   bumpRating.run(row.mu_after_1, row.sigma_after_1, row.ended_at, row.player1_id);
 });
+
+// Unrated games: saved for history/admin visibility only. Deliberately
+// no bumpRating call here — unrated play must never move rating_mu/
+// sigma/games_played, which is also why every rating_* field on `row`
+// is expected to be null (see ratingService.js's finalizeUnratedGame —
+// no rating math ever runs for these, so there's nothing to snapshot).
+export function recordUnratedGame(row) {
+  insertGame.run({ ...row, rated: 0 });
+}
 
 const getRecentGames = db.prepare(`
   SELECT * FROM games
@@ -46,7 +55,11 @@ const getRecentGames = db.prepare(`
 // kept as-is since it's generic enough to be useful for a game-history
 // feature later: a player's own last `limit` games, normalized to "self"
 // vs "opponent" regardless of which side (player0/player1) they were on
-// in each row.
+// in each row. Note: since unrated games are now saved too, this will
+// pick up rows with null mu/sigma fields (and null margin's sign is
+// meaningless there) unless a caller adds a `rated = 1` filter — a
+// reviver of this function should filter to rated rows explicitly if it
+// still wants "for rating math" semantics.
 export function getRecentGamesForPlayer(playerId, limit) {
   const rows = getRecentGames.all(playerId, playerId, limit);
   return rows.map((row) => {
