@@ -685,7 +685,7 @@ async function showGameDetail(id) {
 // ----------------------------------------------------------------- bots --
 
 async function renderBots() {
-  const [{ bots }, { keys }] = await Promise.all([api("/bots"), api("/bot-keys")]);
+  const [{ bots }, { keys }, selfPlay] = await Promise.all([api("/bots"), api("/bot-keys"), api("/self-play")]);
   els.viewMeta.textContent = `${bots.length} bots`;
 
   const rows = bots
@@ -707,6 +707,48 @@ async function renderBots() {
     .join("");
 
   els.content.innerHTML = `
+    <div class="section-title">Self-play scheduler</div>
+    ${selfPlay.lastError ? `<div class="error-banner">${esc(selfPlay.lastError)}</div>` : ""}
+    <div class="toolbar">
+      <span>${selfPlay.enabled ? '<span class="pill pill--live">running</span>' : '<span class="pill">stopped</span>'}</span>
+      <button class="btn ${selfPlay.enabled ? "btn--danger" : "btn--primary"}" id="selfPlayToggle">
+        ${selfPlay.enabled ? "Stop" : "Start"}
+      </button>
+      <span class="muted">Full round-robin eve cycles, same-seed seat-swapped pairings — see docs/BOTS.md Phase 3.</span>
+    </div>
+    <div class="card-grid">
+      <div class="card">
+        <div class="card__label">Rate</div>
+        <div class="card__value">${selfPlay.cyclesPerHour}/hr</div>
+        <div class="card__sub">full round-robin cycles (config, not live-tunable here)</div>
+      </div>
+      <div class="card">
+        <div class="card__label">Cycles played</div>
+        <div class="card__value">${selfPlay.cyclesPlayed}</div>
+        <div class="card__sub">full round-robin sweeps, this process</div>
+      </div>
+      <div class="card">
+        <div class="card__label">Pairings played</div>
+        <div class="card__value">${selfPlay.pairingsPlayed}</div>
+        <div class="card__sub">1 per bot pair per cycle</div>
+      </div>
+      <div class="card">
+        <div class="card__label">Games played</div>
+        <div class="card__value">${selfPlay.gamesPlayed}</div>
+        <div class="card__sub">2 per pairing, same seed</div>
+      </div>
+      <div class="card">
+        <div class="card__label">Last game</div>
+        <div class="card__value" style="font-size:15px">${relTime(selfPlay.lastGameEndedAt)}</div>
+      </div>
+      <div class="card">
+        <div class="card__label">Eligible bots</div>
+        <div class="card__value">${selfPlay.activeBotCount}</div>
+        <div class="card__sub">${selfPlay.activeBotCount < 2 ? "need ≥2 active to run" : `${(selfPlay.activeBotCount * (selfPlay.activeBotCount - 1)) / 2} pairs`}</div>
+      </div>
+    </div>
+
+    <div class="section-title">Bots</div>
     ${
       bots.length
         ? `<table>
@@ -729,6 +771,16 @@ async function renderBots() {
 
     <div id="botDetail"></div>
   `;
+
+  document.getElementById("selfPlayToggle").addEventListener("click", async () => {
+    try {
+      await api("/self-play/enabled", { method: "POST", body: { enabled: !selfPlay.enabled } });
+      showToast(selfPlay.enabled ? "Self-play stopped" : "Self-play started");
+      await renderBots();
+    } catch (err) {
+      showToast(err.message, true);
+    }
+  });
 
   document.getElementById("seedForm").addEventListener("submit", async (e) => {
     e.preventDefault();

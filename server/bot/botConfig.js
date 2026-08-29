@@ -21,11 +21,21 @@ export const BOT_LEAVE_MIN_MS = 1000;
 export const BOT_LEAVE_RANGE_MS = 9000;
 
 // Self-play scheduler (docs/BOTS.md Phase 3) — see selfPlayScheduler.js.
-// Games run back-to-back with no wall-clock pacing (there's no human to
-// pace for), so the only real "cadence" knob is how long to wait before
-// re-checking the active bot pool when there currently aren't enough
-// bots (0 or 1) to pair up — no point spinning a tight retry loop for a
-// condition that only changes via a rare admin action.
+// A "cycle" is a full round-robin sweep (every active bot pair gets one
+// same-seed mirrored pairing) — that's the unit this throttles, not the
+// individual pairing. Pairings within a cycle run back-to-back with no
+// delay; only the START of each new cycle is paced to this rate. 5/hour
+// is a conservative starting default, easy to retune here once there's
+// a feel for how much load the process can absorb alongside real player
+// traffic — and note a bigger active bot pool means each cycle does
+// more work (C(n,2) pairings), so the same cycles/hour setting means
+// more total games as the bot roster grows.
+export const SELF_PLAY_CYCLES_PER_HOUR = 5;
+
+// How long to wait before re-checking the active bot pool when there
+// currently aren't enough bots (0 or 1) to pair up — no point spinning a
+// tight retry loop for a condition that only changes via a rare admin
+// action. Independent of the cycle throttle above.
 export const SELF_PLAY_RETRY_MS = 5000;
 
 // Same runaway-loop guard solverSelfPlay.js uses for its offline harness

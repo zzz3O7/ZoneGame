@@ -90,7 +90,7 @@ leaderboards, etc.
 | pvp        | matchmaking            | n/a (human)  | yes            | normal — either side can request              |
 | pve        | matchmaking            | human-pacing | yes            | bot never accepts; leaves 1–5s after game end |
 | pve        | direct_debug           | none         | **no**         | bot always accepts instantly; lingers otherwise |
-| eve        | self_play_scheduler    | none (fast-sim, no clock) | yes, at reduced weight (see rating.js's `EVE_RATING_WEIGHT`) | n/a — no rematch concept, scheduler just plays the next pair |
+| eve        | self_play_scheduler    | none (fast-sim, no clock); full round-robin cycles throttled to a cycles/hour ceiling | yes, at reduced weight (see rating.js's `EVE_RATING_WEIGHT`) | n/a — no rematch concept; each pair gets one same-seed seat-swapped pairing per cycle |
 
 ---
 
@@ -746,15 +746,26 @@ real eval to take a spread from until tier 3 lands.
       directly rather than the full match orchestration layer — no seamlessness
       requirement to protect here, only ruleset correctness. See
       `server/bot/selfPlayScheduler.js`.
-- [x] Scheduler cadence/backlog strategy for keeping bot ratings live: continuous,
-      one game at a time, round-robin over every pair of currently-active bots
-      (rebuilt from `listActiveBotPlayers()` every game, so an admin toggle takes
-      effect on the very next game). Each move yields the event loop via
-      `setImmediate` rather than running a whole game in one synchronous call
-      stack, so a slow solver-tier search can never stall real player traffic.
-      Off by default on every process start; toggled at runtime via
-      `POST /admin/self-play/enabled { enabled }` (`GET /admin/self-play` for
-      status) — never auto-started at deploy time.
+- [x] Scheduler cadence/backlog strategy for keeping bot ratings live: two nested
+      units of work. A "pairing" is one fresh board seed, played twice by a given
+      pair of bots with seats swapped, so a pair's result isn't at the mercy of
+      whichever side got first-move advantage on that particular board — both
+      games are still recorded as independent rated rows sharing a seed. A
+      "cycle" is a full round-robin sweep — every currently-active bot pair gets
+      exactly one pairing (bot pool read fresh at the START of each cycle, so an
+      admin toggling a bot active/inactive takes effect on the very next cycle,
+      not mid-sweep). THE CYCLE, not the pairing, is what's throttled — to
+      `SELF_PLAY_CYCLES_PER_HOUR` (botConfig.js, currently 30/hr, uncalibrated).
+      Pairings within a cycle run back-to-back with no delay between them; only
+      the start of each new cycle is paced to that ceiling. Independently of that,
+      each individual move (not just each pairing or cycle) still yields the
+      event loop via `setImmediate` rather than running a whole game in one
+      synchronous call stack, so a slow solver-tier search can never stall real
+      player traffic regardless of the throttle setting.
+      Off by default on every process start; toggled at runtime via the Bots tab
+      in the admin panel, or directly via `POST /admin/self-play/enabled
+      { enabled }` (`GET /admin/self-play` for status) — never auto-started at
+      deploy time.
 - [x] Rating impact at reduced weight: `eve` games use `EVE_RATING_WEIGHT` (0.4,
       uncalibrated starting guess) in `rating.js`'s `ratingWeightForMatchType`,
       which blends both the mu delta and the sigma shrinkage toward "no update"
