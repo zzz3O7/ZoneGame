@@ -1,4 +1,4 @@
-exclude lingering strips of cells attached to the blob from search - no piece can be placed there (saves some blob size)
+add UI to control it in admin panel
 
 bot logging: individual bot decisions stored for each match for each move. not global logging, so it can be viewed individually in the admin's panel
 
