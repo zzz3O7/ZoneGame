@@ -9,6 +9,7 @@ import { InputController } from "./gameUIInput.js";
 import { RenderSync } from "./gameUIRender.js";
 import { ClockController } from "./gameUIClock.js";
 import { EndcardController } from "./gameUIEndcard.js";
+import * as localGameStore from "../localGameStore.js";
 
 const KEY_TO_TYPE = { 1: "gesture", 2: "domino", 3: "tromino", 4: "tetromino", 5: "calc" };
 
@@ -21,11 +22,12 @@ const KEY_TO_TYPE = { 1: "gesture", 2: "domino", 3: "tromino", 4: "tetromino", 5
 // own copy. See gameUIInput.js / gameUIRender.js / gameUIClock.js /
 // gameUIEndcard.js.
 export class GameUI {
-  constructor(game, renderer, canvas, matchClient = null) {
+  constructor(game, renderer, canvas, matchClient = null, resumeClockSnapshot = null) {
     this.game = game;
     this.renderer = renderer;
     this.canvas = canvas;
     this.matchClient = matchClient; // null = local hotseat
+    this._resumeClockSnapshot = resumeClockSnapshot; // consumed once by ClockController.startClockTicker() — see localGameStore.js
 
     // main.js reuses the same #board-canvas / document / control buttons
     // across matches instead of recreating them, so every listener this
@@ -158,6 +160,7 @@ export class GameUI {
         this._playEntrySound(applied);
         this.clockCtrl.advanceHotseatClock();
         this._clearCalcIfOwnMove();
+        localGameStore.save(this.game, this.clock);
       } else {
         this.sound.reject();
       }
@@ -183,6 +186,7 @@ export class GameUI {
       this._playEntrySound(entry);
       this.clockCtrl.advanceHotseatClock();
       this._clearCalcIfOwnMove();
+      localGameStore.save(this.game, this.clock);
       this.render.render();
     }
   }

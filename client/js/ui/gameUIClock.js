@@ -1,4 +1,5 @@
 import { extrapolateRemaining, formatClockMs, Clock, LOW_TIME_THRESHOLD_MS } from "../../../shared/clock.js";
+import * as localGameStore from "../localGameStore.js";
 
 // How often the online clock display re-paints between authoritative
 // server snapshots. Display-only — how smooth the ticking looks.
@@ -30,9 +31,19 @@ export class ClockController {
     }
 
     if (ui.game.timeControl) {
-      ui.clock = Clock.fromConfig(ui.game.timeControl);
+      // Resuming a saved local game: pick up with exactly the remaining
+      // time it had when saved (time paused while the page was closed —
+      // see localGameStore.js), rather than starting a fresh clock.
+      // Consumed once; a later rematch/same-board on this same GameUI
+      // instance never happens (each gets its own fresh GameUI), so
+      // there's no risk of accidentally reusing a stale snapshot.
+      ui.clock = ui._resumeClockSnapshot
+        ? Clock.fromSnapshot(ui._resumeClockSnapshot, ui.game.timeControl, Date.now())
+        : Clock.fromConfig(ui.game.timeControl);
+      ui._resumeClockSnapshot = null;
+
       const now = Date.now();
-      ui.clock.startTurn(ui.game.currentPlayerIndex, now);
+      if (ui.clock.currentPlayerIndex === null) ui.clock.startTurn(ui.game.currentPlayerIndex, now);
       this._armHotseatFlagTimer(now);
       ui._clockInterval = setInterval(() => this.tickClocks(), CLOCK_TICK_INTERVAL_MS);
     }
@@ -89,6 +100,7 @@ export class ClockController {
 
     const flaggedIndex = ui.clock.currentPlayerIndex;
     ui.clock.freeze(now); // no increment — running out isn't a completed move
+    localGameStore.clear(); // ends the local game outside Game's own gameOver logic — nothing left to resume
     ui.endcard.showForcedEnd({ reason: "timeout", winnerIndex: 1 - flaggedIndex });
   }
 

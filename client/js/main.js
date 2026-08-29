@@ -20,6 +20,7 @@ import { initSettingsPanel } from "./ui/settingsPanel.js";
 import { initRulesPanel } from "./ui/rulesPanel.js";
 import { initAccountWidget } from "./ui/accountWidget.js";
 import { applyRatingUpdate, account } from "./account.js";
+import * as localGameStore from "./localGameStore.js";
 
 applySettings(); // sound volumes + require-confirm body class, before anything can play/render
 
@@ -94,7 +95,10 @@ function showScreen(screen) {
   // connection from before a completed/left match was already consumed
   // the moment Play was clicked (see onPlayBot). Without this, Play
   // silently does nothing until the person switches tabs away and back.
-  if (screen === menuScreen) menu.refreshBotsTabIfActive();
+  if (screen === menuScreen) {
+    menu.refreshBotsTabIfActive();
+    menu.refreshLocalContinueButton();
+  }
 }
 
 // The page-load reconnect flow (below) shows/hides the menu directly
@@ -368,7 +372,7 @@ function handleReconnectFailed() {
   });
 }
 
-function startGame(game, matchClient = null) {
+function startGame(game, matchClient = null, resumeClockSnapshot = null) {
   showScreen(gameScreen);
 
   ui?.destroy(); // tear down the previous match's listeners before reusing the same DOM
@@ -377,7 +381,7 @@ function startGame(game, matchClient = null) {
   const staticCanvas = document.getElementById("board-canvas-static");
   const renderer = new Renderer(canvas, staticCanvas, game.board, game.zoneRadius);
 
-  ui = new GameUI(game, renderer, canvas, matchClient);
+  ui = new GameUI(game, renderer, canvas, matchClient, resumeClockSnapshot);
   ui.init();
 }
 
@@ -551,6 +555,20 @@ const menu = new Menu({
     sound.matchStart();
     lastLocalParams = params;
     startGame(new Game(params));
+  },
+
+  onContinueLocal: () => {
+    const saved = localGameStore.load();
+    const result = saved && localGameStore.reconstruct(saved);
+    if (!result) {
+      localGameStore.clear(); // corrupt/stale — nothing usable to resume
+      menu.refreshLocalContinueButton();
+      return;
+    }
+    closeDanglingBrowsingConnections();
+    sound.matchStart();
+    lastLocalParams = saved.params; // so Rematch/Same Board on this resumed game work exactly like a freshly-started one
+    startGame(result.game, null, result.clockSnapshot);
   },
 
   onCreateMatch: async (nickname, params, rated) => {
@@ -756,9 +774,13 @@ document.getElementById("btnSameBoard").addEventListener("click", () => {
 // "Back to menu" — leaves any live match (harmless no-op for local hotseat,
 // which has no matchClient/connection to close) and tears down the current
 // GameUI so its clock intervals/timers don't keep running invisibly behind
-// the menu screen.
+// the menu screen. A local hotseat game being left here on purpose is
+// forgotten the same way leaveCurrentMatch() forgets an online session —
+// walking away deliberately isn't meant to be resumable; only an
+// unexpected reload/close is (see localGameStore.js).
 function goToMenu() {
   sound.uiBack();
+  if (ui && !ui.matchClient) localGameStore.clear();
   leaveCurrentMatch();
   ui?.destroy();
   ui = null;

@@ -4,6 +4,7 @@ import { sound } from "../audio/soundManager.js";
 import { account, onAccountChange } from "../account.js";
 import { signInWithGoogle } from "../net/authClient.js";
 import { promptNickname } from "./accountWidget.js";
+import * as localGameStore from "../localGameStore.js";
 
 // Same "zonegame.<thing>" key convention as matchClient.js's session storage.
 // localStorage (not sessionStorage): unlike match reconnect state.
@@ -13,8 +14,9 @@ const NICKNAME_KEY = "zonegame.nickname";
 // tabs. Emits fully-resolved params objects via callbacks — never hands raw
 // input values to the caller.
 export class Menu {
-  constructor({ onStartLocal, onCreateMatch, onJoinMatch, onJoinQueue, onLeaveQueue, onPlayBot, onRequestBotList }) {
+  constructor({ onStartLocal, onContinueLocal, onCreateMatch, onJoinMatch, onJoinQueue, onLeaveQueue, onPlayBot, onRequestBotList }) {
     this.onStartLocal = onStartLocal;
+    this.onContinueLocal = onContinueLocal;
     this.onCreateMatch = onCreateMatch;
     this.onJoinMatch = onJoinMatch;
     this.onJoinQueue = onJoinQueue;
@@ -40,6 +42,7 @@ export class Menu {
     this._renderRankedTab();
     this._renderCreateRatedToggle();
     this._syncNicknameFields();
+    this.refreshLocalContinueButton();
     onAccountChange(() => {
       this._renderRankedTab();
       this._renderCreateRatedToggle();
@@ -137,6 +140,7 @@ export class Menu {
       panels: [...document.querySelectorAll("#menuScreen .tab-panel")],
 
       btnLocal: document.getElementById("btnLocalGame"),
+      btnLocalContinue: document.getElementById("btnLocalContinue"),
       btnCreate: document.getElementById("btnCreateMatch"),
       btnJoin: document.getElementById("btnJoinMatch"),
 
@@ -230,6 +234,16 @@ export class Menu {
   refreshBotsTabIfActive() {
     const botsPanel = this.els.panels.find((p) => p.id === "tabBots");
     if (botsPanel?.classList.contains("active")) this.onRequestBotList?.();
+  }
+
+  // Shows/hides the Continue button based on whether a resumable local
+  // game currently exists — called once at startup and every time the
+  // menu screen comes back into view (main.js's showScreen()), so it
+  // stays accurate after a local game ends/is left (both of which clear
+  // the save — see localGameStore.js) without needing its own dedicated
+  // "local game state changed" event.
+  refreshLocalContinueButton() {
+    this.els.btnLocalContinue.hidden = !localGameStore.hasSaved();
   }
 
   _selectTab(tabId) {
@@ -343,6 +357,10 @@ export class Menu {
     this.els.btnLocal.addEventListener("click", () => {
       sound.uiConfirm();
       this.onStartLocal(this.localSection.buildParams());
+    });
+    this.els.btnLocalContinue.addEventListener("click", () => {
+      sound.uiConfirm();
+      this.onContinueLocal();
     });
 
     // Keep the Create/Join/Quick Play nickname fields in sync (one
