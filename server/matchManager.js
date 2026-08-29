@@ -1,6 +1,47 @@
 import { randomUUID } from "crypto";
 import { Match } from "./match.js";
 import { finalizeRatedGame, finalizeUnratedGame } from "./ratingService.js";
+import { shortId } from "./logger.js";
+import { MSG } from "../shared/net/protocol.js";
+
+// The one place that couples a live networked Match to ratingService.js's
+// network-free finalize* shape — see ratingService.js's top comment for
+// the other producer (bot/selfPlayScheduler.js), which builds the same
+// shape directly from a bare Game, no Match involved. onRatingUpdate is
+// only meaningful here (a self-play game has no client to notify).
+function gameResultFromMatch(match) {
+  const [p0, p1] = match.players;
+  return {
+    player0AccountId: p0.accountPlayerId,
+    player1AccountId: p1.accountPlayerId,
+    winnerIndex: match.endInfo?.winnerIndex ?? null,
+    endReason: match.endInfo?.reason ?? null,
+    scores: match.game.players.map((p) => p.score),
+    totalBoardPoints: match.game.totalBoardPoints,
+    remainingPossiblePoints: match.game.remainingPossiblePoints,
+    // match.params is the pre-game config and never carries a seed — the
+    // actual per-game seed (and startingPlayerIndex) only exist on
+    // activeParams once the game has started, which it always has by the
+    // time a game can finish. See db.js's `seed` column comment.
+    seed: match.activeParams.seed,
+    paramsJson: JSON.stringify(match.activeParams),
+    startedAt: match._gameStartedAt,
+    matchType: match.matchType,
+    origin: match.origin,
+    logLabel: shortId(match.matchId),
+    // Personalized so each client just reads "my" before/after without
+    // having to know its own playerIndex maps to p0 vs p1 — mirrors how
+    // the endcard already frames everything as viewer-relative.
+    onRatingUpdate: (r0, r1) =>
+      match.broadcastPersonalized((p) => ({
+        type: MSG.RATING_UPDATE,
+        ratingBefore: p.playerIndex === 0 ? r0.ratingBefore : r1.ratingBefore,
+        ratingAfter: p.playerIndex === 0 ? r0.ratingAfter : r1.ratingAfter,
+        opponentRatingBefore: p.playerIndex === 0 ? r1.ratingBefore : r0.ratingBefore,
+        opponentRatingAfter: p.playerIndex === 0 ? r1.ratingAfter : r0.ratingAfter,
+      })),
+  };
+}
 
 function genInviteCode() {
   // 6 char, readable alphabet (no 0/O/1/I confusion)
@@ -56,8 +97,9 @@ export class MatchManager {
     // actually ends), so it always sees the real match by then.
     let match;
     const onGameEnd = () => {
-      if (match.rated) finalizeRatedGame(match);
-      else finalizeUnratedGame(match);
+      const result = gameResultFromMatch(match);
+      if (match.rated) finalizeRatedGame(result);
+      else finalizeUnratedGame(result);
     };
     match = new Match(
       matchId,

@@ -2,6 +2,11 @@ import { isAdminConfigured, isAuthorizedAdmin } from "./adminAuth.js";
 import { getRecentLogs, log } from "./logger.js";
 import { listBotPlayers, setBotActive, findOrCreateBotPlayer, botKeyFromRow } from "./bot/botRepository.js";
 import { KNOWN_BOT_KEYS } from "./bot/botRegistry.js";
+import {
+  startSelfPlayScheduler,
+  stopSelfPlayScheduler,
+  getSelfPlaySchedulerStatus,
+} from "./bot/selfPlayScheduler.js";
 import { processMetrics } from "./metrics.js";
 import { versionInfo } from "./version.js";
 import {
@@ -237,6 +242,25 @@ export async function handleAdminRequest(req, res, url, ctx) {
     const id = parseId(parts[2]);
     if (id == null) return json(res, 400, { error: "Invalid bot id" }), true;
     json(res, 200, getBotPerformance(id));
+    return true;
+  }
+
+  // GET /admin/self-play — scheduler status (docs/BOTS.md Phase 3)
+  if (parts.length === 2 && parts[1] === "self-play" && req.method === "GET") {
+    json(res, 200, getSelfPlaySchedulerStatus());
+    return true;
+  }
+
+  // POST /admin/self-play/enabled  { enabled: boolean } — starts/stops
+  // continuous eve self-play. Off by default on every process start
+  // (see selfPlayScheduler.js) — this is the only way to turn it on.
+  if (parts.length === 3 && parts[1] === "self-play" && parts[2] === "enabled" && req.method === "POST") {
+    const body = await readJsonBody(req);
+    if (!body || typeof body.enabled !== "boolean") return json(res, 400, { error: "Body must be { enabled: boolean }" }), true;
+    if (body.enabled) startSelfPlayScheduler();
+    else stopSelfPlayScheduler();
+    log(`admin: self-play scheduler ${body.enabled ? "enabled" : "disabled"}`);
+    json(res, 200, getSelfPlaySchedulerStatus());
     return true;
   }
 

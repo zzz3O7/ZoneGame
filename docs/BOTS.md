@@ -61,7 +61,8 @@ persisted to the `games` table (see Schema below).
 ### `match.matchType` — `'pvp' | 'pve' | 'eve'`
 
 Who is playing. Drives leaderboard inclusion, rating-weight training on
-human-only games, stats queries. (`eve` isn't wired up anywhere yet — Phase 3.)
+human-only games, stats queries. `eve` also selects a reduced rating weight
+(`ratingWeightForMatchType` in rating.js) — see Phase 3 below.
 
 ### `match.origin` — `'matchmaking' | 'direct_debug' | 'self_play_scheduler'`
 
@@ -72,7 +73,7 @@ How the match was entered. Drives side effects:
 - bot post-game behavior (accept-and-linger vs. leave-after-a-pause)
 - queue involvement
 
-(`self_play_scheduler` isn't wired up anywhere yet — Phase 3.)
+`self_play_scheduler` is now wired up — see Phase 3 below.
 
 ### `player.isBot`
 
@@ -89,7 +90,7 @@ leaderboards, etc.
 | pvp        | matchmaking            | n/a (human)  | yes            | normal — either side can request              |
 | pve        | matchmaking            | human-pacing | yes            | bot never accepts; leaves 1–5s after game end |
 | pve        | direct_debug           | none         | **no**         | bot always accepts instantly; lingers otherwise |
-| eve        | self_play_scheduler    | n/a (Phase 3, not implemented) | yes  | n/a                                    |
+| eve        | self_play_scheduler    | none (fast-sim, no clock) | yes, at reduced weight (see rating.js's `EVE_RATING_WEIGHT`) | n/a — no rematch concept, scheduler just plays the next pair |
 
 ---
 
@@ -738,13 +739,31 @@ proposed as the eval spread between the best and second-best candidate move
 how a real player actually hesitates. Not implemented yet — no tier has a
 real eval to take a spread from until tier 3 lands.
 
-## Phase 3 — Population health (not started)
+## Phase 3 — Population health (in progress)
 
-- [ ] EvE fast-sim path via `self_play_scheduler`: no PlayerAgent notification overhead
-      needed (no human to notify), no wall-clock pacing. Can reuse `shared/engine/game.js`
+- [x] EvE fast-sim path via `self_play_scheduler`: no PlayerAgent notification overhead
+      needed (no human to notify), no wall-clock pacing. Reuses `shared/engine/game.js`
       directly rather than the full match orchestration layer — no seamlessness
-      requirement to protect here, only ruleset correctness.
-- [ ] Scheduler cadence/backlog strategy for keeping bot ratings live
+      requirement to protect here, only ruleset correctness. See
+      `server/bot/selfPlayScheduler.js`.
+- [x] Scheduler cadence/backlog strategy for keeping bot ratings live: continuous,
+      one game at a time, round-robin over every pair of currently-active bots
+      (rebuilt from `listActiveBotPlayers()` every game, so an admin toggle takes
+      effect on the very next game). Each move yields the event loop via
+      `setImmediate` rather than running a whole game in one synchronous call
+      stack, so a slow solver-tier search can never stall real player traffic.
+      Off by default on every process start; toggled at runtime via
+      `POST /admin/self-play/enabled { enabled }` (`GET /admin/self-play` for
+      status) — never auto-started at deploy time.
+- [x] Rating impact at reduced weight: `eve` games use `EVE_RATING_WEIGHT` (0.4,
+      uncalibrated starting guess) in `rating.js`'s `ratingWeightForMatchType`,
+      which blends both the mu delta and the sigma shrinkage toward "no update"
+      rather than flatly discounting mu alone — weight=1 (every pvp/pve game) is
+      an exact no-op against the pre-Phase-3 unweighted math. This required
+      refactoring `ratingService.js`'s `finalizeRatedGame`/`finalizeUnratedGame`
+      to take a plain game-result object instead of a live `Match` instance, so
+      the scheduler (which never builds a `Match`) and `matchManager.js` (which
+      does) can feed the exact same pipeline — see that file's top comment.
 - [ ] Move variance for bots without a real eval-noise model (ties back to Phase 2)
 - [ ] Occasional bot-for-human matchmaking at scale, to keep human ratings from going
       stale when there aren't enough humans online (lowest priority — different problem

@@ -195,3 +195,25 @@ export function winProbability({ muA, sigmaA, muB, sigmaB }) {
   const c = Math.sqrt(sigmaA * sigmaA + sigmaB * sigmaB + 2 * TAU_GLOBAL * TAU_GLOBAL);
   return normalCdf((muA - muB) / c);
 }
+
+// --- Rating weight by match_type ----------------------------------------
+
+// eve (bot self-play, see docs/BOTS.md Phase 3) moves ratings less than a
+// normal pvp/pve game: it's cheap, high-volume, and bot-vs-bot skill
+// isn't quite the same population as bot-vs-human, so a single self-play
+// result should count for less evidence than a real game against a
+// human. 0.4 is a starting guess, not calibrated — revisit once
+// self-play has actually run long enough to compare bot ladder stability
+// against the pve/pvp-only baseline.
+const EVE_RATING_WEIGHT = 0.4;
+
+const RATING_WEIGHT_BY_MATCH_TYPE = { eve: EVE_RATING_WEIGHT };
+
+// finalizeRatedGame's one hook into "how much should this game move
+// ratings" — anything not listed here (pvp, pve) gets the normal full
+// weight. A weight of 1 must be a true no-op vs. the old unweighted
+// math (see finalizeRatedGame's blend), which is what makes adding a
+// new entry here safe without touching the update math itself.
+export function ratingWeightForMatchType(matchType) {
+  return RATING_WEIGHT_BY_MATCH_TYPE[matchType] ?? 1;
+}
