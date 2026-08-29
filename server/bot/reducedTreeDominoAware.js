@@ -154,7 +154,27 @@ function id(node) {
 // returns win:false for an empty fragment list - so a zone with zero
 // live components just correctly reports "mover loses" without this
 // function needing to know that's a degenerate case.
-export function jointDominoAware(nodes, moverDom, oppDom, memo = new Map()) {
+// Global by default, unlike buildMemo in buildComponentTree - and safe
+// to be, for a different reason than canonicalRegistry's "shape is
+// shape regardless of zone" argument, though it lands in the same
+// place: a key here is (sorted canonical node ids, moverDom, oppDom).
+// Node ids are only ever assigned to nodes that already went through
+// canonicalize(), so two unrelated zones producing the "same" shape
+// were already sharing one node object before id() ever saw it - the
+// id is just a stable label for that already-shared identity. A cached
+// win/loss result under that id is correct forever, independent of
+// which zone or which ZoneSolver instance the shape came from, so
+// there's no analogue here of the raw-mask hazard buildMemo has (see
+// buildComponentTree/buildTree - THAT one must stay per-call/explicit,
+// since a raw mask only means something relative to one specific
+// ZoneSolver's own cell-to-bit assignment, and the bot constructs a
+// fresh ZoneSolver for nearly every evaluation - see solverBot.js -
+// so there isn't even a stable instance to key persistence off of).
+// A caller can still pass its own memo (every existing call site does,
+// for test isolation) - this only changes what happens when one isn't
+// supplied.
+const globalJointMemo = new Map();
+export function jointDominoAware(nodes, moverDom, oppDom, memo = globalJointMemo) {
   const key = `${nodes.map(id).sort((a, b) => a - b).join(",")}|${moverDom}|${oppDom}`;
   const cached = memo.get(key);
   if (cached !== undefined) return cached;
