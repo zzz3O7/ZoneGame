@@ -137,26 +137,42 @@ function id(node) {
 // smaller key: "X leads with 2 vs Y's 1" and "Y leads with 2 vs X's 1"
 // are the same state now, since nothing in the game can tell X and Y
 // apart except their counts.
-export function jointDominoAware(nodeA, nodeB, moverDom, oppDom, memo = new Map()) {
-  const key = `${id(nodeA)}|${id(nodeB)}|${moverDom}|${oppDom}`;
+// `nodes` is an unordered collection, not a fixed pair: which array slot
+// a component sits in has no bearing on the game, only which components
+// remain and what shape each one is. So the memo key sorts the ids
+// rather than trusting array order - without that, "move in component 0
+// then component 2" and "move in component 2 then component 0" reach
+// the identical resulting state but would never share a cache entry,
+// and that duplication only gets worse as N grows (up to N! ways to
+// reach the same state). This also fixes a real (if minor) inefficiency
+// the old fixed-pair version had: jointDominoAware(X, Y, ...) and
+// jointDominoAware(Y, X, ...) used to be different memo entries for the
+// same state; sorting collapses them into one.
+//
+// An empty array falls out correctly with no special-casing: every() on
+// [] is vacuously true, fragments is [], and solveResidual already
+// returns win:false for an empty fragment list - so a zone with zero
+// live components just correctly reports "mover loses" without this
+// function needing to know that's a degenerate case.
+export function jointDominoAware(nodes, moverDom, oppDom, memo = new Map()) {
+  const key = `${nodes.map(id).sort((a, b) => a - b).join(",")}|${moverDom}|${oppDom}`;
   const cached = memo.get(key);
   if (cached !== undefined) return cached;
 
-  let result;
-  if (nodeA.leaf && nodeB.leaf) {
-    const fragments = [...nodeA.fragments, ...nodeB.fragments];
+  let result = false;
+  if (nodes.every((n) => n.leaf)) {
+    const fragments = nodes.flatMap((n) => n.fragments);
     result = solveResidual(fragments, moverDom, oppDom).win;
   } else {
-    const options = [];
-    if (!nodeA.leaf) for (const child of nodeA.children) options.push([child, nodeB]);
-    if (!nodeB.leaf) for (const child of nodeB.children) options.push([nodeA, child]);
-
-    result = false;
-    for (const [newA, newB] of options) {
-      const childWins = jointDominoAware(newA, newB, oppDom, moverDom, memo);
-      if (!childWins) {
-        result = true;
-        break;
+    outer: for (let i = 0; i < nodes.length; i++) {
+      if (nodes[i].leaf) continue;
+      for (const child of nodes[i].children) {
+        const next = nodes.slice();
+        next[i] = child;
+        if (!jointDominoAware(next, oppDom, moverDom, memo)) {
+          result = true;
+          break outer;
+        }
       }
     }
   }
