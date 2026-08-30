@@ -13,6 +13,7 @@
 import { MSG } from "../shared/net/protocol.js";
 import { botThinkDelayMs } from "./bot/botTiming.js";
 import { BOT_LEAVE_MIN_MS, BOT_LEAVE_RANGE_MS } from "./bot/botConfig.js";
+import { chooseMoveViaWorker } from "./bot/botWorkerClient.js";
 
 // Wraps a live WebSocket. Guards against a closed/null socket the same
 // way the old inline _sendTo helper did.
@@ -37,13 +38,19 @@ export class HumanAgent {
 // broadcasts (which happens synchronously inside Match.addPlayer's
 // _start()), match.game already exists.
 //
-// chooseMove(game, playerIndex) -> move | null is injected rather than
-// hardcoded, so swapping strength tiers (docs/BOTS.md Phase 2) never
-// touches this class — only which function gets passed in.
+// botKey (a string, e.g. "solver-01") is injected rather than a
+// resolved move-choosing function, so swapping strength tiers
+// (docs/BOTS.md Phase 2) never touches this class — only which key gets
+// passed in. It's also the only form a move computation CAN be handed
+// off in: the actual chooseMove(game, playerIndex) function runs inside
+// the bot compute worker now (botWorkerClient.js/botWorker.js), not on
+// this thread, and a live function reference can't cross that boundary
+// — only plain data can. See botWorker.js's top comment for why the
+// move computation lives over there at all.
 export class BotAgent {
-  constructor(match, chooseMove) {
+  constructor(match, botKey) {
     this.match = match;
-    this.chooseMove = chooseMove;
+    this.botKey = botKey;
     this._thinkTimer = null;
     this._afterGameTimer = null;
   }
@@ -112,13 +119,52 @@ export class BotAgent {
     this._thinkTimer = setTimeout(() => this._move(player), delay);
   }
 
-  _move(player) {
+  // True iff it's still safe to apply a move for `player`: the match is
+  // still active, still on the same Game instance it was when this
+  // agent started thinking (a rematch swaps in a brand new Game — see
+  // Match._start — and this class's Match reference outlives any single
+  // game), and it's still that player's turn. Checked both before
+  // dispatching to the worker and again after it responds — the second
+  // check matters now in a way it didn't when this was synchronous: the
+  // worker round-trip is a real await, during which the game can end,
+  // rematch into a new game, or (in principle) the turn can move on some
+  // other way.
+  _canMoveNow(player, gameAtDispatch) {
     const { match } = this;
-    // Stale-timer guard: something else could have ended the game or
-    // advanced the turn again in the time this was scheduled to wait.
-    if (match.status !== "active" || player.playerIndex !== match.game.currentPlayerIndex) return;
+    return match.status === "active" && match.game === gameAtDispatch && player.playerIndex === match.game.currentPlayerIndex;
+  }
 
-    const move = this.chooseMove(match.game, player.playerIndex);
+  async _move(player) {
+    const { match } = this;
+    const gameAtDispatch = match.game;
+    if (!this._canMoveNow(player, gameAtDispatch)) return;
+
+    // The actual move computation runs inside the bot compute worker,
+    // not here — see botWorker.js's top comment for why. match.actions
+    // is the same replay log match.js already keeps for reconnect/
+    // resync; the worker reconstructs an equivalent Game from
+    // (activeParams, actions) rather than needing the live Game object,
+    // which can't cross a thread boundary.
+    let move;
+    try {
+      move = await chooseMoveViaWorker({
+        botKey: this.botKey,
+        params: match.activeParams,
+        actions: match.actions,
+        playerIndex: player.playerIndex,
+      });
+    } catch (err) {
+      // The bot simply doesn't move this turn — same visible outcome as
+      // any other reason a bot might stall, and its clock keeps running
+      // same as a human's would. Not expected in normal operation (see
+      // botWorkerClient.js's own crash/respawn handling), so this is
+      // logged as a real problem rather than silently swallowed.
+      console.error(`bot move computation failed (${this.botKey}): ${err.message}`);
+      return;
+    }
+
+    if (!this._canMoveNow(player, gameAtDispatch)) return; // match ended, rematched into a new game, or turn moved on while this was in flight
+
     if (move) {
       match.attemptMove(this, move.pieceType, move.shape, move.anchorRow, move.anchorCol);
     } else {

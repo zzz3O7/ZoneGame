@@ -31,8 +31,9 @@ directly, using itself (`this`) as the agent for identity lookups
 
 - **`HumanAgent`** — wraps a live WebSocket. `send(msg)` guards against a
   closed/null socket and serializes to JSON.
-- **`BotAgent`** — constructed with a direct `Match` reference and an injected
-  `chooseMove(game, playerIndex)` function. Reacts to `send(msg)` by:
+- **`BotAgent`** — constructed with a direct `Match` reference and a `botKey`
+  string (not a resolved move function — see "Bot compute worker" below for
+  why). Reacts to `send(msg)` by:
   - `MATCH_START` / `MOVE_APPLIED` (non-terminal) → schedules a "think" via
     `_maybeThink()`, which checks whether it's actually this bot's turn before
     scheduling anything.
@@ -41,9 +42,73 @@ directly, using itself (`this`) as the agent for identity lookups
   - `OPPONENT_LEFT` → clears any pending timers.
   - `OPPONENT_WANTS_REMATCH` → see below.
 
-Match code has zero branching on player type — no `if (isBot)` anywhere in
-`match.js`. This is what makes bot play seamless: not by faking a socket, but
-because there is structurally one path a move can take into the engine
+## Bot compute worker
+
+Every bot move — a live match's single move via `BotAgent._move()`, and every
+move of every self-play game (Phase 3 below) — actually runs inside a
+persistent `worker_threads` Worker (`server/bot/botWorker.js`), not on the
+main thread. `server/bot/botWorkerClient.js` is the main-thread handle.
+
+Two independent workers, not one shared one: a `chooseMoveViaWorker` channel
+for live-match moves, and a separate `playSelfPlayGameViaWorker` channel for
+self-play. This split matters because a self-play game is submitted as ONE
+atomic job (the whole game runs to completion inside `botWorker.js` before
+the next job starts — no yielding needed once it's off the main thread). With
+a single shared worker, a live player's bot move could get stuck in queue
+behind an entire in-progress self-play game — up to 5–15s+ for a heavy
+pairing, not just one move's wait. With two channels, a live move can never
+queue behind self-play or vice versa — confirmed directly: a live move
+dispatched mid-flight during a 7-second self-play game resolved in 44ms
+regardless. Each channel is still a single persistent worker (not a pool) —
+still one bot "thinking" per category at a time, matching the original
+design decision to keep self-play sequential; there's also no second CPU
+core on the current VPS to actually parallelize onto within a channel anyway
+(see below). Player experience takes priority over self-play throughput,
+which is the whole reason the split exists.
+
+This exists because a solver-tier bot's search is real, synchronous CPU work
+— confirmed by direct timing: `bot-solver-3` vs `bot-solver-3` runs
+individual moves at 300–700ms each, 5–15s+ for a full game. Run on the main
+thread, that's 300–700ms where the event loop cannot process anything else —
+including a real player's WebSocket message. `setImmediate`-style yielding
+between moves doesn't help here: it only stops many *cheap* moves from
+stacking up, it does nothing about a single *expensive* one, since the stall
+is inside that one synchronous call, not between calls.
+
+Moving that computation into a real OS thread fixes it even on a single-core
+box (this one has exactly one core) — a second thread doesn't add compute
+capacity there, but it does let the OS scheduler preempt it and give the main
+thread's event loop regular turns, instead of the main thread being unable to
+yield until a whole synchronous search finishes. Confirmed directly: with the
+worker in place, the main thread's own event loop showed worst-case ~2–17ms
+of jitter while a full `bot-solver-3` game ran in the background, vs. what
+would have been multi-hundred-ms freezes per move without it.
+
+One real trade-off: a **fresh worker's first job runs slower** (~2–3x
+observed) while V8 JIT-compiles its hot paths from scratch in that isolate —
+a one-time cost per process lifetime (the worker is long-lived, not
+respawned per job), not something that recurs per self-play cycle or per
+live bot move. Expect the first bot move/game after a deploy to be visibly
+slower than the ones right after it; that's normal, not a regression.
+
+For a live match: `BotAgent._move()` sends `{ botKey, params: match.activeParams,
+actions: match.actions, playerIndex }` to the worker and awaits the result.
+The worker can't be handed the live `Game` object (it can't cross a thread
+boundary), so instead it reconstructs an equivalent one via `new
+Game(params)` + replaying every logged action — the exact same
+"`new Game(params)` + replay the action log" reconstruction `match.js`'s
+`buildSyncState` already uses for reconnect/resync (see that method's
+comment), and that `client/js/net/matchClient.js` / `client/js/localGameStore.js`
+already do client-side. Nothing new was invented here; the worker just reuses
+a mechanism that already existed for a different reason. Since this crosses
+a real `await`, `BotAgent._canMoveNow()` re-checks match status, turn, *and*
+Game-instance identity (a rematch swaps in a brand new `Game`) both before
+dispatching and again once the worker responds — a race that couldn't happen
+under the old fully-synchronous design.
+
+Match code still has zero branching on player type — no `if (isBot)` anywhere
+in `match.js`. This is what makes bot play seamless: not by faking a socket,
+but because there is structurally one path a move can take into the engine
 regardless of source. Also the extension point for any future non-human agent
 (hint bot, replay/analysis agent, etc.) without touching match code again.
 
@@ -112,8 +177,10 @@ shared/engine/rules.js         + Rules.allLegalPlacements() (board-wide move enu
 
 `randomBotMove(game, playerIndex)` — uniformly random among
 `Rules.allLegalPlacements()`. Deliberately dumb; Phase 1 was about proving the
-pipeline, not bot strength. `BotAgent` takes `chooseMove` as a constructor
-argument specifically so Phase 2 can swap in a real evaluator without touching
+pipeline, not bot strength. `BotAgent` takes a `botKey` string as a constructor
+argument (resolved to an actual `chooseMove` function only inside the bot
+compute worker, not in `BotAgent` itself — see "Bot compute worker" above)
+specifically so Phase 2 can swap in a real evaluator without touching
 `BotAgent` itself.
 
 ### Move timing (`botTiming.js`)
@@ -722,14 +789,18 @@ implementation, the registry is what turns configs into named bots.
 
 A bot player row's `botKey` is recovered from its `google_sub`
 (`bot:${botKey}`) via `botKeyFromRow()` in `botRepository.js` — this is how
-`index.js` picks the right `chooseMove` for whichever bot row
-`pickClosestBot()`/`PLAY_BOT_REQUEST` resolved to, without hardcoding a
+`index.js` picks the right bot for whichever row `pickClosestBot()`/
+`PLAY_BOT_REQUEST` resolved to (passed to `BotAgent` as a string, then on to
+the compute worker — see "Bot compute worker" above), without hardcoding a
 single bot everywhere the way Phase 1 did.
 
-Performance/concurrency: staying on the main event loop for now (no worker
-threads) — exact zone solving is only expensive for wide-open zones, which is
-exactly where tier 3+ should fall back to a depth/state cap rather than fully
-solving anyway. Revisit if real numbers ever show main-thread blocking.
+Performance/concurrency: real numbers DID show main-thread blocking (see "Bot
+compute worker" above) — `bot-solver-3` runs 300–700ms/move, which is exactly
+the "revisit" trigger this note used to flag. Every bot move computation
+(this tier included) now runs inside `server/bot/botWorker.js`, off the main
+thread, rather than adding a depth/state cap to avoid the cost. Exact zone
+solving being expensive for wide-open zones is still true and still worth
+knowing, but it's no longer something the main thread needs protecting from.
 
 `botThinkDelayMs()` still has no concept of real search time. Direction
 agreed: weak tiers scale delay with legal move count (already true today via
@@ -757,15 +828,23 @@ real eval to take a spread from until tier 3 lands.
       not mid-sweep). THE CYCLE, not the pairing, is what's throttled — to
       `SELF_PLAY_CYCLES_PER_HOUR` (botConfig.js, currently 30/hr, uncalibrated).
       Pairings within a cycle run back-to-back with no delay between them; only
-      the start of each new cycle is paced to that ceiling. Independently of that,
-      each individual move (not just each pairing or cycle) still yields the
-      event loop via `setImmediate` rather than running a whole game in one
-      synchronous call stack, so a slow solver-tier search can never stall real
-      player traffic regardless of the throttle setting.
+      the start of each new cycle is paced to that ceiling.
       Off by default on every process start; toggled at runtime via the Bots tab
       in the admin panel, or directly via `POST /admin/self-play/enabled
       { enabled }` (`GET /admin/self-play` for status) — never auto-started at
       deploy time.
+- [x] Every self-play game (and, as a direct consequence, every live-match bot
+      move too) runs inside the bot compute worker described in "Bot compute
+      worker" above, not on the main thread — see that section for the full
+      story. This replaced an earlier per-move `setImmediate`-yielding
+      approach that turned out not to be enough: it prevented many *cheap*
+      moves from stacking up, but did nothing about a single *expensive* one
+      (confirmed: `bot-solver-3` moves cost 300–700ms of real synchronous
+      compute), which is what was actually causing noticeable lag. Moving the
+      whole self-play scheduler onto the worker also simplified it —
+      `selfPlayScheduler.js` no longer does any per-move bookkeeping at all,
+      just coordination (who plays whom, when) and the (cheap) DB write once a
+      worker job resolves.
 - [x] Rating impact at reduced weight: `eve` games use `EVE_RATING_WEIGHT` (0.4,
       uncalibrated starting guess) in `rating.js`'s `ratingWeightForMatchType`,
       which blends both the mu delta and the sigma shrinkage toward "no update"

@@ -18,7 +18,6 @@ import {
   TIME_PRESETS,
 } from "../shared/config.js";
 import { applyInactivityRegrowth } from "./rating.js";
-import { chooseMoveForBotKey } from "./bot/botRegistry.js";
 import { listActiveBotPlayers, pickClosestBot, botKeyFromRow } from "./bot/botRepository.js";
 import { displayRating } from "./playerRepository.js";
 
@@ -128,7 +127,7 @@ function matchBotFallback(entry, resolvedTimeMode, rated, remove) {
     humanAccountPlayerId: entry.accountPlayerId,
     botNickname: bot.nickname,
     botAccountPlayerId: bot.id,
-    makeBotAgent: (m) => new BotAgent(m, chooseMoveForBotKey(botKeyFromRow(bot))),
+    makeBotAgent: (m) => new BotAgent(m, botKeyFromRow(bot)),
     params,
     rated,
     origin: "matchmaking",
@@ -400,7 +399,7 @@ wss.on("connection", (ws, req) => {
           humanAccountPlayerId: ws.__accountPlayer?.id ?? null,
           botNickname: bot.nickname,
           botAccountPlayerId: bot.id,
-          makeBotAgent: (m) => new BotAgent(m, chooseMoveForBotKey(botKeyFromRow(bot))),
+          makeBotAgent: (m) => new BotAgent(m, botKeyFromRow(bot)),
           params,
           rated: false, // direct debug never affects rating — see docs/BOTS.md
           origin: "direct_debug",
