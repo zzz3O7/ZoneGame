@@ -83,8 +83,8 @@ function concreteDominoMoves(zoneSolver, mask) {
 // between calls (measured: no warming trend across 9 repeated calls on
 // one 12+12 zone, 8-24ms every time). With a shared buildMemo, only the
 // first call pays that cost.
-export function winningMoves(zoneSolver, rawMasks, moverDom, oppDom, memo, buildMemo = new Map(), maxComponentSize) {
-  const currentNodes = rawMasks.map((m) => buildComponentTree(zoneSolver, m, buildMemo, maxComponentSize));
+export function winningMoves(zoneSolver, rawMasks, moverDom, oppDom, memo, buildMemo = new Map(), maxComponentMoves) {
+  const currentNodes = rawMasks.map((m) => buildComponentTree(zoneSolver, m, buildMemo, maxComponentMoves));
   const moverWins = jointDominoAware(currentNodes, moverDom, oppDom, memo);
   const allLeaf = currentNodes.every((n) => n.leaf);
   const moves = [];
@@ -108,7 +108,7 @@ export function winningMoves(zoneSolver, rawMasks, moverDom, oppDom, memo, build
             continue;
           }
           const nextNodes = currentNodes.slice();
-          nextNodes[i] = buildComponentTree(zoneSolver, resultMask, buildMemo, maxComponentSize);
+          nextNodes[i] = buildComponentTree(zoneSolver, resultMask, buildMemo, maxComponentMoves);
           // Strict === false, not !result: a null (undetermined) reply
           // is not a proven opponent loss, and !null is true in JS -
           // treating it as falsy here would silently count an unknown
@@ -127,7 +127,7 @@ export function winningMoves(zoneSolver, rawMasks, moverDom, oppDom, memo, build
           moves.push({ componentIndex: i, type: "classical", cells: zoneSolver.cellsOfMask(m), resultMask });
           continue;
         }
-        const resultParts = buildComponentParts(zoneSolver, resultMask, buildMemo, maxComponentSize);
+        const resultParts = buildComponentParts(zoneSolver, resultMask, buildMemo, maxComponentMoves);
         const nextNodes = [...currentNodes.slice(0, i), ...resultParts, ...currentNodes.slice(i + 1)];
         if (jointDominoAware(nextNodes, oppDom, moverDom, memo) === false) {
           moves.push({ componentIndex: i, type: "classical", cells: zoneSolver.cellsOfMask(m), resultMask });
@@ -154,13 +154,13 @@ export function winningMoves(zoneSolver, rawMasks, moverDom, oppDom, memo, build
 // sub-millisecond-to-a-few-ms after). rawMasks must stay fixed for the
 // life of one table - this is the (M,M') table for one specific,
 // already-resolved classical leaf, not a moving target.
-export function buildZoneDominoTable(zoneSolver, rawMasks, maxDominoes = 2, maxComponentSize) {
+export function buildZoneDominoTable(zoneSolver, rawMasks, maxDominoes = 2, maxComponentMoves) {
   const jointMemo = new Map();
   const buildMemo = new Map();
   const table = {};
   for (let m = 0; m <= maxDominoes; m++) {
     for (let o = 0; o <= maxDominoes; o++) {
-      table[`${m},${o}`] = winningMoves(zoneSolver, rawMasks, m, o, jointMemo, buildMemo, maxComponentSize);
+      table[`${m},${o}`] = winningMoves(zoneSolver, rawMasks, m, o, jointMemo, buildMemo, maxComponentMoves);
     }
   }
   return table;
