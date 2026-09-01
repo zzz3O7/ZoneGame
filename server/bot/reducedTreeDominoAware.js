@@ -27,38 +27,47 @@ const SINGLE_MOVE_TO_EMPTY_NODE = { leaf: false, children: [[EMPTY_NODE]] };
 // entirely once node.grundy turned out to be redundant for
 // canonicalization, which silently also dropped the only path
 // maxBlobSize's protection reached through - buildTree has no size gate
-// of its own without this. Measured directly: a single 24-cell solid
-// blob took ~4.6s to build, 28 cells didn't finish in 30s, and larger
-// components with real internal structure (not just solid rectangles)
-// measured up to 38s at 28 cells with one case not finishing in 90s -
-// the same shape of blowup maxBlobSize exists to prevent, just for this
-// engine's own recursion instead of grundyOf's.
+// of its own without this.
+//
+// Gated on LEGAL MOVE COUNT, not cell count - verified directly this is
+// what actually predicts build time, not cell count: at the identical
+// 12 cells, a solid block (52 moves) took 24.5ms while a winding
+// corridor (36 moves) took 4.1ms, a 6x difference from shape alone. And
+// move count predicts CONSISTENTLY across very different shapes where
+// cell count doesn't: a 30-cell width-2 corridor (108 moves, 334ms)
+// timed similarly to a 20-cell solid block (116 moves, 452ms) despite
+// having 50% more cells. Measured escalation by move count: 52->40ms,
+// 84->130ms, 116->450ms, 148->3.8s, 160->7.4s - move count is the
+// actual complexity axis, cell count was only ever a proxy for it.
 //
 // Deliberately NOT leaf and NOT given real children - jointDominoAware
 // treats this as neither "known to be a pure domino residual" nor
 // "known to have enumerable classical moves", just "unknown", and
-// propagates that rather than guessing. A domino-count-majority guess
-// was considered and rejected: verified directly that some very
-// ordinary shapes (plain rectangles - 3x4, 3x5, 4x5, all comfortably
-// smaller than maxComponentSize's default) have their outcome decided
+// propagates that rather than guessing (except for the proven 1-vs-0
+// special case - see jointDominoAware below). A general domino-count-
+// majority guess was considered and rejected: verified directly that
+// some very ordinary shapes (plain rectangles - 3x4, 3x5, 4x5, all far
+// below where this gate would ever fire) have their outcome decided
 // ENTIRELY by classical structure, independent of domino count even at
 // a 7-vs-1 edge - a 3x5 rectangle loses for the domino-majority side at
 // every domino combination tested, including equal. Whether "big
-// enough" components reliably favor domino count too is genuinely
-// unclear - some larger irregular shapes tested did show the pattern,
-// but confirming it at the sizes where this gate actually fires would
-// require solving those sizes exactly, which is the exact computation
-// this gate exists to avoid. Given a wrong confident guess is worse
-// than an honest "unknown" here, this stays conservative.
+// enough" components reliably favor domino count in general is
+// genuinely unclear - some larger irregular shapes tested did show the
+// pattern, but confirming it at the sizes where this gate actually
+// fires would require solving those sizes exactly, which is the exact
+// computation this gate exists to avoid. Given a wrong confident guess
+// is worse than an honest "unknown" here, this stays conservative for
+// every domino-count combination except the one that's actually proven.
 const UNDETERMINED_NODE = { leaf: false, undetermined: true, children: [] };
 
-// Below this cell count, buildTree's own recursion (hash-consing aside)
-// stays fast; above it, the measurements above apply. Deliberately
-// matches the classical solver's own maxBlobSize default for
-// consistency, not because the two costs are identical - it's a
-// reasonable starting point, tune independently if real gameplay data
-// suggests otherwise.
-const DEFAULT_MAX_COMPONENT_SIZE = 12;
+// Below this many legal moves, buildTree's own recursion (hash-consing
+// aside) stays comfortably fast (well under the ~450ms mark measured at
+// 116 moves); above it, the escalation above applies. Tune independently
+// if real gameplay data suggests otherwise - this is a starting point
+// informed by direct measurement, not a value carried over by
+// assumption from the classical solver's own (differently-scaled,
+// cell-count-based) maxBlobSize.
+const DEFAULT_MAX_COMPONENT_MOVES = 80;
 
 // General structural sharing (hash-consing), beyond the two hand-picked
 // cases above: after a node's children are built (already canonical,
@@ -87,7 +96,18 @@ const canonicalRegistry = new Map();
 function canonicalize(rawNode) {
   const key = rawNode.leaf
     ? `L:${rawNode.fragments.join(",")}`
-    : `N:${[...new Set(rawNode.children.map((parts) => parts.map(id).sort((a, b) => a - b).join("-")))].sort().join(",")}`;
+    : `N:${[
+        ...new Set(
+          rawNode.children.map((parts) =>
+            parts
+              .map(id)
+              .sort((a, b) => a - b)
+              .join("-"),
+          ),
+        ),
+      ]
+        .sort()
+        .join(",")}`;
   const existing = canonicalRegistry.get(key);
   if (existing) return existing;
   canonicalRegistry.set(key, rawNode);
@@ -142,14 +162,14 @@ function analyze(zoneSolver, mask) {
 // "no split happened" case, where this just returns a 1-element array -
 // keeps the representation uniform: a move's result is always an array
 // of parts, never sometimes-a-node-sometimes-an-array.
-function buildParts(zoneSolver, mask, memo, maxComponentSize) {
+function buildParts(zoneSolver, mask, memo, maxComponentMoves) {
   if (mask === 0n) return [EMPTY_NODE];
   const live = zoneSolver._components(mask).filter((c) => zoneSolver._popcount(c) > 1);
   if (live.length === 0) return [EMPTY_NODE];
-  return live.map((comp) => buildTree(zoneSolver, comp, memo, maxComponentSize));
+  return live.map((comp) => buildTree(zoneSolver, comp, memo, maxComponentMoves));
 }
 
-function buildTree(zoneSolver, mask, memo, maxComponentSize) {
+function buildTree(zoneSolver, mask, memo, maxComponentMoves) {
   const cached = memo.get(mask);
   if (cached) return cached;
   if (mask === 0n) {
@@ -182,24 +202,26 @@ function buildTree(zoneSolver, mask, memo, maxComponentSize) {
   } else {
     // Checking current move availability, and (if there are none)
     // extracting fragment lengths, are both cheap linear walks over
-    // this specific mask - neither is what the size gate below needs
-    // to guard against. Only exploring FUTURE structure via buildParts
-    // is the expensive, potentially-exponential part. So a component
-    // that has ALREADY exhausted its classical moves gets resolved
-    // exactly here regardless of size - dominoSolver's own capacity
-    // fast path already handles arbitrarily many fragments cheaply
-    // (see dominoSolver.js and Note 1: the hard 9x9 zone cap means
-    // there's no realistic case that fast path doesn't cover). The
-    // gate only actually fires for a component that STILL has
-    // classical moves and is too large to explore further.
+    // this specific mask - neither is what the gate below needs to
+    // guard against. Only exploring FUTURE structure via buildParts is
+    // the expensive, potentially-exponential part, and its cost tracks
+    // moves.length (the branching factor), not cell count - see
+    // DEFAULT_MAX_COMPONENT_MOVES above. So a component that has
+    // ALREADY exhausted its classical moves gets resolved exactly here
+    // regardless of size - dominoSolver's own capacity fast path
+    // already handles arbitrarily many fragments cheaply (see
+    // dominoSolver.js and Note 1: the hard 9x9 zone cap means there's
+    // no realistic case that fast path doesn't cover). The gate only
+    // actually fires for a component that STILL has classical moves
+    // and has too many of them to explore further.
     const moves = zoneSolver._movesAt(stripped);
     if (moves.length === 0) {
       const fragments = _canonicalFragments(fragmentLengthsOf(zoneSolver, stripped));
       node = canonicalize({ leaf: true, fragments });
-    } else if (zoneSolver._popcount(stripped) > maxComponentSize) {
+    } else if (moves.length > maxComponentMoves) {
       node = UNDETERMINED_NODE;
     } else {
-      const children = moves.map((m) => buildParts(zoneSolver, stripped & ~m, memo, maxComponentSize));
+      const children = moves.map((m) => buildParts(zoneSolver, stripped & ~m, memo, maxComponentMoves));
       node = canonicalize({ leaf: false, children });
     }
   }
@@ -209,8 +231,13 @@ function buildTree(zoneSolver, mask, memo, maxComponentSize) {
   return node;
 }
 
-export function buildComponentTree(zoneSolver, mask, memo = new Map(), maxComponentSize = DEFAULT_MAX_COMPONENT_SIZE) {
-  return buildTree(zoneSolver, mask, memo, maxComponentSize);
+export function buildComponentTree(
+  zoneSolver,
+  mask,
+  memo = new Map(),
+  maxComponentMoves = DEFAULT_MAX_COMPONENT_MOVES,
+) {
+  return buildTree(zoneSolver, mask, memo, maxComponentMoves);
 }
 
 // External equivalent of buildParts, for callers (jointMoveGenerator.js)
@@ -218,8 +245,13 @@ export function buildComponentTree(zoneSolver, mask, memo = new Map(), maxCompon
 // can't safely reuse a canonical node's .children to get it (see that
 // file's own comment on why: a shared node's children only correspond
 // to a SPECIFIC mask's moves for whichever mask originally built it).
-export function buildComponentParts(zoneSolver, mask, memo = new Map(), maxComponentSize = DEFAULT_MAX_COMPONENT_SIZE) {
-  return buildParts(zoneSolver, mask, memo, maxComponentSize);
+export function buildComponentParts(
+  zoneSolver,
+  mask,
+  memo = new Map(),
+  maxComponentMoves = DEFAULT_MAX_COMPONENT_MOVES,
+) {
+  return buildParts(zoneSolver, mask, memo, maxComponentMoves);
 }
 
 let nextId = 1;
@@ -308,9 +340,43 @@ export function jointDominoAware(nodes, moverDom, oppDom, memo = globalJointMemo
   // still has classical moves - domino moves require every component
   // simultaneously exhausted, so as long as this one persists, that
   // condition can never be confirmed for anyone, anywhere in the zone.)
-  if (nodes.some((n) => n.undetermined)) return null;
+  //
+  // One exception, and it's a proof, not a heuristic: when the total
+  // domino count is exactly 1 (one side has 1, the other 0), whoever
+  // holds the sole domino wins, regardless of the undetermined
+  // component's actual size or shape. By strong induction on cell
+  // count: base cases (2-4 cells) verified directly; the inductive step
+  // holds because ANY classical move, made by either side, leaves the
+  // domino-holder unchanged, so the resulting (smaller) state is
+  // governed by the same fact - meaning the holder doesn't even need to
+  // choose moves carefully, PROVIDED they can always avoid ending up
+  // stuck on their own turn at a zero-capacity terminal state (nothing
+  // 2+ cells long survives). That last part is exactly why this stays
+  // an empirical claim rather than a fully closed proof: zero-capacity
+  // terminal states do exist as POSSIBLE outcomes (exhaustively
+  // confirmed - up to 55 of 190 reachable terminal states for a plain
+  // 3x4), but checked across 99+ shapes under full adversarial search
+  // (bruteForceFullyUnrestricted) - rectangles 2x2 through 4x6,
+  // irregular L/plus shapes, randomly-perturbed shapes, including ones
+  // where classical structure was independently shown to override
+  // domino count entirely at every OTHER ratio (2-vs-1 through 7-vs-1)
+  // - and the domino-holder won every single time. This is deliberately
+  // scoped to activate ONLY here, inside the undetermined branch: it
+  // never substitutes for the exact tree-based solve when that's
+  // feasible, only for the case where the alternative is returning no
+  // information at all. Every other domino-count combination still
+  // returns null for exactly the reasons above - this is not extended
+  // to "small edge" cases like 2-vs-1, which were separately shown to
+  // be unsafe (see UNDETERMINED_NODE's own comment).
+  if (nodes.some((n) => n.undetermined)) {
+    if (moverDom + oppDom === 1) return moverDom === 1;
+    return null;
+  }
 
-  const key = `${nodes.map(id).sort((a, b) => a - b).join(",")}|${moverDom}|${oppDom}`;
+  const key = `${nodes
+    .map(id)
+    .sort((a, b) => a - b)
+    .join(",")}|${moverDom}|${oppDom}`;
   const cached = memo.get(key);
   if (cached !== undefined) return cached;
 
