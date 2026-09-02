@@ -1,5 +1,6 @@
 import { fragmentLengthsOf } from "./fragmentExtractor.js";
 import { solveResidual, _canonicalFragments } from "./dominoSolver.js";
+import { canonicalShapeKey, canonicalTreeNodeCache, CANONICAL_MIN_CELLS } from "./canonicalShape.js";
 
 // Shared, globally-memoized constants. A mask with nothing left behaves
 // identically whether it's truly empty or a single dead cell (both have
@@ -200,29 +201,52 @@ function buildTree(zoneSolver, mask, memo, maxComponentMoves) {
   ) {
     node = SINGLE_MOVE_TO_EMPTY_NODE;
   } else {
-    // Checking current move availability, and (if there are none)
-    // extracting fragment lengths, are both cheap linear walks over
-    // this specific mask - neither is what the gate below needs to
-    // guard against. Only exploring FUTURE structure via buildParts is
-    // the expensive, potentially-exponential part, and its cost tracks
-    // moves.length (the branching factor), not cell count - see
-    // DEFAULT_MAX_COMPONENT_MOVES above. So a component that has
-    // ALREADY exhausted its classical moves gets resolved exactly here
-    // regardless of size - dominoSolver's own capacity fast path
-    // already handles arbitrarily many fragments cheaply (see
-    // dominoSolver.js and Note 1: the hard 9x9 zone cap means there's
-    // no realistic case that fast path doesn't cover). The gate only
-    // actually fires for a component that STILL has classical moves
-    // and has too many of them to explore further.
-    const moves = zoneSolver._movesAt(stripped);
-    if (moves.length === 0) {
-      const fragments = _canonicalFragments(fragmentLengthsOf(zoneSolver, stripped));
-      node = canonicalize({ leaf: true, fragments });
-    } else if (moves.length > maxComponentMoves) {
-      node = UNDETERMINED_NODE;
+    // A shape another caller already fully built - at ANY recursion
+    // depth, including one discovered mid-tree by a split, since this
+    // is the same buildTree() a split's buildParts() calls right back
+    // into - resolves here for free, checked BEFORE even computing
+    // _movesAt, let alone the maxComponentMoves gate. Geometry-keyed,
+    // not mask-keyed, so a rotated/mirrored/translated occurrence of a
+    // shape seen anywhere else (any zone, any ZoneSolver instance,
+    // built for the classical engine's own moves.length gate or this
+    // one) hits it too - see canonicalShape.js. Skipped below
+    // CANONICAL_MIN_CELLS, same reasoning as zoneSolver.js's grundyOf.
+    const useCanonical = zoneSolver._popcount(stripped) >= CANONICAL_MIN_CELLS;
+    const key = useCanonical ? canonicalShapeKey(zoneSolver.cellsOfMask(stripped)) : null;
+    const cachedGlobal = useCanonical ? canonicalTreeNodeCache.get(key) : undefined;
+    if (cachedGlobal !== undefined) {
+      node = cachedGlobal;
     } else {
-      const children = moves.map((m) => buildParts(zoneSolver, stripped & ~m, memo, maxComponentMoves));
-      node = canonicalize({ leaf: false, children });
+      // Checking current move availability, and (if there are none)
+      // extracting fragment lengths, are both cheap linear walks over
+      // this specific mask - neither is what the gate below needs to
+      // guard against. Only exploring FUTURE structure via buildParts is
+      // the expensive, potentially-exponential part, and its cost tracks
+      // moves.length (the branching factor), not cell count - see
+      // DEFAULT_MAX_COMPONENT_MOVES above. So a component that has
+      // ALREADY exhausted its classical moves gets resolved exactly here
+      // regardless of size - dominoSolver's own capacity fast path
+      // already handles arbitrarily many fragments cheaply (see
+      // dominoSolver.js and Note 1: the hard 9x9 zone cap means there's
+      // no realistic case that fast path doesn't cover). The gate only
+      // actually fires for a component that STILL has classical moves
+      // and has too many of them to explore further.
+      const moves = zoneSolver._movesAt(stripped);
+      if (moves.length === 0) {
+        const fragments = _canonicalFragments(fragmentLengthsOf(zoneSolver, stripped));
+        node = canonicalize({ leaf: true, fragments });
+      } else if (moves.length > maxComponentMoves) {
+        node = UNDETERMINED_NODE;
+      } else {
+        const children = moves.map((m) => buildParts(zoneSolver, stripped & ~m, memo, maxComponentMoves));
+        node = canonicalize({ leaf: false, children });
+      }
+      // Only a fully-built node is safe to share globally -
+      // UNDETERMINED_NODE means THIS call's own maxComponentMoves
+      // ceiling fired, which is a fact about this attempt, not the
+      // shape, so it must never be cached here (the very check above
+      // would then wrongly short-circuit a more generous caller too).
+      if (useCanonical && node !== UNDETERMINED_NODE) canonicalTreeNodeCache.set(key, node);
     }
   }
 
