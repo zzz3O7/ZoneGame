@@ -94,7 +94,7 @@ const DEFAULT_MAX_COMPONENT_MOVES = 80;
 // way the old single-node version collapsed moves leading to the
 // identical single node.
 const canonicalRegistry = new Map();
-function canonicalize(rawNode) {
+export function canonicalize(rawNode) {
   const key = rawNode.leaf
     ? `L:${rawNode.fragments.join(",")}`
     : `N:${[
@@ -204,18 +204,26 @@ function buildTree(zoneSolver, mask, memo, maxComponentMoves) {
     // A shape another caller already fully built - at ANY recursion
     // depth, including one discovered mid-tree by a split, since this
     // is the same buildTree() a split's buildParts() calls right back
-    // into - resolves here for free, checked BEFORE even computing
-    // _movesAt, let alone the maxComponentMoves gate. Geometry-keyed,
-    // not mask-keyed, so a rotated/mirrored/translated occurrence of a
-    // shape seen anywhere else (any zone, any ZoneSolver instance,
-    // built for the classical engine's own moves.length gate or this
-    // one) hits it too - see canonicalShape.js. Skipped below
-    // CANONICAL_MIN_CELLS, same reasoning as zoneSolver.js's grundyOf.
+    // into. Geometry-keyed, not mask-keyed, so a rotated/mirrored/
+    // translated occurrence of a shape seen anywhere else (any zone,
+    // any ZoneSolver instance) hits it too - see canonicalShape.js.
+    // Skipped below CANONICAL_MIN_CELLS - see canonicalShape.js.
+    //
+    // maxComponentMoves is a strength dial, not just a cost dial - a
+    // caller with a small gate must never solve something its own gate
+    // would reject just because a more generously-configured caller
+    // solved it first. So a cache hit is only trusted if the ENTRY's
+    // own root move count (recorded when it was built, monotonically
+    // bounds every move count anywhere in its subtree - shrinking a
+    // mask can only remove legal placements, never add them) is within
+    // THIS caller's own gate. Below that, it's as if the entry weren't
+    // there at all, and the shape gets rebuilt (and re-gated) from
+    // scratch, exactly as it would without any cache.
     const useCanonical = zoneSolver._popcount(stripped) >= CANONICAL_MIN_CELLS;
     const key = useCanonical ? canonicalShapeKey(zoneSolver.cellsOfMask(stripped)) : null;
-    const cachedGlobal = useCanonical ? canonicalTreeNodeCache.get(key) : undefined;
-    if (cachedGlobal !== undefined) {
-      node = cachedGlobal;
+    const cachedEntry = useCanonical ? canonicalTreeNodeCache.get(key) : undefined;
+    if (cachedEntry !== undefined && cachedEntry.requiredMoves <= maxComponentMoves) {
+      node = cachedEntry.node;
     } else {
       // Checking current move availability, and (if there are none)
       // extracting fragment lengths, are both cheap linear walks over
@@ -244,9 +252,12 @@ function buildTree(zoneSolver, mask, memo, maxComponentMoves) {
       // Only a fully-built node is safe to share globally -
       // UNDETERMINED_NODE means THIS call's own maxComponentMoves
       // ceiling fired, which is a fact about this attempt, not the
-      // shape, so it must never be cached here (the very check above
-      // would then wrongly short-circuit a more generous caller too).
-      if (useCanonical && node !== UNDETERMINED_NODE) canonicalTreeNodeCache.set(key, node);
+      // shape, so it must never be cached here (a later, smaller-gated
+      // caller's read check above would otherwise have nothing to
+      // compare against and could be tricked into trusting it).
+      if (useCanonical && node !== UNDETERMINED_NODE) {
+        canonicalTreeNodeCache.set(key, { node, requiredMoves: moves.length });
+      }
     }
   }
 
@@ -384,16 +395,55 @@ export function jointDominoAware(nodes, moverDom, oppDom, memo = globalJointMemo
   // irregular L/plus shapes, randomly-perturbed shapes, including ones
   // where classical structure was independently shown to override
   // domino count entirely at every OTHER ratio (2-vs-1 through 7-vs-1)
-  // - and the domino-holder won every single time. This is deliberately
-  // scoped to activate ONLY here, inside the undetermined branch: it
-  // never substitutes for the exact tree-based solve when that's
-  // feasible, only for the case where the alternative is returning no
-  // information at all. Every other domino-count combination still
-  // returns null for exactly the reasons above - this is not extended
-  // to "small edge" cases like 2-vs-1, which were separately shown to
-  // be unsafe (see UNDETERMINED_NODE's own comment).
+  // - and the domino-holder won every single time.
+  //
+  // Generalizes cleanly past exactly 1 domino: whichever side has ZERO
+  // dominoes can never spend one, period, for the rest of the game -
+  // that's a structural fact independent of how many the OTHER side
+  // holds, since a domino count only ever decreases by being spent.
+  // Extra dominoes beyond the one actually needed are pure surplus for
+  // whoever holds them: they never remove an option, and the opponent
+  // still can't contest a domino exchange no matter how large the gap
+  // gets. So n-vs-0 and 0-vs-n reduce to the exact same argument as
+  // 1-vs-0, for any n > 0. Re-verified directly (both directions, exact
+  // brute force, n up to 4) on a naturally-oversized 4x4 (84 root moves
+  // - genuinely exceeds the gate with no artificial forcing needed).
+  //
+  // SCOPE TRAP, worth flagging so it doesn't cost another session the
+  // same detour: this fact is NOT universally true for arbitrary small
+  // shapes tested via raw brute force outside of this branch - e.g. a
+  // plain 2x2 or 2x6 rectangle can resolve in one classical move that
+  // leaves the opponent with zero cells, winning outright regardless of
+  // anyone's domino count, which looks like a counterexample if you
+  // test the bare claim on toy shapes. That's not a counterexample to
+  // what's used here: this code path is only ever reached when the
+  // shape already exceeded DEFAULT_MAX_COMPONENT_MOVES (80), which by
+  // construction rules out exactly that kind of quick classical
+  // knockout - a shape with that many legal moves is structurally far
+  // from "resolves in one move" territory. Confirmed the pathology
+  // disappears exactly at the size where a shape naturally starts
+  // exceeding the real gate (a 2-row strip needs 12+ columns before it
+  // NEEDS 80+ moves at all, and by then both directions hold clean).
+  // Testing this fact means either using a real oversized shape or
+  // artificially forcing UNDETERMINED_NODE via a tiny maxComponentMoves
+  // on something with genuine multi-move complexity - never a plain
+  // small shape checked in isolation.
+  //
+  // moverDom === oppDom === 0 stays null deliberately: neither side can
+  // ever touch a domino, so the outcome is purely classical - exactly
+  // the thing this branch doesn't know. And this still doesn't extend
+  // to cases where BOTH sides hold at least one domino (2-vs-1 etc,
+  // which were separately shown to be unsafe - see UNDETERMINED_NODE's
+  // own comment) - only a hard zero on one side collapses the shared-
+  // budget problem entirely, which is what makes this safe at all.
+  //
+  // Deliberately scoped to activate ONLY here, inside the undetermined
+  // branch: it never substitutes for the exact tree-based solve when
+  // that's feasible, only for the case where the alternative is
+  // returning no information at all.
   if (nodes.some((n) => n.undetermined)) {
-    if (moverDom + oppDom === 1) return moverDom === 1;
+    if (oppDom === 0 && moverDom > 0) return true;
+    if (moverDom === 0 && oppDom > 0) return false;
     return null;
   }
 
