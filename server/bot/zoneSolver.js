@@ -1,6 +1,7 @@
 import { Shape, SHAPE_VARIANTS } from "../../shared/engine/shape.js";
 import { Board } from "../../shared/engine/board.js";
 import { ORTHOGONAL_OFFSETS } from "../../shared/engine/directions.js";
+import { canonicalShapeKey, canonicalGrundyCache, CANONICAL_MIN_CELLS } from "./canonicalShape.js";
 
 // Dominoes are deliberately excluded from this model entirely — not
 // just deprioritized, genuinely absent from the move set. A zone here
@@ -163,6 +164,14 @@ export class ZoneSolver {
   // call — a component can (and in real play very often does) further
   // fragment mid-recursion as pieces get placed inside it, and that's
   // exactly where most of the performance win comes from.
+  //
+  // A single connected component also checks the global canonical-
+  // shape cache (see canonicalShape.js) before anything else, keyed on
+  // the shape's geometry alone, not this instance's mask numbering or
+  // maxBlobSize — a shape already solved via ANY ZoneSolver instance
+  // (any zone, any bot preset, any rotation/mirror/translation of it)
+  // resolves instantly here too, and every fully-computed result this
+  // instance produces is shared back the same way.
   grundyOf(mask) {
     if (mask === 0n) return 0;
     const cached = this.grundyMemo.get(mask);
@@ -183,25 +192,46 @@ export class ZoneSolver {
         xorAcc ^= g;
       }
       result = unknown ? null : xorAcc;
-    } else if (this._popcount(mask) > this.maxBlobSize) {
-      result = null;
     } else {
-      const moves = this._movesAt(mask);
-      if (moves.length === 0) {
-        result = 0;
+      // Single connected component - this instance's own maxBlobSize
+      // gate is checked FIRST, before the global canonical cache is
+      // ever consulted: gates are strength dials, not just cost dials
+      // (see canonicalShape.js header), so a shape too big for THIS
+      // caller's ceiling must give up here regardless of whether some
+      // more generously-configured caller already solved it. A shape
+      // that passes its own gate can still skip recomputation via the
+      // cache below. Skipped below CANONICAL_MIN_CELLS - see
+      // canonicalShape.js.
+      const withinGate = this._popcount(mask) <= this.maxBlobSize;
+      const useCanonical = withinGate && this._popcount(mask) >= CANONICAL_MIN_CELLS;
+      const key = useCanonical ? canonicalShapeKey(this.cellsOfMask(mask)) : null;
+      const cachedGlobal = useCanonical ? canonicalGrundyCache.get(key) : undefined;
+      if (!withinGate) {
+        result = null;
+      } else if (cachedGlobal !== undefined) {
+        result = cachedGlobal;
       } else {
-        const seen = new Set();
-        let unknown = false;
-        for (const m of moves) {
-          const g = this.grundyOf(mask & ~m);
-          if (g === null) {
-            unknown = true;
-            break;
+        const moves = this._movesAt(mask);
+        if (moves.length === 0) {
+          result = 0;
+        } else {
+          const seen = new Set();
+          let unknown = false;
+          for (const m of moves) {
+            const g = this.grundyOf(mask & ~m);
+            if (g === null) {
+              unknown = true;
+              break;
+            }
+            seen.add(g);
           }
-          seen.add(g);
+          result = unknown ? null : mex(seen);
         }
-        result = unknown ? null : mex(seen);
       }
+      // Only a fully-computed result is safe to share globally - a
+      // null here means THIS call's own maxBlobSize ceiling fired,
+      // which is a fact about this attempt, not about the shape.
+      if (useCanonical && result !== null) canonicalGrundyCache.set(key, result);
     }
 
     this.grundyMemo.set(mask, result);

@@ -1,3 +1,7 @@
+"direct"/"invite" match origin, not "matchmaking"
+
+differentiate losing moves too
+
 bot logging: individual bot decisions stored for each match for each move. not global logging, so it can be viewed individually in the admin's panel
 
 scale thinking time with possible moves (for simple bots)
