@@ -190,9 +190,7 @@ async function loopTick() {
   // the point, not just an optimization.
   try {
     const { grundySaved, treeSaved } = await saveSelfPlayCanonicalCache();
-    if (grundySaved || treeSaved) {
-      log(`self-play: saved canonical cache (+${grundySaved} grundy, +${treeSaved} tree)`);
-    }
+    log(`self-play: saved canonical cache (+${grundySaved} grundy, +${treeSaved} tree)`);
   } catch (err) {
     log(`self-play: canonical cache save failed: ${err.message}`);
   }

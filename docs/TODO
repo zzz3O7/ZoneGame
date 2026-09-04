@@ -1,5 +1,9 @@
 "direct"/"invite" match origin, not "matchmaking"
 
+make MAX_COMPONENT_MOVES a strength dial too
+
+bot self play logging toggle
+
 SIGTERM/SIGINT shutdown hook to flush canonical cache before exit
 
 ??? differentiate losing moves too
