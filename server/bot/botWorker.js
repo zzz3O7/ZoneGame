@@ -20,6 +20,22 @@ import { parentPort } from "worker_threads";
 import { Game } from "../../shared/engine/game.js";
 import { chooseMoveForBotKey } from "./botRegistry.js";
 import { SELF_PLAY_MAX_MOVES } from "./botConfig.js";
+import { log } from "../logger.js";
+import { loadCanonicalCaches, saveCanonicalCaches } from "./canonicalCacheStore.js";
+
+// canonicalCacheStore.js talks to solverCache.db, not the live
+// player-facing zonegame.db — this file's "no DB access" rule above is
+// about keeping match/player/account data on the main thread, not
+// about solver infrastructure that's designed to be used from exactly
+// this kind of context. Loads once per worker spawn, for BOTH channels
+// (this file is shared — see botWorkerClient.js's top comment), so a
+// live-move worker's very first move can already benefit from shapes
+// self-play accumulated in a previous run, not just shapes solved
+// within its own lifetime.
+{
+  const { grundyLoaded, treeLoaded } = loadCanonicalCaches();
+  log(`bot worker: loaded canonical cache (${grundyLoaded} grundy, ${treeLoaded} tree)`);
+}
 
 // Reconstructs a Game from (params, actions) — the exact same
 // "new Game(params), then replay every logged action" reconstruction
@@ -88,7 +104,20 @@ function playSelfPlayGame({ botKeyA, botKeyB, params }) {
   };
 }
 
-const HANDLERS = { chooseMove, playSelfPlayGame };
+// Flushes this thread's newly-solved canonical shapes to solverCache.db
+// — see canonicalCacheStore.js's incremental-save tracking (only
+// entries added since this thread's own last save actually get
+// written, so repeated calls stay cheap). Triggered from the main
+// thread at whatever point makes sense for the caller's channel — see
+// selfPlayScheduler.js (self-play, once per cycle) and
+// playerAgent.js's BotAgent._onGameOver (live matches, once per
+// finished PvE game). Same handler serves both channels; only the
+// call site differs.
+function saveCache() {
+  return saveCanonicalCaches();
+}
+
+const HANDLERS = { chooseMove, playSelfPlayGame, saveCache };
 
 parentPort.on("message", (msg) => {
   try {

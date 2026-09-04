@@ -103,3 +103,25 @@ export function chooseMoveViaWorker({ botKey, params, actions, playerIndex }) {
 export function playSelfPlayGameViaWorker({ botKeyA, botKeyB, params }) {
   return submitSelfPlay("playSelfPlayGame", { botKeyA, botKeyB, params });
 }
+
+// Flushes the self-play worker's newly-solved canonical shapes to disk.
+// Called from selfPlayScheduler.js once per cycle — never mid-pairing,
+// see that file. Resolves to { grundySaved, treeSaved }.
+export function saveSelfPlayCanonicalCache() {
+  return submitSelfPlay("saveCache", {});
+}
+
+// Flushes the live-move worker's newly-solved canonical shapes to disk.
+// Called from playerAgent.js's BotAgent._onGameOver, once per finished
+// PvE match (after the game has ended, never mid-match). Runs on the
+// live-move channel itself, so it briefly queues behind (or ahead of)
+// any move request in flight at that moment — same as any other job on
+// this channel. Acceptable because canonicalCacheStore.js's incremental
+// save only writes shapes solved since this thread's own last save, so
+// a single match's flush is typically small once the cache has warmed
+// up (and worst case, a big novel match delays the next queued move by
+// however long that write takes — no live move is ever silently
+// dropped or reordered by this, just possibly delayed).
+export function saveLiveMoveCanonicalCache() {
+  return submitLiveMove("saveCache", {});
+}

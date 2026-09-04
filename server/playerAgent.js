@@ -13,7 +13,7 @@
 import { MSG } from "../shared/net/protocol.js";
 import { botThinkDelayMs } from "./bot/botTiming.js";
 import { BOT_LEAVE_MIN_MS, BOT_LEAVE_RANGE_MS } from "./bot/botConfig.js";
-import { chooseMoveViaWorker } from "./bot/botWorkerClient.js";
+import { chooseMoveViaWorker, saveLiveMoveCanonicalCache } from "./bot/botWorkerClient.js";
 
 // Wraps a live WebSocket. Guards against a closed/null socket the same
 // way the old inline _sendTo helper did.
@@ -96,6 +96,15 @@ export class BotAgent {
   _onGameOver() {
     clearTimeout(this._thinkTimer);
     clearTimeout(this._afterGameTimer);
+
+    // Flush whatever new canonical shapes this match's solver-tier
+    // moves added to the live-move worker's in-memory cache. Once per
+    // finished match, not mid-match. Fire-and-forget: nothing here
+    // needs to wait on it, and a failed save just means this match's
+    // new shapes stay in-memory-only until the next successful one —
+    // self-healing, not lost work (see botWorkerClient.js).
+    saveLiveMoveCanonicalCache().catch((err) => console.error(`live-move canonical cache save failed: ${err.message}`));
+
     if (this.match.origin === "direct_debug") return;
 
     const delay = BOT_LEAVE_MIN_MS + Math.random() * BOT_LEAVE_RANGE_MS;
@@ -131,7 +140,9 @@ export class BotAgent {
   // other way.
   _canMoveNow(player, gameAtDispatch) {
     const { match } = this;
-    return match.status === "active" && match.game === gameAtDispatch && player.playerIndex === match.game.currentPlayerIndex;
+    return (
+      match.status === "active" && match.game === gameAtDispatch && player.playerIndex === match.game.currentPlayerIndex
+    );
   }
 
   async _move(player) {

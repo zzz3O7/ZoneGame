@@ -38,7 +38,7 @@
 import { resolveParams } from "../../shared/params.js";
 import { createRng } from "../../shared/engine/rng.js";
 import { botKeyFromRow, listActiveBotPlayers } from "./botRepository.js";
-import { playSelfPlayGameViaWorker } from "./botWorkerClient.js";
+import { playSelfPlayGameViaWorker, saveSelfPlayCanonicalCache } from "./botWorkerClient.js";
 import { finalizeRatedGame } from "../ratingService.js";
 import { log } from "../logger.js";
 import { SELF_PLAY_RETRY_MS, SELF_PLAY_CYCLES_PER_HOUR } from "./botConfig.js";
@@ -182,6 +182,21 @@ async function loopTick() {
   const cycleStartedAt = Date.now();
   const completed = await runCycle(pairs);
   if (completed) stats.cyclesPlayed++;
+
+  // Once per cycle attempt, whether it ran to completion or was cut
+  // short (disabled mid-sweep, or a pairing threw) — a partial cycle
+  // still solved real shapes worth keeping. Never per-pairing or
+  // per-game; see canonicalCacheStore.js for why batching like this is
+  // the point, not just an optimization.
+  try {
+    const { grundySaved, treeSaved } = await saveSelfPlayCanonicalCache();
+    if (grundySaved || treeSaved) {
+      log(`self-play: saved canonical cache (+${grundySaved} grundy, +${treeSaved} tree)`);
+    }
+  } catch (err) {
+    log(`self-play: canonical cache save failed: ${err.message}`);
+  }
+
   if (!enabled) {
     looping = false; // cycle was abandoned (disabled or hit a bug) — just stop, no next cycle scheduled
     return;
