@@ -193,20 +193,23 @@ export class ZoneSolver {
       }
       result = unknown ? null : xorAcc;
     } else {
-      // Single connected component - a shape another ZoneSolver
-      // instance (a different bot preset's maxBlobSize, or the
-      // endgame search) already fully solved is available here for
-      // free, checked BEFORE this instance's own gate - so a shape
-      // that's too big for THIS caller's ceiling can still resolve
-      // instantly if some more generous caller solved it first.
-      // Skipped below CANONICAL_MIN_CELLS - see canonicalShape.js.
-      const useCanonical = this._popcount(mask) >= CANONICAL_MIN_CELLS;
+      // Single connected component - this instance's own maxBlobSize
+      // gate is checked FIRST, before the global canonical cache is
+      // ever consulted: gates are strength dials, not just cost dials
+      // (see canonicalShape.js header), so a shape too big for THIS
+      // caller's ceiling must give up here regardless of whether some
+      // more generously-configured caller already solved it. A shape
+      // that passes its own gate can still skip recomputation via the
+      // cache below. Skipped below CANONICAL_MIN_CELLS - see
+      // canonicalShape.js.
+      const withinGate = this._popcount(mask) <= this.maxBlobSize;
+      const useCanonical = withinGate && this._popcount(mask) >= CANONICAL_MIN_CELLS;
       const key = useCanonical ? canonicalShapeKey(this.cellsOfMask(mask)) : null;
       const cachedGlobal = useCanonical ? canonicalGrundyCache.get(key) : undefined;
-      if (cachedGlobal !== undefined) {
-        result = cachedGlobal;
-      } else if (this._popcount(mask) > this.maxBlobSize) {
+      if (!withinGate) {
         result = null;
+      } else if (cachedGlobal !== undefined) {
+        result = cachedGlobal;
       } else {
         const moves = this._movesAt(mask);
         if (moves.length === 0) {
