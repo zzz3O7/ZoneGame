@@ -1,6 +1,11 @@
 import { getPlayerById } from "./playerRepository.js";
 import { recordRatedGame, recordUnratedGame } from "./gameRepository.js";
-import { computeBinaryUpdate, computeMarginModifier, applyInactivityRegrowth, ratingWeightForMatchType } from "./rating.js";
+import {
+  computeBinaryUpdate,
+  computeMarginModifier,
+  applyInactivityRegrowth,
+  ratingWeightForMatchType,
+} from "./rating.js";
 import { log } from "./logger.js";
 
 // finalizeRatedGame/finalizeUnratedGame take a plain, already-finished
@@ -51,6 +56,7 @@ export function finalizeRatedGame({
   matchType,
   origin,
   logLabel = "-",
+  logResult = true,
   onRatingUpdate,
 }) {
   if (player0AccountId == null || player1AccountId == null) {
@@ -137,14 +143,16 @@ export function finalizeRatedGame({
     origin,
   });
 
-  log(
-    `Rated game ${logLabel}: ` +
-      `${player0.nickname ?? player0.email} ${ratingBefore0}->${ratingAfter0}, ` +
-      `${player1.nickname ?? player1.email} ${ratingBefore1}->${ratingAfter1} ` +
-      `(${endReason}, margin=${margin.toFixed(2)}, mod=${modifier.toFixed(3)}` +
-      (weight !== 1 ? `, weight=${weight}` : "") +
-      `, remaining=${remainingPossiblePoints}/${totalBoardPoints})`,
-  );
+  if (logResult) {
+    log(
+      `Rated game ${logLabel}: ` +
+        `${player0.nickname ?? player0.email} ${ratingBefore0}->${ratingAfter0}, ` +
+        `${player1.nickname ?? player1.email} ${ratingBefore1}->${ratingAfter1} ` +
+        `(${endReason}, margin=${margin.toFixed(2)}, mod=${modifier.toFixed(3)}` +
+        (weight !== 1 ? `, weight=${weight}` : "") +
+        `, remaining=${remainingPossiblePoints}/${totalBoardPoints})`,
+    );
+  }
 
   if (onRatingUpdate) {
     onRatingUpdate(

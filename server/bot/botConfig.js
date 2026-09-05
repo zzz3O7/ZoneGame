@@ -32,7 +32,7 @@ export const BOT_LEAVE_RANGE_MS = 9000;
 // absorb alongside real player traffic — and note a bigger active bot
 // pool means each cycle does more work (C(n,2) pairings), so the same
 // cycles/hour setting means more total games as the bot roster grows.
-export const SELF_PLAY_CYCLES_PER_HOUR = 30;
+export const SELF_PLAY_CYCLES_PER_HOUR = 60;
 
 // How long to wait before re-checking the active bot pool when there
 // currently aren't enough bots (0 or 1) to pair up — no point spinning a
@@ -46,3 +46,21 @@ export const SELF_PLAY_RETRY_MS = 5000;
 // placement loop), not a game that's merely "long". Enforced inside
 // botWorker.js, where self-play games actually run.
 export const SELF_PLAY_MAX_MOVES = 4000;
+
+// Whether finalizeRatedGame (ratingService.js) prints its per-game
+// "Rated game ...: X->Y, ..." line for self-play games specifically.
+// Off by default: a live PvP/PvE match producing that line is one
+// interesting event; a self-play cycle producing dozens of them per
+// sweep is just noise that drowns out everything else in the log
+// (cache load/save lines included). Live matches always log regardless
+// of this flag — see finalizeRatedGame's logResult param.
+export const SELF_PLAY_LOG_RESULTS = false;
+
+// Whether the self-play scheduler fetches and logs canonical cache
+// hit/miss/timing stats once per cycle (see canonicalShape.js,
+// selfPlayScheduler.js). Off by default: this is investigation-grade
+// output (full bucket JSON, every cycle, forever) meant for actively
+// tuning CANONICAL_MIN_CELLS or similar, not for routine operation.
+// When off, the scheduler skips the worker round-trip entirely, not
+// just the log line - so leaving this off costs nothing extra.
+export const SELF_PLAY_LOG_CACHE_STATS = true;

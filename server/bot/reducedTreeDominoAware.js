@@ -1,6 +1,17 @@
 import { fragmentLengthsOf } from "./fragmentExtractor.js";
 import { solveResidual, _canonicalFragments } from "./dominoSolver.js";
-import { canonicalShapeKey, canonicalTreeNodeCache, CANONICAL_MIN_CELLS } from "./canonicalShape.js";
+import {
+  canonicalShapeKey,
+  canonicalTreeNodeCache,
+  canonicalTreeNodeCacheLarge,
+  CANONICAL_MIN_CELLS,
+  CANONICAL_LARGE_SHAPE_CELLS,
+  recordTreeKeyTime,
+  recordTreeHit,
+  recordTreeMiss,
+  recordTreeGateRejected,
+} from "./canonicalShape.js";
+import { performance } from "node:perf_hooks";
 
 // Shared, globally-memoized constants. A mask with nothing left behaves
 // identically whether it's truly empty or a single dead cell (both have
@@ -115,6 +126,24 @@ export function canonicalize(rawNode) {
   return rawNode;
 }
 
+// Precautionary, not evidence-based like canonicalGrundyCacheLarge/
+// canonicalTreeNodeCacheLarge's boundary: neither canonicalRegistry nor
+// globalJointMemo (below) has a size gate at all - canonicalize() runs
+// for every node built, leaf or not, any size - and neither has been
+// measured under real tree-bot traffic yet, since no tree-capable bot
+// has been active in self-play. Clearing both per game costs nothing if
+// they turn out to be small/well-shared in practice (an empty-ish Map
+// is free to clear) and prevents unbounded growth if they're not, until
+// there's real hit/miss data - same instrumentation approach as
+// canonicalShape.js's stats, not yet wired here - to decide whether
+// either deserves a proper small/large split instead of a blanket
+// per-game clear. Called from the same per-game hooks as
+// clearLargeCanonicalCaches (see botWorker.js).
+export function clearEphemeralTreeCaches() {
+  canonicalRegistry.clear();
+  globalJointMemo.clear();
+}
+
 function isCollinear(cells) {
   const rows = new Set(cells.map(([r]) => r));
   const cols = new Set(cells.map(([, c]) => c));
@@ -220,11 +249,35 @@ function buildTree(zoneSolver, mask, memo, maxComponentMoves) {
     // there at all, and the shape gets rebuilt (and re-gated) from
     // scratch, exactly as it would without any cache.
     const useCanonical = zoneSolver._popcount(stripped) >= CANONICAL_MIN_CELLS;
-    const key = useCanonical ? canonicalShapeKey(zoneSolver.cellsOfMask(stripped)) : null;
-    const cachedEntry = useCanonical ? canonicalTreeNodeCache.get(key) : undefined;
+    // Same cell-count gate as CANONICAL_LARGE_SHAPE_CELLS in
+    // canonicalGrundyCache's read/write - see canonicalTreeNodeCacheLarge
+    // in canonicalShape.js for why this stays cell-count-based rather
+    // than switching to move count just because move count is the cost
+    // driver reported in the buckets below.
+    const treeCache =
+      zoneSolver._popcount(stripped) >= CANONICAL_LARGE_SHAPE_CELLS
+        ? canonicalTreeNodeCacheLarge
+        : canonicalTreeNodeCache;
+    let key = null;
+    let cachedEntry;
+    if (useCanonical) {
+      const t0 = performance.now();
+      key = canonicalShapeKey(zoneSolver.cellsOfMask(stripped));
+      recordTreeKeyTime(performance.now() - t0);
+      cachedEntry = treeCache.get(key);
+    }
     if (cachedEntry !== undefined && cachedEntry.requiredMoves <= maxComponentMoves) {
       node = cachedEntry.node;
+      if (useCanonical) recordTreeHit(cachedEntry.requiredMoves);
     } else {
+      // An entry existed but this caller's own gate rejected it (see the
+      // strength-dial rule above) - distinct from a true miss, still
+      // bucketed together on the build-time side since both pay full
+      // rebuild cost. Captured before the rebuild below overwrites
+      // nothing relevant, just so the record* call after knows which one
+      // this was.
+      const wasGateRejected = useCanonical && cachedEntry !== undefined;
+      const buildStart = useCanonical ? performance.now() : 0;
       // Checking current move availability, and (if there are none)
       // extracting fragment lengths, are both cheap linear walks over
       // this specific mask - neither is what the gate below needs to
@@ -249,6 +302,11 @@ function buildTree(zoneSolver, mask, memo, maxComponentMoves) {
         const children = moves.map((m) => buildParts(zoneSolver, stripped & ~m, memo, maxComponentMoves));
         node = canonicalize({ leaf: false, children });
       }
+      if (useCanonical) {
+        const buildMs = performance.now() - buildStart;
+        if (wasGateRejected) recordTreeGateRejected(moves.length, buildMs);
+        else recordTreeMiss(moves.length, buildMs);
+      }
       // Only a fully-built node is safe to share globally -
       // UNDETERMINED_NODE means THIS call's own maxComponentMoves
       // ceiling fired, which is a fact about this attempt, not the
@@ -256,7 +314,7 @@ function buildTree(zoneSolver, mask, memo, maxComponentMoves) {
       // caller's read check above would otherwise have nothing to
       // compare against and could be tricked into trusting it).
       if (useCanonical && node !== UNDETERMINED_NODE) {
-        canonicalTreeNodeCache.set(key, { node, requiredMoves: moves.length });
+        treeCache.set(key, { node, requiredMoves: moves.length });
       }
     }
   }

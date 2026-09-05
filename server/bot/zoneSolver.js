@@ -1,7 +1,17 @@
 import { Shape, SHAPE_VARIANTS } from "../../shared/engine/shape.js";
 import { Board } from "../../shared/engine/board.js";
 import { ORTHOGONAL_OFFSETS } from "../../shared/engine/directions.js";
-import { canonicalShapeKey, canonicalGrundyCache, CANONICAL_MIN_CELLS } from "./canonicalShape.js";
+import {
+  canonicalShapeKey,
+  canonicalGrundyCache,
+  canonicalGrundyCacheLarge,
+  CANONICAL_MIN_CELLS,
+  CANONICAL_LARGE_SHAPE_CELLS,
+  recordGrundyKeyTime,
+  recordGrundyHit,
+  recordGrundyMiss,
+} from "./canonicalShape.js";
+import { performance } from "node:perf_hooks";
 
 // Dominoes are deliberately excluded from this model entirely — not
 // just deprioritized, genuinely absent from the move set. A zone here
@@ -202,15 +212,29 @@ export class ZoneSolver {
       // that passes its own gate can still skip recomputation via the
       // cache below. Skipped below CANONICAL_MIN_CELLS - see
       // canonicalShape.js.
-      const withinGate = this._popcount(mask) <= this.maxBlobSize;
-      const useCanonical = withinGate && this._popcount(mask) >= CANONICAL_MIN_CELLS;
-      const key = useCanonical ? canonicalShapeKey(this.cellsOfMask(mask)) : null;
-      const cachedGlobal = useCanonical ? canonicalGrundyCache.get(key) : undefined;
+      const cells = this._popcount(mask);
+      const withinGate = cells <= this.maxBlobSize;
+      const useCanonical = withinGate && cells >= CANONICAL_MIN_CELLS;
+      // See CANONICAL_LARGE_SHAPE_CELLS in canonicalShape.js: measured
+      // negligible cross-game reuse at/above this size, so those shapes
+      // go in the ephemeral per-game cache instead of the persisted
+      // one - same read/write shape either way, just a different Map.
+      const grundyCache = cells >= CANONICAL_LARGE_SHAPE_CELLS ? canonicalGrundyCacheLarge : canonicalGrundyCache;
+      let key = null;
+      let cachedGlobal;
+      if (useCanonical) {
+        const t0 = performance.now();
+        key = canonicalShapeKey(this.cellsOfMask(mask));
+        recordGrundyKeyTime(performance.now() - t0);
+        cachedGlobal = grundyCache.get(key);
+      }
       if (!withinGate) {
         result = null;
       } else if (cachedGlobal !== undefined) {
         result = cachedGlobal;
+        if (useCanonical) recordGrundyHit(cells);
       } else {
+        const solveStart = useCanonical ? performance.now() : 0;
         const moves = this._movesAt(mask);
         if (moves.length === 0) {
           result = 0;
@@ -227,11 +251,12 @@ export class ZoneSolver {
           }
           result = unknown ? null : mex(seen);
         }
+        if (useCanonical) recordGrundyMiss(cells, performance.now() - solveStart);
       }
       // Only a fully-computed result is safe to share globally - a
       // null here means THIS call's own maxBlobSize ceiling fired,
       // which is a fact about this attempt, not about the shape.
-      if (useCanonical && result !== null) canonicalGrundyCache.set(key, result);
+      if (useCanonical && result !== null) grundyCache.set(key, result);
     }
 
     this.grundyMemo.set(mask, result);

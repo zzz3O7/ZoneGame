@@ -1,14 +1,12 @@
 "direct"/"invite" match origin, not "matchmaking"
 
+finish upper bound caching logic for tree bots too
+
 make MAX_COMPONENT_MOVES a strength dial too
-
-bot self play logging toggle
-
-SIGTERM/SIGINT shutdown hook to flush canonical cache before exit
 
 ??? differentiate losing moves too
 
-bot logging: individual bot decisions stored for each match for each move. not global logging, so it can be viewed individually in the admin's panel
+only allow bots on classical board
 
 scale thinking time with possible moves (for simple bots)
 and with move "complexity" for smarter bots

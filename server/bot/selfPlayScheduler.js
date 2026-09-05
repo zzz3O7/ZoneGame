@@ -38,10 +38,15 @@
 import { resolveParams } from "../../shared/params.js";
 import { createRng } from "../../shared/engine/rng.js";
 import { botKeyFromRow, listActiveBotPlayers } from "./botRepository.js";
-import { playSelfPlayGameViaWorker, saveSelfPlayCanonicalCache } from "./botWorkerClient.js";
+import { playSelfPlayGameViaWorker, getSelfPlayCanonicalCacheStats } from "./botWorkerClient.js";
 import { finalizeRatedGame } from "../ratingService.js";
 import { log } from "../logger.js";
-import { SELF_PLAY_RETRY_MS, SELF_PLAY_CYCLES_PER_HOUR } from "./botConfig.js";
+import {
+  SELF_PLAY_RETRY_MS,
+  SELF_PLAY_CYCLES_PER_HOUR,
+  SELF_PLAY_LOG_RESULTS,
+  SELF_PLAY_LOG_CACHE_STATS,
+} from "./botConfig.js";
 
 const MATCH_TYPE = "eve";
 const ORIGIN = "self_play_scheduler";
@@ -110,6 +115,7 @@ function recordGame(bots, boardSeed, params, result) {
     matchType: MATCH_TYPE,
     origin: ORIGIN,
     logLabel: `self-play ${bots[0].nickname} vs ${bots[1].nickname}`,
+    logResult: SELF_PLAY_LOG_RESULTS,
   });
   stats.gamesPlayed++;
   stats.lastGameEndedAt = result.endedAt;
@@ -183,16 +189,26 @@ async function loopTick() {
   const completed = await runCycle(pairs);
   if (completed) stats.cyclesPlayed++;
 
-  // Once per cycle attempt, whether it ran to completion or was cut
-  // short (disabled mid-sweep, or a pairing threw) — a partial cycle
-  // still solved real shapes worth keeping. Never per-pairing or
-  // per-game; see canonicalCacheStore.js for why batching like this is
-  // the point, not just an optimization.
-  try {
-    const { grundySaved, treeSaved } = await saveSelfPlayCanonicalCache();
-    log(`self-play: saved canonical cache (+${grundySaved} grundy, +${treeSaved} tree)`);
-  } catch (err) {
-    log(`self-play: canonical cache save failed: ${err.message}`);
+  // Gated, and skipped entirely (not just the log line) when off - this
+  // is investigation-grade instrumentation, see botConfig.js. Purely
+  // in-memory (Layer 1/2) stats - nothing here touches disk; canonical
+  // cache persistence was tried and removed (see canonicalShape.js's
+  // history on CANONICAL_LARGE_SHAPE_CELLS) once measurement showed the
+  // benefit capped at roughly one cycle's worth of warm-up regardless
+  // of how large the persisted file grew, while disk cost only grew.
+  if (SELF_PLAY_LOG_CACHE_STATS) {
+    try {
+      const { grundy: g, tree: t } = await getSelfPlayCanonicalCacheStats();
+      const pct = (r) => (r === null ? "n/a" : `${(r * 100).toFixed(1)}%`);
+      const ms = (v) => (v === null ? "n/a" : `${v.toFixed(3)}ms`);
+      log(
+        `self-play: cache stats — ` +
+          `grundy ${g.hits}/${g.hits + g.misses} hit (${pct(g.hitRate)}), size=${g.cacheSize}, sizeLarge=${g.cacheSizeLarge}, avgKey=${ms(g.avgKeyTimeMs)}, hitBuckets=${JSON.stringify(g.hitBuckets)}, solveBuckets=${JSON.stringify(g.solveBuckets)} | ` +
+          `tree ${t.hits}/${t.hits + t.misses + t.gateRejected} hit (${pct(t.hitRate)}), gateRejected=${t.gateRejected}, size=${t.cacheSize}, avgKey=${ms(t.avgKeyTimeMs)}, hitBuckets=${JSON.stringify(t.hitBuckets)}, buildBuckets=${JSON.stringify(t.buildBuckets)}`,
+      );
+    } catch (err) {
+      log(`self-play: canonical cache stats fetch failed: ${err.message}`);
+    }
   }
 
   if (!enabled) {

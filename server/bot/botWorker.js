@@ -21,21 +21,8 @@ import { Game } from "../../shared/engine/game.js";
 import { chooseMoveForBotKey } from "./botRegistry.js";
 import { SELF_PLAY_MAX_MOVES } from "./botConfig.js";
 import { log } from "../logger.js";
-import { loadCanonicalCaches, saveCanonicalCaches } from "./canonicalCacheStore.js";
-
-// canonicalCacheStore.js talks to solverCache.db, not the live
-// player-facing zonegame.db — this file's "no DB access" rule above is
-// about keeping match/player/account data on the main thread, not
-// about solver infrastructure that's designed to be used from exactly
-// this kind of context. Loads once per worker spawn, for BOTH channels
-// (this file is shared — see botWorkerClient.js's top comment), so a
-// live-move worker's very first move can already benefit from shapes
-// self-play accumulated in a previous run, not just shapes solved
-// within its own lifetime.
-{
-  const { grundyLoaded, treeLoaded } = loadCanonicalCaches();
-  log(`bot worker: loaded canonical cache (${grundyLoaded} grundy, ${treeLoaded} tree)`);
-}
+import { getAndResetCanonicalCacheStats, clearLargeCanonicalCaches } from "./canonicalShape.js";
+import { clearEphemeralTreeCaches } from "./reducedTreeDominoAware.js";
 
 // Reconstructs a Game from (params, actions) — the exact same
 // "new Game(params), then replay every logged action" reconstruction
@@ -94,6 +81,16 @@ function playSelfPlayGame({ botKeyA, botKeyB, params }) {
     moves++;
   }
 
+  // A large shape's only real reuse is within its own game's recursive
+  // exploration - see CANONICAL_LARGE_SHAPE_CELLS in canonicalShape.js.
+  // canonicalRegistry/globalJointMemo (reducedTreeDominoAware.js) are a
+  // separate, ungated, unmeasured concern - see clearEphemeralTreeCaches.
+  // Same-thread call, no message plumbing needed (unlike the live-move
+  // side, where a match spans many separate chooseMove calls instead of
+  // one synchronous function like this).
+  clearLargeCanonicalCaches();
+  clearEphemeralTreeCaches();
+
   return {
     winnerIndex: game.winnerIndex,
     scores: game.players.map((p) => p.score),
@@ -104,20 +101,28 @@ function playSelfPlayGame({ botKeyA, botKeyB, params }) {
   };
 }
 
-// Flushes this thread's newly-solved canonical shapes to solverCache.db
-// — see canonicalCacheStore.js's incremental-save tracking (only
-// entries added since this thread's own last save actually get
-// written, so repeated calls stay cheap). Triggered from the main
-// thread at whatever point makes sense for the caller's channel — see
-// selfPlayScheduler.js (self-play, once per cycle) and
-// playerAgent.js's BotAgent._onGameOver (live matches, once per
-// finished PvE game). Same handler serves both channels; only the
-// call site differs.
-function saveCache() {
-  return saveCanonicalCaches();
+// Snapshot + reset of this thread's canonical cache hit/miss/timing
+// stats since the last call - see canonicalShape.js. Currently only
+// wired to the self-play channel (see botWorkerClient.js) since that's
+// where the CANONICAL_MIN_CELLS question actually needs real traffic
+// volume to answer.
+function getCanonicalStats() {
+  return getAndResetCanonicalCacheStats();
 }
 
-const HANDLERS = { chooseMove, playSelfPlayGame, saveCache };
+// Live-move counterpart to the direct in-thread call inside
+// playSelfPlayGame above - a live match spans many separate chooseMove
+// calls instead of one synchronous function, so there's no single place
+// to call this directly; playerAgent.js's BotAgent._onGameOver triggers
+// it via this job instead, once per finished match (see
+// botWorkerClient.js).
+function clearLargeCache() {
+  clearLargeCanonicalCaches();
+  clearEphemeralTreeCaches();
+  return { ok: true };
+}
+
+const HANDLERS = { chooseMove, playSelfPlayGame, getCanonicalStats, clearLargeCache };
 
 parentPort.on("message", (msg) => {
   try {

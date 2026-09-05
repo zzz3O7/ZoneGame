@@ -13,7 +13,7 @@
 import { MSG } from "../shared/net/protocol.js";
 import { botThinkDelayMs } from "./bot/botTiming.js";
 import { BOT_LEAVE_MIN_MS, BOT_LEAVE_RANGE_MS } from "./bot/botConfig.js";
-import { chooseMoveViaWorker, saveLiveMoveCanonicalCache } from "./bot/botWorkerClient.js";
+import { chooseMoveViaWorker, clearLiveMoveLargeCanonicalCache } from "./bot/botWorkerClient.js";
 
 // Wraps a live WebSocket. Guards against a closed/null socket the same
 // way the old inline _sendTo helper did.
@@ -97,13 +97,17 @@ export class BotAgent {
     clearTimeout(this._thinkTimer);
     clearTimeout(this._afterGameTimer);
 
-    // Flush whatever new canonical shapes this match's solver-tier
-    // moves added to the live-move worker's in-memory cache. Once per
-    // finished match, not mid-match. Fire-and-forget: nothing here
-    // needs to wait on it, and a failed save just means this match's
-    // new shapes stay in-memory-only until the next successful one —
-    // self-healing, not lost work (see botWorkerClient.js).
-    saveLiveMoveCanonicalCache().catch((err) => console.error(`live-move canonical cache save failed: ${err.message}`));
+    // Discards whatever large (20+ cell, see CANONICAL_LARGE_SHAPE_CELLS
+    // in canonicalShape.js) shapes this match's solver-tier moves added
+    // to the live-move worker's in-memory cache. Once per finished
+    // match, not mid-match. Fire-and-forget: nothing here needs to wait
+    // on it. No persistence involved (tried and removed - see
+    // canonicalShape.js) - this is purely in-memory hygiene, keeping a
+    // long-lived worker from accumulating shapes with near-zero chance
+    // of ever being seen again.
+    clearLiveMoveLargeCanonicalCache().catch((err) =>
+      console.error(`live-move large canonical cache clear failed: ${err.message}`),
+    );
 
     if (this.match.origin === "direct_debug") return;
 

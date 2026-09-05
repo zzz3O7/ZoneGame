@@ -104,24 +104,22 @@ export function playSelfPlayGameViaWorker({ botKeyA, botKeyB, params }) {
   return submitSelfPlay("playSelfPlayGame", { botKeyA, botKeyB, params });
 }
 
-// Flushes the self-play worker's newly-solved canonical shapes to disk.
-// Called from selfPlayScheduler.js once per cycle — never mid-pairing,
-// see that file. Resolves to { grundySaved, treeSaved }.
-export function saveSelfPlayCanonicalCache() {
-  return submitSelfPlay("saveCache", {});
+// Snapshot + reset of the self-play worker's canonical cache hit/miss/
+// timing stats since the last call - see selfPlayScheduler.js, called
+// once per cycle. Self-play only for now: it's the one channel with
+// enough volume to make the numbers meaningful, and this is
+// specifically for re-deriving CANONICAL_MIN_CELLS / CANONICAL_LARGE_SHAPE_CELLS
+// against real traffic (see canonicalShape.js). Purely in-memory
+// instrumentation - independent of whether anything gets persisted to
+// disk (nothing does; see canonicalShape.js's history on that).
+export function getSelfPlayCanonicalCacheStats() {
+  return submitSelfPlay("getCanonicalStats", {});
 }
 
-// Flushes the live-move worker's newly-solved canonical shapes to disk.
-// Called from playerAgent.js's BotAgent._onGameOver, once per finished
-// PvE match (after the game has ended, never mid-match). Runs on the
-// live-move channel itself, so it briefly queues behind (or ahead of)
-// any move request in flight at that moment — same as any other job on
-// this channel. Acceptable because canonicalCacheStore.js's incremental
-// save only writes shapes solved since this thread's own last save, so
-// a single match's flush is typically small once the cache has warmed
-// up (and worst case, a big novel match delays the next queued move by
-// however long that write takes — no live move is ever silently
-// dropped or reordered by this, just possibly delayed).
-export function saveLiveMoveCanonicalCache() {
-  return submitLiveMove("saveCache", {});
+// Discards the live-move worker's ephemeral large-shape cache - see
+// CANONICAL_LARGE_SHAPE_CELLS in canonicalShape.js. Called from
+// playerAgent.js's BotAgent._onGameOver, once per finished match (self-
+// play's equivalent runs directly in-thread instead, see botWorker.js).
+export function clearLiveMoveLargeCanonicalCache() {
+  return submitLiveMove("clearLargeCache", {});
 }

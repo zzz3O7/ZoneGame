@@ -93,7 +93,7 @@ export const BOT_SOLVER_1 = {
 // off the "walks past a guaranteed win to create a known-bad zone"
 // mistake structurally rather than just making it less costly.
 export const BOT_SOLVER_2 = {
-  maxBlobSize: 12,
+  maxBlobSize: 24,
   actionPriority: {
     shuffle: true,
     order: [
@@ -126,7 +126,7 @@ export const BOT_SOLVER_2 = {
 // family — see server/scripts/solverSelfPlay.js for current self-play
 // numbers rather than a comment that will drift out of date.
 export const BOT_SOLVER_3 = {
-  maxBlobSize: 12,
+  maxBlobSize: 24,
   actionPriority: {
     shuffle: false,
     order: [
